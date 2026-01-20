@@ -56,7 +56,7 @@
         <template #header>
           <div style="display: flex; justify-content: space-between; align-items: center">
             <span style="font-weight: bold">配置详情</span>
-            <div v-show="selectedConfig">
+            <div v-if="selectedConfig">
               <el-button type="primary" size="small" @click="handleSaveConfig">保存修改</el-button>
               <el-button size="small" @click="handleExportConfig">导出</el-button>
               <el-button size="small" @click="handleImportConfig">导入</el-button>
@@ -66,13 +66,13 @@
 
         <!-- 空状态提示 -->
         <el-empty
-          v-show="!selectedConfig"
+          v-if="!selectedConfig"
           description="请从左侧选择一个配置或新建配置"
           :image-size="120"
         />
 
         <!-- 配置表单 -->
-        <el-form v-show="selectedConfig" :model="selectedConfig" label-width="120px" style="max-width: 800px">
+        <el-form v-else-if="selectedConfig" :model="selectedConfig" label-width="120px" style="max-width: 800px">
           <el-form-item label="配置名称">
             <el-input v-model="selectedConfig.name" />
           </el-form-item>
@@ -192,6 +192,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Refresh } from '@element-plus/icons-vue'
+import { invoke } from '@tauri-apps/api/core'
 
 const profiles = ref([])
 const selectedConfigId = ref('')
@@ -209,9 +211,11 @@ const newConfigForm = ref({
 
 const loadProfiles = async () => {
   try {
-    const data = await window.eel.get_profiles()()
-    profiles.value = data.profiles || []
-    defaultProfileId.value = data.default_id || ''
+    const allProfiles = await invoke('get_profiles')
+    profiles.value = allProfiles || []
+
+    const defaultId = await invoke('get_default_profile_id')
+    defaultProfileId.value = defaultId || ''
 
     // 自动选中配置（优先选中默认配置，否则选中第一个）
     if (profiles.value.length > 0 && !selectedConfigId.value) {
@@ -220,13 +224,14 @@ const loadProfiles = async () => {
     }
   } catch (error) {
     console.error('加载配置失败:', error)
-    ElMessage.error('加载配置失败')
+    ElMessage.error('加载配置失败: ' + error)
   }
 }
 
 const loadPlatformInfo = async () => {
   try {
-    platformInfo.value = await window.eel.get_platform_info()()
+    const info = await invoke('get_platform_info')
+    platformInfo.value = `${info.os} (${info.arch})`
   } catch (error) {
     console.error('获取平台信息失败:', error)
   }
@@ -234,7 +239,7 @@ const loadPlatformInfo = async () => {
 
 const loadPrinters = async () => {
   try {
-    availablePrinters.value = await window.eel.get_printers()()
+    availablePrinters.value = await invoke('get_printers')
   } catch (error) {
     console.error('获取打印机列表失败:', error)
     availablePrinters.value = []
@@ -286,22 +291,22 @@ const handleCreateConfig = async () => {
   }
 
   try {
-    const result = await window.eel.create_profile(
-      newConfigForm.value.name,
-      newConfigForm.value.printerName,
-      newConfigForm.value.taskName || ''
-    )()
+    // 获取平台信息
+    const platform = await invoke('get_platform_info')
 
-    if (result.success) {
-      ElMessage.success('配置创建成功')
-      newConfigDialogVisible.value = false
-      await loadProfiles()
-    } else {
-      ElMessage.error(result.error || '创建失败')
-    }
+    // 创建配置
+    await invoke('create_profile', {
+      name: newConfigForm.value.name,
+      printerName: newConfigForm.value.printerName,
+      platform: platform
+    })
+
+    ElMessage.success('配置创建成功')
+    newConfigDialogVisible.value = false
+    await loadProfiles()
   } catch (error) {
     console.error('创建配置失败:', error)
-    ElMessage.error('创建失败: ' + error.message)
+    ElMessage.error('创建失败: ' + error)
   }
 }
 
@@ -315,17 +320,16 @@ const handleSaveConfig = async () => {
   }
 
   try {
-    const result = await window.eel.update_profile(selectedConfig.value)()
+    await invoke('update_profile', {
+      id: selectedConfig.value.id,
+      profile: selectedConfig.value
+    })
 
-    if (result.success) {
-      ElMessage.success('配置已保存')
-      await loadProfiles()
-    } else {
-      ElMessage.error(result.error || '保存失败')
-    }
+    ElMessage.success('配置已保存')
+    await loadProfiles()
   } catch (error) {
     console.error('保存配置失败:', error)
-    ElMessage.error('保存失败: ' + error.message)
+    ElMessage.error('保存失败: ' + error)
   }
 }
 
@@ -339,20 +343,18 @@ const handleDeleteConfig = async () => {
       type: 'warning'
     })
 
-    const result = await window.eel.delete_profile(selectedConfigId.value)()
+    await invoke('delete_profile', {
+      id: selectedConfigId.value
+    })
 
-    if (result.success) {
-      ElMessage.success('配置已删除')
-      selectedConfigId.value = ''
-      selectedConfig.value = null
-      await loadProfiles()
-    } else {
-      ElMessage.error(result.error || '删除失败')
-    }
+    ElMessage.success('配置已删除')
+    selectedConfigId.value = ''
+    selectedConfig.value = null
+    await loadProfiles()
   } catch (error) {
     if (error !== 'cancel') {
       console.error('删除配置失败:', error)
-      ElMessage.error('删除失败: ' + error.message)
+      ElMessage.error('删除失败: ' + error)
     }
   }
 }
@@ -361,17 +363,15 @@ const handleSetDefault = async () => {
   if (!selectedConfigId.value) return
 
   try {
-    const result = await window.eel.set_default_profile(selectedConfigId.value)()
+    await invoke('set_default_profile', {
+      id: selectedConfigId.value
+    })
 
-    if (result.success) {
-      ElMessage.success('已设为默认配置')
-      await loadProfiles()
-    } else {
-      ElMessage.error(result.error || '设置失败')
-    }
+    ElMessage.success('已设为默认配置')
+    await loadProfiles()
   } catch (error) {
     console.error('设置默认配置失败:', error)
-    ElMessage.error('设置失败: ' + error.message)
+    ElMessage.error('设置失败: ' + error)
   }
 }
 
@@ -379,24 +379,22 @@ const handleExportConfig = async () => {
   if (!selectedConfig.value) return
 
   try {
-    const result = await window.eel.export_profile(selectedConfigId.value)()
+    const jsonData = await invoke('export_profile', {
+      id: selectedConfigId.value
+    })
 
-    if (result.success) {
-      const blob = new Blob([result.data], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${selectedConfig.value.name}.json`
-      a.click()
-      URL.revokeObjectURL(url)
+    const blob = new Blob([jsonData], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${selectedConfig.value.name}.json`
+    a.click()
+    URL.revokeObjectURL(url)
 
-      ElMessage.success('配置已导出')
-    } else {
-      ElMessage.error(result.error || '导出失败')
-    }
+    ElMessage.success('配置已导出')
   } catch (error) {
     console.error('导出配置失败:', error)
-    ElMessage.error('导出失败: ' + error.message)
+    ElMessage.error('导出失败: ' + error)
   }
 }
 
@@ -411,17 +409,15 @@ const handleImportConfig = () => {
 
     try {
       const text = await file.text()
-      const result = await window.eel.import_profile(text)()
+      await invoke('import_profile', {
+        json: text
+      })
 
-      if (result.success) {
-        ElMessage.success('配置已导入')
-        await loadProfiles()
-      } else {
-        ElMessage.error(result.error || '导入失败')
-      }
+      ElMessage.success('配置已导入')
+      await loadProfiles()
     } catch (error) {
       console.error('导入配置失败:', error)
-      ElMessage.error('导入失败: ' + error.message)
+      ElMessage.error('导入失败: ' + error)
     }
   }
 

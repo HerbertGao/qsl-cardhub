@@ -8,7 +8,7 @@
         <el-descriptions-item label="版本">v1.0.0</el-descriptions-item>
         <el-descriptions-item label="描述">业余无线电卡片打印系统</el-descriptions-item>
         <el-descriptions-item label="技术栈">
-          Python + Eel + Vue 3 + Element Plus
+          Rust + Tauri 2 + Vue 3 + Element Plus
         </el-descriptions-item>
         <el-descriptions-item label="平台支持">
           Windows / macOS / Linux

@@ -1,0 +1,217 @@
+# QSL-CardHub - Rust + Tauri 版本
+
+> 业余无线电 QSL 卡片打印工具
+
+## 简介
+
+QSL-CardHub 是一款专为业余无线电爱好者设计的 QSL 卡片打印工具。Rust + Tauri 版本提供了更快的启动速度、更小的体积和更好的跨平台支持。
+
+### 主要特性
+
+- ✅ **快速启动**：启动时间 < 500ms
+- ✅ **体积小巧**：可执行文件 < 20MB
+- ✅ **跨平台支持**：Windows、macOS、Linux
+- ✅ **配置管理**：支持多配置切换、导入导出
+- ✅ **打印功能**：QSL 卡片打印、校准页打印
+- ✅ **现代化界面**：Vue 3 + Element Plus
+
+## 项目结构
+
+```
+QSL-CardHub/
+├── src/                    # Rust 后端代码
+│   ├── commands/          # Tauri Commands（API 层）
+│   │   ├── platform.rs    # 平台信息
+│   │   ├── profile.rs     # 配置管理
+│   │   └── printer.rs     # 打印功能
+│   ├── config/            # 配置管理模块
+│   │   ├── models.rs      # 数据模型
+│   │   └── profile_manager.rs # 配置管理器
+│   ├── printer/           # 打印模块
+│   │   ├── backend/       # 打印后端
+│   │   │   ├── windows.rs # Windows 后端
+│   │   │   ├── cups.rs    # CUPS 后端
+│   │   │   └── mock.rs    # Mock 后端
+│   │   ├── tspl.rs        # TSPL 生成器
+│   │   └── manager.rs     # 打印管理器
+│   ├── utils/             # 工具模块
+│   │   └── platform.rs    # 平台检测
+│   ├── error/             # 错误处理
+│   └── main.rs            # 主程序入口
+├── web/                   # Vue 3 前端
+│   ├── src/
+│   │   ├── views/         # 页面组件
+│   │   └── components/    # 通用组件
+│   └── vite.config.js
+├── config/                # 配置文件目录
+│   ├── config.toml        # 全局配置
+│   ├── profiles/          # Profile 配置
+│   └── templates/         # 打印模板（v0.5）
+├── output/                # Mock 打印输出
+├── tests/                 # 测试文件
+└── Cargo.toml            # Rust 依赖配置
+```
+
+## 技术栈
+
+### 后端
+- **Rust** - 系统编程语言
+- **Tauri 2** - 桌面应用框架
+- **serde** - 序列化/反序列化
+- **toml** - TOML 配置文件解析
+- **anyhow/thiserror** - 错误处理
+- **uuid** - UUID 生成
+- **chrono** - 日期时间处理
+
+### 前端
+- **Vue 3** - 渐进式前端框架
+- **Element Plus** - UI 组件库
+- **Vite** - 构建工具
+
+### 平台特定依赖
+- **Windows**: windows-rs (Win32 API)
+- **macOS/Linux**: CUPS (lp 命令)
+
+## 快速开始
+
+### 前置要求
+
+- Rust 1.70+
+- Node.js 18+
+- pnpm (推荐) 或 npm
+
+**平台特定要求：**
+- Windows: 无额外要求
+- macOS: 已安装 Xcode Command Line Tools
+- Linux: 已安装 CUPS (`sudo apt install cups` 或 `sudo yum install cups`)
+
+### 安装依赖
+
+```bash
+# 安装 Rust 依赖
+cargo build
+
+# 安装前端依赖
+cd web
+pnpm install
+```
+
+### 开发模式
+
+```bash
+# 启动开发服务器（前端热重载 + Rust 后端）
+cargo tauri dev
+```
+
+### 生产构建
+
+```bash
+# 构建前端
+cd web
+pnpm run build
+
+# 构建 Tauri 应用
+cd ..
+cargo tauri build
+```
+
+构建产物位于 `src-tauri/target/release/bundle/`
+
+## 配置文件
+
+### 配置目录位置
+
+- **开发模式**: 项目根目录 `config/`
+- **生产模式**:
+  - Windows: `%APPDATA%/QSL-CardHub/`
+  - macOS: `~/Library/Application Support/QSL-CardHub/`
+  - Linux: `~/.config/QSL-CardHub/`
+
+### 配置文件结构
+
+```
+config/
+├── config.toml           # 全局配置
+└── profiles/
+    ├── uuid-1.toml       # 配置 1
+    └── uuid-2.toml       # 配置 2
+```
+
+### 示例配置
+
+参见 `config/profiles/example.toml`
+
+## 架构设计
+
+详细架构设计请参考：
+- [提案文档](openspec/changes/migrate-to-rust-tauri/proposal.md)
+- [设计文档](openspec/changes/migrate-to-rust-tauri/design.md)
+- [任务清单](openspec/changes/migrate-to-rust-tauri/tasks.md)
+
+## 开发指南
+
+### 添加新的 Tauri Command
+
+1. 在 `src/commands/` 中定义函数
+2. 使用 `#[tauri::command]` 宏标注
+3. 在 `src/main.rs` 的 `invoke_handler!` 中注册
+
+```rust
+#[tauri::command]
+async fn my_command(param: String) -> Result<String, String> {
+    Ok(format!("Hello, {}", param))
+}
+```
+
+### 运行测试
+
+```bash
+# 运行所有测试
+cargo test
+
+# 运行特定模块测试
+cargo test --package QSL-CardHub --lib config::tests
+```
+
+### 代码格式化
+
+```bash
+# 格式化 Rust 代码
+cargo fmt
+
+# 格式化前端代码
+cd web
+pnpm run lint
+```
+
+## 版本规划
+
+- **v0.1** (当前): 基础功能迁移
+  - 配置管理
+  - TSPL 打印
+  - 跨平台支持
+
+- **v0.5**: 模板配置化
+  - 打印模板配置文件
+  - PDF 测试后端
+  - 日志查看功能
+
+- **v1.0**: 完整版本
+  - 完整错误处理
+  - 打包优化
+  - 用户文档
+
+- **v2.0**: 高级功能
+  - 模板管理 UI
+  - 中文字体支持
+  - 批量打印
+  - 网络打印
+
+## 许可证
+
+MIT License
+
+## 联系方式
+
+- 作者: Herbert Gao
+- 项目: https://github.com/yourusername/QSL-CardHub

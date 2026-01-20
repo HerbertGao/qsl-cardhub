@@ -64,6 +64,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
 import PrintView from './views/PrintView.vue'
 import ConfigView from './views/ConfigView.vue'
 import LogView from './views/LogView.vue'
@@ -79,10 +80,11 @@ const handleMenuSelect = (index) => {
 onMounted(async () => {
   try {
     // 调用后端 API 获取配置列表
-    const result = await window.eel.get_profiles()()
+    const profiles = await invoke('get_profiles')
+    const defaultId = await invoke('get_default_profile_id')
 
     // 如果没有配置或没有默认配置，跳转到配置页面
-    if (!result.profiles || result.profiles.length === 0 || !result.default_id) {
+    if (!profiles || profiles.length === 0 || !defaultId) {
       activeMenu.value = 'config'
     }
   } catch (error) {

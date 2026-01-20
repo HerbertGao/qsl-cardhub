@@ -1,0 +1,78 @@
+# 76x130模板
+# 标准 76mm x 130mm QSL 卡片打印模板
+#
+# 说明：
+# - TSPL 打印机和 PDF 后端都使用相同的坐标配置
+# - PDF 后端忠实渲染 TSPL 指令，作为真实打印的预览
+# - 所有元素（标题、副标题、呼号、条形码、序列号、数量）都通过 TSPL 命令渲染
+
+[metadata]
+name = "76x130模板"
+version = "1.0"
+description = "标准 QSL 卡片模板，76mm x 130mm，包含中文标题"
+
+[paper]
+width_mm = 76
+height_mm = 130
+gap_mm = 2
+direction = 0
+
+[title]
+# 标题配置（固定文本，居中）
+text = "中国无线电协会业余分会-2区卡片局"
+x = 304               # X 坐标（dots，居中）
+y = 20                # Y 坐标（dots）
+font = "5"            # TSPL 字体编号
+rotation = 0          # 旋转角度
+x_scale = 2           # X 方向缩放倍数
+y_scale = 2           # Y 方向缩放倍数
+
+[subtitle]
+# 副标题配置（动态文本，来自任务名称，居中）
+x = 304               # X 坐标（dots，居中）
+y = 100               # Y 坐标（dots，标题下方）
+font = "5"            # TSPL 字体编号
+rotation = 0          # 旋转角度
+x_scale = 2           # X 方向缩放倍数
+y_scale = 2           # Y 方向缩放倍数
+
+[callsign]
+# 呼号配置（大字号，居中）
+x = 304               # X 坐标（dots，608 / 2 = 304 居中）
+y = 200               # Y 坐标（dots，标题下方）
+font = "5"            # TSPL 字体编号
+rotation = 0          # 旋转角度
+x_scale = 4           # X 方向缩放倍数（更大的字号）
+y_scale = 4           # Y 方向缩放倍数
+
+[barcode]
+# 条形码配置（居中）
+x = 304               # X 坐标（dots，居中）
+y = 400               # Y 坐标（dots，呼号下方）
+type = "128"          # 条形码类型
+height = 100          # 条形码高度（dots）
+human_readable = 1    # 显示可读文本
+rotation = 0          # 旋转角度
+narrow_bar = 2        # 窄条宽度（dots）
+wide_bar = 2          # 宽条宽度（dots）
+
+[serial]
+# 序列号配置（居中）
+x = 304               # X 坐标（dots，居中）
+y = 650               # Y 坐标（dots，条形码下方）
+font = "5"            # TSPL 字体编号
+rotation = 0          # 旋转角度
+x_scale = 3           # X 方向缩放倍数
+y_scale = 3           # Y 方向缩放倍数
+prefix = "SN: "       # 前缀文本
+format = "{:03}"      # 格式化字符串
+
+[quantity]
+# 数量配置（居中）
+x = 304               # X 坐标（dots，居中）
+y = 850               # Y 坐标（dots，序列号下方）
+font = "5"            # TSPL 字体编号
+rotation = 0          # 旋转角度
+x_scale = 3           # X 方向缩放倍数
+y_scale = 3           # Y 方向缩放倍数
+prefix = "QTY: "      # 前缀文本

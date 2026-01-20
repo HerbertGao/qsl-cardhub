@@ -1,0 +1,11 @@
+.claude/
+.cursor/
+.git/
+assets/
+config/
+openspec/
+output/
+target/
+tests/
+.gitignore
+*.md

@@ -52,3 +52,24 @@ Icon
 Network Trash Folder
 Temporary Items
 .apdisk
+
+# Node.js
+web/node_modules/
+web/dist/
+web/.vite/
+
+# Output
+output/
+*.tspl
+
+# Config (keep example files)
+config/config.toml
+config/profiles/*.toml
+!config/profiles/example.toml
+
+# Tauri
+src-tauri/target/
+src-tauri/WixTools/
+
+logs/
+test_output/

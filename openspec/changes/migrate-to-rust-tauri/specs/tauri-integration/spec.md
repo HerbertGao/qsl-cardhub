@@ -197,7 +197,7 @@
 - **那么** 应包含以下元数据：
   - productName: "QSL-CardHub"
   - version: "0.1.0"
-  - identifier: "com.herbert.qsl-cardhub"
+  - identifier: "com.herbertgao.qsl-cardhub"
   - copyright: "© 2026 Herbert Software"
 
 #### 场景:窗口配置

@@ -131,6 +131,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, QuestionFilled } from '@element-plus/icons-vue'
+import { invoke } from '@tauri-apps/api/core'
 
 const profiles = ref([])
 const currentProfile = ref('')
@@ -179,15 +180,20 @@ const skip4Down = (number) => {
 const loadProfiles = async () => {
   loadingProfiles.value = true
   try {
-    const data = await window.eel.get_profiles()()
-    profiles.value = data.profiles || []
-    defaultProfileId.value = data.default_id || ''
+    // 获取所有配置
+    const allProfiles = await invoke('get_profiles')
+    profiles.value = allProfiles || []
+
+    // 获取默认配置 ID
+    const defaultId = await invoke('get_default_profile_id')
+    defaultProfileId.value = defaultId || ''
+
     if (defaultProfileId.value && !currentProfile.value) {
       currentProfile.value = defaultProfileId.value
     }
   } catch (error) {
     console.error('加载配置失败:', error)
-    ElMessage.error('加载配置失败')
+    ElMessage.error('加载配置失败: ' + error)
   } finally {
     loadingProfiles.value = false
   }
@@ -212,6 +218,13 @@ const handlePrint = async () => {
     return
   }
 
+  // 获取当前 Profile 的打印机名称
+  const profile = currentProfileInfo.value
+  if (!profile) {
+    ElMessage.warning('配置信息不完整')
+    return
+  }
+
   printing.value = true
   try {
     // 应用跳过 4 逻辑
@@ -220,39 +233,36 @@ const handlePrint = async () => {
       currentSerial = skip4(currentSerial)
     }
 
-    const result = await window.eel.print_qsl(
-      currentProfile.value,
-      printForm.value.callsign,
-      String(currentSerial).padStart(3, '0'),
-      printForm.value.qty
-    )()
+    // 调用 Tauri API
+    await invoke('print_qsl', {
+      printerName: profile.printer.name,
+      callsign: printForm.value.callsign,
+      serial: currentSerial,
+      qty: printForm.value.qty
+    })
 
-    if (result.success) {
-      ElMessage.success('打印成功')
-      // 清空呼号，序列号自动增长
-      printForm.value.callsign = ''
-      currentSerial = currentSerial + 1
+    ElMessage.success('打印成功')
+    // 清空呼号，序列号自动增长
+    printForm.value.callsign = ''
+    currentSerial = currentSerial + 1
 
-      // 应用跳过 4 逻辑到递增后的序列号
-      if (skip4Enabled.value) {
-        currentSerial = skip4(currentSerial)
-      }
-
-      printForm.value.serial = currentSerial
-
-      // 序列号超过999则重置为1
-      if (printForm.value.serial > 999) {
-        printForm.value.serial = 1
-      }
-
-      // 更新上一个值
-      previousSerial.value = printForm.value.serial
-    } else {
-      ElMessage.error(result.error || '打印失败')
+    // 应用跳过 4 逻辑到递增后的序列号
+    if (skip4Enabled.value) {
+      currentSerial = skip4(currentSerial)
     }
+
+    printForm.value.serial = currentSerial
+
+    // 序列号超过999则重置为1
+    if (printForm.value.serial > 999) {
+      printForm.value.serial = 1
+    }
+
+    // 更新上一个值
+    previousSerial.value = printForm.value.serial
   } catch (error) {
     console.error('打印失败:', error)
-    ElMessage.error('打印失败: ' + error.message)
+    ElMessage.error('打印失败: ' + error)
   } finally {
     printing.value = false
   }
@@ -296,17 +306,20 @@ const handlePrintCalibration = async () => {
     return
   }
 
-  try {
-    const result = await window.eel.print_calibration(currentProfile.value)()
+  const profile = currentProfileInfo.value
+  if (!profile) {
+    ElMessage.warning('配置信息不完整')
+    return
+  }
 
-    if (result.success) {
-      ElMessage.success('校准页打印成功')
-    } else {
-      ElMessage.error(result.error || '打印失败')
-    }
+  try {
+    await invoke('print_calibration', {
+      printerName: profile.printer.name
+    })
+    ElMessage.success('校准页打印成功')
   } catch (error) {
     console.error('打印校准页失败:', error)
-    ElMessage.error('打印失败: ' + error.message)
+    ElMessage.error('打印失败: ' + error)
   }
 }
 
