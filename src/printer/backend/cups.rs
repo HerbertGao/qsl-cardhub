@@ -43,15 +43,36 @@ impl PrinterBackend for CupsBackend {
         }
 
         // 解析输出
-        // 输出格式：printer PrinterName is idle...
+        // 英文格式：printer PrinterName is idle...
+        // 中文格式：打印机PrinterName闲置...
         let stdout = String::from_utf8_lossy(&output.stdout);
         let mut printers = Vec::new();
 
         for line in stdout.lines() {
             if line.starts_with("printer ") {
+                // 英文格式
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 if parts.len() >= 2 {
                     printers.push(parts[1].to_string());
+                }
+            } else if line.starts_with("打印机") {
+                // 中文格式：打印机PrinterName闲置... 或 打印机PrinterName已禁用...
+                let rest = line.trim_start_matches("打印机");
+                // 找到状态关键词的位置
+                let printer_name = if let Some(pos) = rest.find("闲置") {
+                    &rest[..pos]
+                } else if let Some(pos) = rest.find("已禁用") {
+                    &rest[..pos]
+                } else if let Some(pos) = rest.find("正在打印") {
+                    &rest[..pos]
+                } else {
+                    // 如果找不到已知状态，尝试找逗号或空格
+                    rest.split(|c| c == ',' || c == '，' || c == ' ')
+                        .next()
+                        .unwrap_or("")
+                };
+                if !printer_name.is_empty() {
+                    printers.push(printer_name.to_string());
                 }
             }
         }

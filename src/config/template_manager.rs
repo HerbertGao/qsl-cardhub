@@ -20,8 +20,7 @@ impl TemplateManager {
     pub fn new(template_dir: PathBuf) -> Result<Self> {
         // 确保模板目录存在
         if !template_dir.exists() {
-            std::fs::create_dir_all(&template_dir)
-                .context("创建模板目录失败")?;
+            std::fs::create_dir_all(&template_dir).context("创建模板目录失败")?;
             log::info!("📁 创建模板目录: {}", template_dir.display());
         }
 
@@ -38,8 +37,7 @@ impl TemplateManager {
 
     /// 加载所有模板文件
     fn load_all_templates(&mut self) -> Result<()> {
-        let entries = std::fs::read_dir(&self.template_dir)
-            .context("读取模板目录失败")?;
+        let entries = std::fs::read_dir(&self.template_dir).context("读取模板目录失败")?;
 
         for entry in entries {
             let entry = entry.context("读取目录项失败")?;
@@ -136,8 +134,7 @@ impl TemplateManager {
         let filename = name.to_lowercase().replace(" ", "-") + ".toml";
         let path = self.template_dir.join(filename);
         if path.exists() {
-            std::fs::remove_file(&path)
-                .context(format!("删除模板文件失败: {}", path.display()))?;
+            std::fs::remove_file(&path).context(format!("删除模板文件失败: {}", path.display()))?;
         }
 
         log::info!("🗑️  删除模板: {}", name);

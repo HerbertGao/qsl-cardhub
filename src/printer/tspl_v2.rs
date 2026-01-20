@@ -45,7 +45,10 @@ impl TSPLGeneratorV2 {
         let mut tspl = String::new();
 
         // 纸张配置
-        tspl.push_str(&format!("SIZE {} mm, {} mm\n", paper_width_mm, paper_height_mm));
+        tspl.push_str(&format!(
+            "SIZE {} mm, {} mm\n",
+            paper_width_mm, paper_height_mm
+        ));
         tspl.push_str("GAP 2 mm, 0 mm\n");
         tspl.push_str("DIRECTION 0\n");
         tspl.push_str("CLS\n");
@@ -62,7 +65,14 @@ impl TSPLGeneratorV2 {
 
                 // 生成文本位图指令
                 for (i, (x, y, bitmap)) in bitmaps.iter().enumerate() {
-                    log::debug!("生成位图[{}]指令: {}x{} at ({}, {})", i, bitmap.width(), bitmap.height(), x, y);
+                    log::debug!(
+                        "生成位图[{}]指令: {}x{} at ({}, {})",
+                        i,
+                        bitmap.width(),
+                        bitmap.height(),
+                        x,
+                        y
+                    );
                     tspl.push_str(&self.generate_bitmap_command(*x, *y, bitmap)?);
                 }
 
@@ -93,7 +103,10 @@ impl TSPLGeneratorV2 {
                     canvas_size.1
                 );
             }
-            RenderResult::FullBitmap { canvas, canvas_size } => {
+            RenderResult::FullBitmap {
+                canvas,
+                canvas_size,
+            } => {
                 log::info!("生成全位图模式TSPL指令");
 
                 // 生成完整画布位图指令
@@ -178,7 +191,10 @@ impl TSPLGeneratorV2 {
     }
 
     /// 生成 BOX 边框指令
-    fn generate_border_command(&self, border: &crate::printer::layout_engine::BorderConfig) -> String {
+    fn generate_border_command(
+        &self,
+        border: &crate::printer::layout_engine::BorderConfig,
+    ) -> String {
         // BOX x_start, y_start, x_end, y_end, line_thickness
         format!(
             "BOX {},{},{},{},{}\n",
@@ -200,7 +216,7 @@ impl Default for TSPLGeneratorV2 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::template_v2::{TemplateV2Config, OutputConfig};
+    use crate::config::template_v2::{OutputConfig, TemplateV2Config};
     use crate::printer::layout_engine::LayoutEngine;
     use crate::printer::render_pipeline::RenderPipeline;
     use crate::printer::template_engine::TemplateEngine;

@@ -2,8 +2,8 @@
 //
 // 测试 PDF 和 TSPL 后端与渲染管道的集成
 
-use QSL_CardHub::config::template_v2::{TemplateV2Config, OutputConfig};
-use QSL_CardHub::printer::backend::{PdfBackendV2};
+use QSL_CardHub::config::template_v2::{OutputConfig, TemplateV2Config};
+use QSL_CardHub::printer::backend::PdfBackendV2;
 use QSL_CardHub::printer::layout_engine::LayoutEngine;
 use QSL_CardHub::printer::render_pipeline::RenderPipeline;
 use QSL_CardHub::printer::template_engine::TemplateEngine;
@@ -197,8 +197,7 @@ fn test_backend_with_config_file() {
 
     // 从配置文件加载
     let config_path = Path::new("config/templates/qsl-card-v2.toml");
-    let config = TemplateV2Config::load_from_file(config_path)
-        .expect("加载配置文件失败");
+    let config = TemplateV2Config::load_from_file(config_path).expect("加载配置文件失败");
 
     let mut data = HashMap::new();
     data.insert("task_name".to_string(), "From Config".to_string());
@@ -273,7 +272,11 @@ fn test_multiple_cards_batch() {
         let png_path = pdf_backend.render(render_result).unwrap();
         assert!(png_path.exists());
 
-        println!("✓ 生成卡片: {} -> {}", callsign, png_path.file_name().unwrap().to_string_lossy());
+        println!(
+            "✓ 生成卡片: {} -> {}",
+            callsign,
+            png_path.file_name().unwrap().to_string_lossy()
+        );
     }
 
     println!("✅ 批量生成测试通过");

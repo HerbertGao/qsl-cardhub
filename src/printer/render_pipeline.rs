@@ -140,7 +140,8 @@ impl RenderPipeline {
         log::info!("渲染全位图模式");
 
         // 1. 创建白色背景画布
-        let mut canvas = self.create_canvas(layout_result.canvas_width, layout_result.canvas_height);
+        let mut canvas =
+            self.create_canvas(layout_result.canvas_width, layout_result.canvas_height);
 
         // 2. 渲染所有元素到画布
         for element in &layout_result.elements {
@@ -194,7 +195,10 @@ impl RenderPipeline {
     }
 
     /// 渲染条形码元素为位图
-    fn render_barcode_element(&mut self, element: &LayoutedElement) -> Result<(u32, u32, GrayImage)> {
+    fn render_barcode_element(
+        &mut self,
+        element: &LayoutedElement,
+    ) -> Result<(u32, u32, GrayImage)> {
         let barcode_config = element
             .barcode_config
             .as_ref()
@@ -363,7 +367,7 @@ impl Default for RenderPipeline {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::template_v2::{TemplateV2Config, OutputConfig};
+    use crate::config::template_v2::{OutputConfig, TemplateV2Config};
     use crate::printer::layout_engine::LayoutEngine;
     use crate::printer::template_engine::TemplateEngine;
     use std::collections::HashMap;
@@ -468,7 +472,11 @@ mod tests {
                 assert_eq!(canvas_size, (608, 1039));
                 assert!(border.is_some(), "应该有边框");
 
-                println!("✓ 混合模式: {} 位图, {} 条码", bitmaps.len(), native_barcodes.len());
+                println!(
+                    "✓ 混合模式: {} 位图, {} 条码",
+                    bitmaps.len(),
+                    native_barcodes.len()
+                );
             }
             _ => panic!("应该返回MixedMode"),
         }
@@ -496,7 +504,10 @@ mod tests {
         let result = pipeline.render(layout_result, &output_config).unwrap();
 
         match result {
-            RenderResult::FullBitmap { canvas, canvas_size } => {
+            RenderResult::FullBitmap {
+                canvas,
+                canvas_size,
+            } => {
                 assert_eq!(canvas.width(), 608);
                 assert_eq!(canvas.height(), 1039);
                 assert_eq!(canvas_size, (608, 1039));

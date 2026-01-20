@@ -3,8 +3,8 @@
 // 测试模板配置的加载、解析和使用
 
 use QSL_CardHub::config::{TemplateConfig, TemplateManager};
-use QSL_CardHub::printer::backend::PrinterBackend;
 use QSL_CardHub::printer::backend::PdfBackend;
+use QSL_CardHub::printer::backend::PrinterBackend;
 use QSL_CardHub::printer::tspl::TSPLGenerator;
 use std::path::PathBuf;
 
@@ -17,7 +17,10 @@ fn test_template_config_loading() {
 
     println!("模板名称: {}", template.metadata.name);
     println!("模板版本: {}", template.metadata.version);
-    println!("纸张尺寸: {}mm x {}mm", template.paper.width_mm, template.paper.height_mm);
+    println!(
+        "纸张尺寸: {}mm x {}mm",
+        template.paper.width_mm, template.paper.height_mm
+    );
 
     assert_eq!(template.metadata.name, "QSL Card v1");
     assert_eq!(template.paper.width_mm, 76);
@@ -106,12 +109,15 @@ fn test_tspl_generation_with_template() {
     assert!(tspl_no_task.contains("BG7XXX"));
 
     // 有任务名称
-    let tspl_with_task = generator.generate_from_template(&template, "BD7ABC", 2, 5, Some("春季活动"));
+    let tspl_with_task =
+        generator.generate_from_template(&template, "BD7ABC", 2, 5, Some("春季活动"));
 
     println!("\n生成的 TSPL（有任务名称）:");
     println!("{}", tspl_with_task);
 
-    assert!(tspl_with_task.contains("TEXT 304,20,\"5\",0,2,2,\"中国无线电协会业余分会-2区卡片局\""));
+    assert!(
+        tspl_with_task.contains("TEXT 304,20,\"5\",0,2,2,\"中国无线电协会业余分会-2区卡片局\"")
+    );
     assert!(tspl_with_task.contains("TEXT 304,100,\"5\",0,2,2,\"春季活动\""));
     assert!(tspl_with_task.contains("BD7ABC"));
 
@@ -160,8 +166,7 @@ fn test_template_file_loading() {
         return;
     }
 
-    let template = TemplateConfig::load_from_file(template_path.clone())
-        .expect("加载模板文件失败");
+    let template = TemplateConfig::load_from_file(template_path.clone()).expect("加载模板文件失败");
 
     println!("从文件加载的模板:");
     println!("  名称: {}", template.metadata.name);

@@ -9,7 +9,6 @@ use thiserror::Error;
 #[allow(dead_code)]
 pub enum AppError {
     // ========== 配置相关错误 ==========
-
     /// 配置文件不存在
     #[error("配置文件不存在: {0}")]
     ConfigNotFound(String),
@@ -31,7 +30,6 @@ pub enum AppError {
     ProfileInvalid(String),
 
     // ========== 打印相关错误 ==========
-
     /// 打印机不可用
     #[error("打印机不可用: {0}")]
     PrinterUnavailable(String),
@@ -61,7 +59,6 @@ pub enum AppError {
     TextRenderFailed(String),
 
     // ========== 文件相关错误 ==========
-
     /// 文件未找到
     #[error("文件未找到: {0}")]
     FileNotFound(String),
@@ -79,7 +76,6 @@ pub enum AppError {
     DirectoryCreationFailed(String),
 
     // ========== 数据相关错误 ==========
-
     /// 数据无效
     #[error("数据无效: {0}")]
     DataInvalid(String),
@@ -93,7 +89,6 @@ pub enum AppError {
     InvalidParameter(String),
 
     // ========== 系统错误 ==========
-
     /// IO 错误
     #[error("IO 错误: {0}")]
     Io(#[from] std::io::Error),
@@ -111,7 +106,6 @@ pub enum AppError {
     Timeout(String),
 
     // ========== 通用错误 ==========
-
     /// 其他错误
     #[error("{0}")]
     Other(String),
@@ -123,16 +117,28 @@ impl AppError {
         match self {
             // 配置相关
             AppError::ConfigNotFound(path) => {
-                format!("找不到配置文件：{}\n\n请检查文件是否存在，或尝试重新创建配置。", path)
+                format!(
+                    "找不到配置文件：{}\n\n请检查文件是否存在，或尝试重新创建配置。",
+                    path
+                )
             }
             AppError::ConfigParseFailed(reason) => {
-                format!("配置文件格式错误：{}\n\n请检查配置文件格式是否正确，或删除后重新创建。", reason)
+                format!(
+                    "配置文件格式错误：{}\n\n请检查配置文件格式是否正确，或删除后重新创建。",
+                    reason
+                )
             }
             AppError::ConfigSaveFailed(reason) => {
-                format!("保存配置失败：{}\n\n请检查是否有足够的磁盘空间和文件写入权限。", reason)
+                format!(
+                    "保存配置失败：{}\n\n请检查是否有足够的磁盘空间和文件写入权限。",
+                    reason
+                )
             }
             AppError::ProfileNotFound(id) => {
-                format!("找不到 Profile：{}\n\n该配置可能已被删除，请选择其他配置或创建新配置。", id)
+                format!(
+                    "找不到 Profile：{}\n\n该配置可能已被删除，请选择其他配置或创建新配置。",
+                    id
+                )
             }
             AppError::ProfileInvalid(reason) => {
                 format!("Profile 配置无效：{}\n\n请检查配置参数是否正确。", reason)
@@ -140,16 +146,28 @@ impl AppError {
 
             // 打印相关
             AppError::PrinterUnavailable(name) => {
-                format!("打印机不可用：{}\n\n请检查打印机是否已连接、开机，并确保驱动程序已正确安装。", name)
+                format!(
+                    "打印机不可用：{}\n\n请检查打印机是否已连接、开机，并确保驱动程序已正确安装。",
+                    name
+                )
             }
             AppError::PrinterNotFound(name) => {
-                format!("找不到打印机：{}\n\n请确认打印机名称是否正确，或在系统中添加该打印机。", name)
+                format!(
+                    "找不到打印机：{}\n\n请确认打印机名称是否正确，或在系统中添加该打印机。",
+                    name
+                )
             }
             AppError::PrintJobFailed(reason) => {
-                format!("打印任务失败：{}\n\n请检查打印机状态和纸张是否正常。", reason)
+                format!(
+                    "打印任务失败：{}\n\n请检查打印机状态和纸张是否正常。",
+                    reason
+                )
             }
             AppError::TsplGenerationFailed(reason) => {
-                format!("生成打印指令失败：{}\n\n这可能是程序内部错误，请联系开发者。", reason)
+                format!(
+                    "生成打印指令失败：{}\n\n这可能是程序内部错误，请联系开发者。",
+                    reason
+                )
             }
             AppError::BarcodeGenerationFailed(reason) => {
                 format!("生成条形码失败：{}\n\n请检查呼号格式是否正确。", reason)
@@ -194,7 +212,10 @@ impl AppError {
                 format!("数据序列化错误：{}", reason)
             }
             AppError::PermissionDenied(reason) => {
-                format!("权限不足：{}\n\n请以管理员身份运行程序，或检查文件/目录权限。", reason)
+                format!(
+                    "权限不足：{}\n\n请以管理员身份运行程序，或检查文件/目录权限。",
+                    reason
+                )
             }
             AppError::Timeout(reason) => {
                 format!("操作超时：{}\n\n请检查网络连接或稍后重试。", reason)

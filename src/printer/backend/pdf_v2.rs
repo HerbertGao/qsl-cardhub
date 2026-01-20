@@ -108,7 +108,14 @@ impl PdfBackendV2 {
 
         // 叠加文本位图
         for (i, (x, y, bitmap)) in bitmaps.iter().enumerate() {
-            log::debug!("叠加位图[{}]: {}x{} at ({}, {})", i, bitmap.width(), bitmap.height(), x, y);
+            log::debug!(
+                "叠加位图[{}]: {}x{} at ({}, {})",
+                i,
+                bitmap.width(),
+                bitmap.height(),
+                x,
+                y
+            );
             self.overlay(&mut canvas, bitmap, *x, *y);
         }
 

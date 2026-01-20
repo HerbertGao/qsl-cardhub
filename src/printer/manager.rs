@@ -2,10 +2,9 @@
 //
 // 聚合所有打印后端，提供统一的打印机管理接口
 
-use super::backend::{MockBackend, PdfBackend, PrinterBackend};
+use super::backend::{PdfBackend, PrinterBackend};
 use super::tspl::TSPLGenerator;
 use anyhow::{Context, Result};
-use std::path::PathBuf;
 
 #[cfg(target_os = "windows")]
 use super::backend::WindowsBackend;
@@ -23,7 +22,7 @@ pub struct PrinterManager {
 
 impl PrinterManager {
     /// 创建新的打印机管理器
-    pub fn new(output_dir: PathBuf) -> Result<Self> {
+    pub fn new() -> Result<Self> {
         let mut backends: Vec<Box<dyn PrinterBackend>> = Vec::new();
 
         // 添加平台特定的后端
@@ -42,9 +41,6 @@ impl PrinterManager {
             Ok(pdf_backend) => backends.push(Box::new(pdf_backend)),
             Err(e) => eprintln!("⚠️  PDF 后端初始化失败: {}", e),
         }
-
-        // 添加 Mock 后端（总是可用）
-        backends.push(Box::new(MockBackend::new(output_dir)?));
 
         Ok(Self {
             backends,
@@ -93,7 +89,9 @@ impl PrinterManager {
         task_name: Option<&str>,
     ) -> Result<()> {
         // 生成 TSPL 指令
-        let tspl = self.tspl_generator.generate_qsl_card(callsign, serial, qty, task_name);
+        let tspl = self
+            .tspl_generator
+            .generate_qsl_card(callsign, serial, qty, task_name);
 
         // 发送到打印机
         self.send_raw(printer_name, tspl.as_bytes())

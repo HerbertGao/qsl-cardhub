@@ -13,7 +13,10 @@ pub struct PrinterState {
 #[tauri::command]
 pub async fn get_printers(state: State<'_, PrinterState>) -> Result<Vec<String>, String> {
     log::info!("正在获取打印机列表");
-    let manager = state.manager.lock().map_err(|e| format!("锁定失败: {}", e))?;
+    let manager = state
+        .manager
+        .lock()
+        .map_err(|e| format!("锁定失败: {}", e))?;
     let printers = manager
         .list_printers()
         .map_err(|e| format!("获取打印机列表失败: {}", e))?;
@@ -46,7 +49,10 @@ pub async fn print_qsl(
         task_name.as_deref().unwrap_or("无"),
         printer_name
     );
-    let manager = state.manager.lock().map_err(|e| format!("锁定失败: {}", e))?;
+    let manager = state
+        .manager
+        .lock()
+        .map_err(|e| format!("锁定失败: {}", e))?;
     let result = manager.print_qsl(&printer_name, &callsign, serial, qty, task_name.as_deref());
 
     match &result {
@@ -67,7 +73,10 @@ pub async fn print_calibration(
     state: State<'_, PrinterState>,
 ) -> Result<(), String> {
     log::info!("开始打印校准页: 打印机={}", printer_name);
-    let manager = state.manager.lock().map_err(|e| format!("锁定失败: {}", e))?;
+    let manager = state
+        .manager
+        .lock()
+        .map_err(|e| format!("锁定失败: {}", e))?;
     let result = manager.print_calibration(&printer_name);
 
     match &result {

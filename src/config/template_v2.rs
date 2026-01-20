@@ -3,9 +3,9 @@
 // 定义v2版本的模板配置结构,支持灵活的元素来源(fixed/input/computed)、
 // 高度预算、布局约束等自适应布局功能
 
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use anyhow::{Context, Result};
 
 /// v2版本完整模板配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -311,8 +311,8 @@ impl TemplateV2Config {
         let content = std::fs::read_to_string(path)
             .context(format!("读取模板文件失败: {}", path.display()))?;
 
-        let config: TemplateV2Config = toml::from_str(&content)
-            .context(format!("解析模板文件失败: {}", path.display()))?;
+        let config: TemplateV2Config =
+            toml::from_str(&content).context(format!("解析模板文件失败: {}", path.display()))?;
 
         // 基本验证
         config.validate()?;
@@ -329,13 +329,15 @@ impl TemplateV2Config {
 
     /// 保存配置到TOML文件
     pub fn save_to_file(&self, path: &Path) -> Result<()> {
-        let toml_str = toml::to_string_pretty(self)
-            .context("序列化模板配置失败")?;
+        let toml_str = toml::to_string_pretty(self).context("序列化模板配置失败")?;
 
-        std::fs::write(path, toml_str)
-            .context(format!("写入模板文件失败: {}", path.display()))?;
+        std::fs::write(path, toml_str).context(format!("写入模板文件失败: {}", path.display()))?;
 
-        log::info!("✅ 保存v2模板: {} 到 {}", self.metadata.name, path.display());
+        log::info!(
+            "✅ 保存v2模板: {} 到 {}",
+            self.metadata.name,
+            path.display()
+        );
 
         Ok(())
     }
@@ -348,7 +350,9 @@ impl TemplateV2Config {
         }
 
         // 验证输出模式
-        if self.output.mode != "text_bitmap_plus_native_barcode" && self.output.mode != "full_bitmap" {
+        if self.output.mode != "text_bitmap_plus_native_barcode"
+            && self.output.mode != "full_bitmap"
+        {
             anyhow::bail!(
                 "无效的输出模式: {}, 支持的模式: text_bitmap_plus_native_barcode, full_bitmap",
                 self.output.mode
@@ -369,7 +373,8 @@ impl TemplateV2Config {
         if elem.element_type != "text" && elem.element_type != "barcode" {
             anyhow::bail!(
                 "元素 {} 的类型无效: {}, 支持的类型: text, barcode",
-                elem.id, elem.element_type
+                elem.id,
+                elem.element_type
             );
         }
 
@@ -377,7 +382,8 @@ impl TemplateV2Config {
         if elem.source != "fixed" && elem.source != "input" && elem.source != "computed" {
             anyhow::bail!(
                 "元素 {} 的来源无效: {}, 支持的来源: fixed, input, computed",
-                elem.id, elem.source
+                elem.id,
+                elem.source
             );
         }
 
@@ -458,21 +464,19 @@ mod tests {
                 en_bold: "LiberationSans-Bold.ttf".to_string(),
                 fallback_bold: "SourceHanSansSC-Bold.otf".to_string(),
             },
-            elements: vec![
-                ElementConfig {
-                    id: "title".to_string(),
-                    element_type: "text".to_string(),
-                    source: "fixed".to_string(),
-                    value: Some("Test Title".to_string()),
-                    key: None,
-                    format: None,
-                    max_height_mm: Some(10.0),
-                    barcode_type: None,
-                    height_mm: None,
-                    quiet_zone_mm: None,
-                    human_readable: None,
-                },
-            ],
+            elements: vec![ElementConfig {
+                id: "title".to_string(),
+                element_type: "text".to_string(),
+                source: "fixed".to_string(),
+                value: Some("Test Title".to_string()),
+                key: None,
+                format: None,
+                max_height_mm: Some(10.0),
+                barcode_type: None,
+                height_mm: None,
+                quiet_zone_mm: None,
+                human_readable: None,
+            }],
             output: OutputConfig {
                 mode: "text_bitmap_plus_native_barcode".to_string(),
                 threshold: 160,
@@ -608,8 +612,7 @@ mod tests {
     #[test]
     fn test_load_qsl_card_v2_toml() {
         let config_path = Path::new("config/templates/qsl-card-v2.toml");
-        let config = TemplateV2Config::load_from_file(config_path)
-            .expect("应该成功加载v2配置");
+        let config = TemplateV2Config::load_from_file(config_path).expect("应该成功加载v2配置");
 
         // 验证基本信息
         assert_eq!(config.metadata.template_version, "2.0");

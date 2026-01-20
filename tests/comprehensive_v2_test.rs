@@ -2,8 +2,8 @@
 //
 // 测试从配置加载到 PNG/TSPL 生成的完整流程
 
-use QSL_CardHub::api_v2::{quick_generate_png, quick_generate_tspl, QslCardGenerator};
-use QSL_CardHub::config::template_v2::{TemplateV2Config, OutputConfig};
+use QSL_CardHub::api_v2::{QslCardGenerator, quick_generate_png, quick_generate_tspl};
+use QSL_CardHub::config::template_v2::{OutputConfig, TemplateV2Config};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -16,14 +16,20 @@ fn test_comprehensive_qsl_card_generation() {
     // 步骤 1: 加载模板配置
     println!("📋 步骤 1: 加载模板配置");
     let config_path = Path::new("config/templates/qsl-card-v2.toml");
-    assert!(config_path.exists(), "配置文件不存在: {}", config_path.display());
+    assert!(
+        config_path.exists(),
+        "配置文件不存在: {}",
+        config_path.display()
+    );
 
-    let config = TemplateV2Config::load_from_file(config_path)
-        .expect("加载配置文件失败");
+    let config = TemplateV2Config::load_from_file(config_path).expect("加载配置文件失败");
 
     println!("  ✓ 模板名称: {}", config.metadata.name);
     println!("  ✓ 模板版本: {}", config.metadata.version);
-    println!("  ✓ 纸张尺寸: {}x{} mm", config.page.width_mm, config.page.height_mm);
+    println!(
+        "  ✓ 纸张尺寸: {}x{} mm",
+        config.page.width_mm, config.page.height_mm
+    );
     println!("  ✓ DPI: {}", config.page.dpi);
     println!("  ✓ 元素数量: {}", config.elements.len());
 
@@ -57,20 +63,19 @@ fn test_comprehensive_qsl_card_generation() {
 
     let mut generator = QslCardGenerator::new().expect("创建生成器失败");
 
-    let png_path_mixed = generator.generate_png(
-        &config,
-        &data,
-        output_dir.clone(),
-        &mixed_mode_config,
-    ).expect("生成混合模式PNG失败");
+    let png_path_mixed = generator
+        .generate_png(&config, &data, output_dir.clone(), &mixed_mode_config)
+        .expect("生成混合模式PNG失败");
 
     assert!(png_path_mixed.exists(), "PNG文件不存在");
 
     let img_mixed = image::open(&png_path_mixed).expect("打开PNG失败");
     println!("  ✓ 混合模式PNG: {}", png_path_mixed.display());
     println!("  ✓ 图像尺寸: {}x{}", img_mixed.width(), img_mixed.height());
-    println!("  ✓ 文件大小: {} KB",
-        std::fs::metadata(&png_path_mixed).unwrap().len() / 1024);
+    println!(
+        "  ✓ 文件大小: {} KB",
+        std::fs::metadata(&png_path_mixed).unwrap().len() / 1024
+    );
 
     // 步骤 5: 测试全位图模式渲染
     println!("\n🖼️  步骤 5: 测试全位图模式渲染");
@@ -79,24 +84,24 @@ fn test_comprehensive_qsl_card_generation() {
         threshold: 160,
     };
 
-    let png_path_full = generator.generate_png(
-        &config,
-        &data,
-        output_dir.clone(),
-        &full_bitmap_config,
-    ).expect("生成全位图PNG失败");
+    let png_path_full = generator
+        .generate_png(&config, &data, output_dir.clone(), &full_bitmap_config)
+        .expect("生成全位图PNG失败");
 
     assert!(png_path_full.exists(), "PNG文件不存在");
 
     let img_full = image::open(&png_path_full).expect("打开PNG失败");
     println!("  ✓ 全位图PNG: {}", png_path_full.display());
     println!("  ✓ 图像尺寸: {}x{}", img_full.width(), img_full.height());
-    println!("  ✓ 文件大小: {} KB",
-        std::fs::metadata(&png_path_full).unwrap().len() / 1024);
+    println!(
+        "  ✓ 文件大小: {} KB",
+        std::fs::metadata(&png_path_full).unwrap().len() / 1024
+    );
 
     // 步骤 6: 生成 TSPL 指令（混合模式）
     println!("\n📄 步骤 6: 生成TSPL指令（混合模式）");
-    let tspl_mixed = generator.generate_tspl(&config, &data, &mixed_mode_config)
+    let tspl_mixed = generator
+        .generate_tspl(&config, &data, &mixed_mode_config)
         .expect("生成TSPL失败");
 
     assert!(tspl_mixed.contains("SIZE"), "TSPL应包含SIZE指令");
@@ -110,16 +115,23 @@ fn test_comprehensive_qsl_card_generation() {
     println!("  ✓ TSPL文件: {}", tspl_path_mixed.display());
     println!("  ✓ TSPL大小: {} KB", tspl_mixed.len() / 1024);
     println!("  ✓ BITMAP指令数: {}", tspl_mixed.matches("BITMAP").count());
-    println!("  ✓ BARCODE指令数: {}", tspl_mixed.matches("BARCODE").count());
+    println!(
+        "  ✓ BARCODE指令数: {}",
+        tspl_mixed.matches("BARCODE").count()
+    );
 
     // 步骤 7: 生成 TSPL 指令（全位图模式）
     println!("\n📄 步骤 7: 生成TSPL指令（全位图模式）");
-    let tspl_full = generator.generate_tspl(&config, &data, &full_bitmap_config)
+    let tspl_full = generator
+        .generate_tspl(&config, &data, &full_bitmap_config)
         .expect("生成TSPL失败");
 
     assert!(tspl_full.contains("SIZE"), "TSPL应包含SIZE指令");
     assert!(tspl_full.contains("BITMAP"), "TSPL应包含BITMAP指令");
-    assert!(!tspl_full.contains("BARCODE"), "全位图模式不应包含BARCODE指令");
+    assert!(
+        !tspl_full.contains("BARCODE"),
+        "全位图模式不应包含BARCODE指令"
+    );
 
     let tspl_path_full = output_dir.join("full_bitmap.tspl");
     std::fs::write(&tspl_path_full, &tspl_full).expect("写入TSPL文件失败");
@@ -130,21 +142,15 @@ fn test_comprehensive_qsl_card_generation() {
 
     // 步骤 8: 便捷API测试
     println!("\n🚀 步骤 8: 测试便捷API");
-    let quick_png = quick_generate_png(
-        Some(config_path),
-        &data,
-        output_dir.clone(),
-        "full_bitmap",
-    ).expect("快速生成PNG失败");
+    let quick_png = quick_generate_png(Some(config_path), &data, output_dir.clone(), "full_bitmap")
+        .expect("快速生成PNG失败");
 
     assert!(quick_png.exists());
     println!("  ✓ 快速生成PNG: {}", quick_png.display());
 
-    let quick_tspl = quick_generate_tspl(
-        Some(config_path),
-        &data,
-        "text_bitmap_plus_native_barcode",
-    ).expect("快速生成TSPL失败");
+    let quick_tspl =
+        quick_generate_tspl(Some(config_path), &data, "text_bitmap_plus_native_barcode")
+            .expect("快速生成TSPL失败");
 
     println!("  ✓ 快速生成TSPL: {} KB", quick_tspl.len() / 1024);
 
@@ -157,15 +163,16 @@ fn test_comprehensive_qsl_card_generation() {
         let mut batch_data = data.clone();
         batch_data.insert("sn".to_string(), format!("{:03}", i));
 
-        let batch_png = generator.generate_png(
-            &config,
-            &batch_data,
-            batch_dir.clone(),
-            &full_bitmap_config,
-        ).expect("批量生成失败");
+        let batch_png = generator
+            .generate_png(&config, &batch_data, batch_dir.clone(), &full_bitmap_config)
+            .expect("批量生成失败");
 
         assert!(batch_png.exists());
-        println!("  ✓ 批量 {}/5: {}", i, batch_png.file_name().unwrap().to_string_lossy());
+        println!(
+            "  ✓ 批量 {}/5: {}",
+            i,
+            batch_png.file_name().unwrap().to_string_lossy()
+        );
     }
 
     // 步骤 10: 不同内容变化测试
@@ -183,12 +190,9 @@ fn test_comprehensive_qsl_card_generation() {
         test_data.insert("sn".to_string(), sn.to_string());
         test_data.insert("qty".to_string(), qty.to_string());
 
-        let test_png = generator.generate_png(
-            &config,
-            &test_data,
-            output_dir.clone(),
-            &full_bitmap_config,
-        ).expect(&format!("生成{}失败", label));
+        let test_png = generator
+            .generate_png(&config, &test_data, output_dir.clone(), &full_bitmap_config)
+            .expect(&format!("生成{}失败", label));
 
         assert!(test_png.exists());
         println!("  ✓ {}: {}", label, test_png.display());
@@ -244,17 +248,18 @@ fn test_default_template_generation() {
 
     // 使用便捷API，不提供模板路径（使用默认模板）
     let png_path = quick_generate_png(
-        None,  // 使用默认模板
+        None, // 使用默认模板
         &data,
         output_dir.clone(),
         "full_bitmap",
-    ).expect("生成PNG失败");
+    )
+    .expect("生成PNG失败");
 
     assert!(png_path.exists());
     println!("✅ 默认模板PNG: {}", png_path.display());
 
-    let tspl = quick_generate_tspl(None, &data, "text_bitmap_plus_native_barcode")
-        .expect("生成TSPL失败");
+    let tspl =
+        quick_generate_tspl(None, &data, "text_bitmap_plus_native_barcode").expect("生成TSPL失败");
 
     assert!(tspl.len() > 1000);
     println!("✅ 默认模板TSPL: {} KB", tspl.len() / 1024);
@@ -288,12 +293,9 @@ fn test_performance_batch_generation() {
         data.insert("sn".to_string(), format!("{:03}", i));
         data.insert("qty".to_string(), "100".to_string());
 
-        generator.generate_png(
-            &config,
-            &data,
-            output_dir.clone(),
-            &output_config,
-        ).expect("生成失败");
+        generator
+            .generate_png(&config, &data, output_dir.clone(), &output_config)
+            .expect("生成失败");
     }
 
     let elapsed = start.elapsed();
@@ -307,7 +309,11 @@ fn test_performance_batch_generation() {
 
     // 性能基准：每张卡片应在 350ms 内完成（合理标准，包含文本渲染、布局计算、图像生成）
     // 注：首次加载字体会较慢，后续有缓存会加快
-    assert!(per_card < 350, "性能不达标：每张耗时 {}ms > 350ms", per_card);
+    assert!(
+        per_card < 350,
+        "性能不达标：每张耗时 {}ms > 350ms",
+        per_card
+    );
 
     println!("\n✅ 性能测试通过！\n");
 }

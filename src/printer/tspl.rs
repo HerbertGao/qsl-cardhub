@@ -33,7 +33,13 @@ impl TSPLGenerator {
     ///
     /// # 返回
     /// TSPL 指令字符串
-    pub fn generate_qsl_card(&self, callsign: &str, serial: u32, qty: u32, task_name: Option<&str>) -> String {
+    pub fn generate_qsl_card(
+        &self,
+        callsign: &str,
+        serial: u32,
+        qty: u32,
+        task_name: Option<&str>,
+    ) -> String {
         let mut tspl = String::new();
 
         // 添加任务名称元数据（使用注释，PDF后端会解析）
@@ -50,10 +56,7 @@ impl TSPLGenerator {
 
         // 呼号（大字号，居中）
         // TEXT X, Y, "font", rotation, x_scale, y_scale, "content"
-        tspl.push_str(&format!(
-            "TEXT 304,80,\"5\",0,3,3,\"{}\"\n",
-            callsign
-        ));
+        tspl.push_str(&format!("TEXT 304,80,\"5\",0,3,3,\"{}\"\n", callsign));
 
         // 条形码（CODE128，居中）
         // BARCODE X, Y, "type", height, human_readable, rotation, narrow, wide, "content"
@@ -63,16 +66,10 @@ impl TSPLGenerator {
         ));
 
         // 序列号
-        tspl.push_str(&format!(
-            "TEXT 50,520,\"5\",0,2,2,\"SN: {:03}\"\n",
-            serial
-        ));
+        tspl.push_str(&format!("TEXT 50,520,\"5\",0,2,2,\"SN: {:03}\"\n", serial));
 
         // 数量
-        tspl.push_str(&format!(
-            "TEXT 50,720,\"5\",0,2,2,\"QTY: {}\"\n",
-            qty
-        ));
+        tspl.push_str(&format!("TEXT 50,720,\"5\",0,2,2,\"QTY: {}\"\n", qty));
 
         // 打印命令
         tspl.push_str("PRINT 1\n");

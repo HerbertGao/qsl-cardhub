@@ -20,12 +20,8 @@ fn test_title_not_overlapping_border() {
     data.insert("qty".to_string(), "500".to_string());
 
     let config_path = Path::new("config/templates/qsl-card-v2.toml");
-    let png_path = quick_generate_png(
-        Some(config_path),
-        &data,
-        output_dir.clone(),
-        "full_bitmap",
-    ).expect("生成PNG失败");
+    let png_path = quick_generate_png(Some(config_path), &data, output_dir.clone(), "full_bitmap")
+        .expect("生成PNG失败");
 
     assert!(png_path.exists());
 

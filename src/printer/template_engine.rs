@@ -75,13 +75,12 @@ impl TemplateEngine {
                 element.source
             );
 
-            let content = Self::resolve_content(element, data)
-                .with_context(|| {
-                    format!(
-                        "解析元素 {} (type={}, source={}) 失败",
-                        element.id, element.element_type, element.source
-                    )
-                })?;
+            let content = Self::resolve_content(element, data).with_context(|| {
+                format!(
+                    "解析元素 {} (type={}, source={}) 失败",
+                    element.id, element.element_type, element.source
+                )
+            })?;
 
             log::debug!("  -> 解析结果: {:?}", content);
 
@@ -195,8 +194,14 @@ impl TemplateEngine {
         }
 
         if !missing_keys.is_empty() {
-            log::error!("format字符串中的占位符在运行时数据中不存在: {:?}", missing_keys);
-            anyhow::bail!("format字符串中的占位符在运行时数据中不存在: {:?}", missing_keys);
+            log::error!(
+                "format字符串中的占位符在运行时数据中不存在: {:?}",
+                missing_keys
+            );
+            anyhow::bail!(
+                "format字符串中的占位符在运行时数据中不存在: {:?}",
+                missing_keys
+            );
         }
 
         Ok(result)

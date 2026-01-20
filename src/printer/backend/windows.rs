@@ -16,8 +16,8 @@ use windows::Win32::Foundation::{BOOL, HANDLE};
 
 #[cfg(target_os = "windows")]
 use windows::Win32::Graphics::Printing::{
-    ClosePrinter, EndDocPrinter, EndPagePrinter, EnumPrintersW, OpenPrinterW, StartDocPrinterW,
-    StartPagePrinter, WritePrinter, DOC_INFO_1W, PRINTER_ENUM_LOCAL, PRINTER_INFO_2W,
+    ClosePrinter, DOC_INFO_1W, EndDocPrinter, EndPagePrinter, EnumPrintersW, OpenPrinterW,
+    PRINTER_ENUM_LOCAL, PRINTER_INFO_2W, StartDocPrinterW, StartPagePrinter, WritePrinter,
 };
 
 #[cfg(target_os = "windows")]
@@ -79,7 +79,9 @@ impl PrinterBackend for WindowsBackend {
             for i in 0..returned as usize {
                 let printer_info = &*printer_info_array.add(i);
                 if !printer_info.pPrinterName.is_null() {
-                    let name = printer_info.pPrinterName.to_string()
+                    let name = printer_info
+                        .pPrinterName
+                        .to_string()
                         .context("无法解析打印机名称")?;
                     printers.push(name);
                 }
@@ -92,7 +94,8 @@ impl PrinterBackend for WindowsBackend {
     fn send_raw(&self, printer_name: &str, data: &[u8]) -> Result<()> {
         unsafe {
             // 打开打印机
-            let mut printer_name_wide: Vec<u16> = printer_name.encode_utf16().chain(Some(0)).collect();
+            let mut printer_name_wide: Vec<u16> =
+                printer_name.encode_utf16().chain(Some(0)).collect();
             let mut printer_handle: HANDLE = HANDLE::default();
 
             OpenPrinterW(

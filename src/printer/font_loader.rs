@@ -101,17 +101,29 @@ impl FontLoader {
             // Windows 系统字体
             let windows_dir = std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".to_string());
             paths.push(PathBuf::from(format!("{}\\Fonts\\arial.ttf", windows_dir)));
-            paths.push(PathBuf::from(format!("{}\\Fonts\\calibri.ttf", windows_dir)));
-            paths.push(PathBuf::from(format!("{}\\Fonts\\segoeui.ttf", windows_dir)));
+            paths.push(PathBuf::from(format!(
+                "{}\\Fonts\\calibri.ttf",
+                windows_dir
+            )));
+            paths.push(PathBuf::from(format!(
+                "{}\\Fonts\\segoeui.ttf",
+                windows_dir
+            )));
         }
 
         #[cfg(target_os = "linux")]
         {
             // Linux 系统字体
-            paths.push(PathBuf::from("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"));
-            paths.push(PathBuf::from("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"));
+            paths.push(PathBuf::from(
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            ));
+            paths.push(PathBuf::from(
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            ));
             paths.push(PathBuf::from("/usr/share/fonts/TTF/DejaVuSans.ttf"));
-            paths.push(PathBuf::from("/usr/share/fonts/truetype/freefont/FreeSans.ttf"));
+            paths.push(PathBuf::from(
+                "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+            ));
         }
 
         paths
@@ -157,9 +169,15 @@ impl FontLoader {
         #[cfg(target_os = "linux")]
         {
             // Linux 系统中文字体
-            paths.push(PathBuf::from("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"));
-            paths.push(PathBuf::from("/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttf"));
-            paths.push(PathBuf::from("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc")); // 文泉驿
+            paths.push(PathBuf::from(
+                "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+            ));
+            paths.push(PathBuf::from(
+                "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttf",
+            ));
+            paths.push(PathBuf::from(
+                "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+            )); // 文泉驿
         }
 
         paths

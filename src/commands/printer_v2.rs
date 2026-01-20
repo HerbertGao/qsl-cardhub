@@ -2,7 +2,7 @@
 //
 // 使用新的模板系统 v2 架构
 
-use crate::config::template_v2::{TemplateV2Config, OutputConfig};
+use crate::config::template_v2::{OutputConfig, TemplateV2Config};
 use crate::printer::backend::{PdfBackendV2, PrinterBackend};
 use crate::printer::layout_engine::LayoutEngine;
 use crate::printer::render_pipeline::RenderPipeline;
@@ -29,12 +29,11 @@ pub struct PrinterStateV2 {
 impl PrinterStateV2 {
     /// 创建新的打印机状态
     pub fn new() -> Result<Self, String> {
-        let layout_engine = LayoutEngine::new()
-            .map_err(|e| format!("创建布局引擎失败: {}", e))?;
-        let render_pipeline = RenderPipeline::new()
-            .map_err(|e| format!("创建渲染管道失败: {}", e))?;
-        let pdf_backend = PdfBackendV2::with_downloads_dir()
-            .map_err(|e| format!("创建PDF后端失败: {}", e))?;
+        let layout_engine = LayoutEngine::new().map_err(|e| format!("创建布局引擎失败: {}", e))?;
+        let render_pipeline =
+            RenderPipeline::new().map_err(|e| format!("创建渲染管道失败: {}", e))?;
+        let pdf_backend =
+            PdfBackendV2::with_downloads_dir().map_err(|e| format!("创建PDF后端失败: {}", e))?;
         let tspl_generator = TSPLGeneratorV2::new();
 
         Ok(Self {
@@ -109,32 +108,44 @@ pub async fn preview_qsl_v2(
     log::info!("✓ 解析 {} 个元素", resolved_elements.len());
 
     // 3. 布局计算
-    let mut layout_engine = state.layout_engine.lock()
+    let mut layout_engine = state
+        .layout_engine
+        .lock()
         .map_err(|e| format!("锁定布局引擎失败: {}", e))?;
-    let layout_result = layout_engine.layout(&config, resolved_elements)
+    let layout_result = layout_engine
+        .layout(&config, resolved_elements)
         .map_err(|e| format!("布局计算失败: {}", e))?;
-    log::info!("✓ 布局计算完成: {}x{} dots", layout_result.canvas_width, layout_result.canvas_height);
+    log::info!(
+        "✓ 布局计算完成: {}x{} dots",
+        layout_result.canvas_width,
+        layout_result.canvas_height
+    );
 
     // 4. 渲染
-    let mut render_pipeline = state.render_pipeline.lock()
+    let mut render_pipeline = state
+        .render_pipeline
+        .lock()
         .map_err(|e| format!("锁定渲染管道失败: {}", e))?;
     let output_config = OutputConfig {
         mode: request.output_config.mode.clone(),
         threshold: request.output_config.threshold,
     };
-    let render_result = render_pipeline.render(layout_result, &output_config)
+    let render_result = render_pipeline
+        .render(layout_result, &output_config)
         .map_err(|e| format!("渲染失败: {}", e))?;
     log::info!("✓ 渲染完成");
 
     // 5. 保存为 PNG
-    let mut pdf_backend = state.pdf_backend.lock()
+    let mut pdf_backend = state
+        .pdf_backend
+        .lock()
         .map_err(|e| format!("锁定PDF后端失败: {}", e))?;
-    let png_path = pdf_backend.render(render_result)
+    let png_path = pdf_backend
+        .render(render_result)
         .map_err(|e| format!("保存PNG失败: {}", e))?;
 
     // 6. 读取图像尺寸
-    let img = image::open(&png_path)
-        .map_err(|e| format!("读取图像失败: {}", e))?;
+    let img = image::open(&png_path).map_err(|e| format!("读取图像失败: {}", e))?;
 
     log::info!("✅ 预览生成成功: {}", png_path.display());
 
@@ -175,29 +186,35 @@ pub async fn print_qsl_v2(
         .map_err(|e| format!("模板解析失败: {}", e))?;
 
     // 3. 布局计算
-    let mut layout_engine = state.layout_engine.lock()
+    let mut layout_engine = state
+        .layout_engine
+        .lock()
         .map_err(|e| format!("锁定布局引擎失败: {}", e))?;
-    let layout_result = layout_engine.layout(&config, resolved_elements)
+    let layout_result = layout_engine
+        .layout(&config, resolved_elements)
         .map_err(|e| format!("布局计算失败: {}", e))?;
 
     // 4. 渲染
-    let mut render_pipeline = state.render_pipeline.lock()
+    let mut render_pipeline = state
+        .render_pipeline
+        .lock()
         .map_err(|e| format!("锁定渲染管道失败: {}", e))?;
     let output_config = OutputConfig {
         mode: request.output_config.mode.clone(),
         threshold: request.output_config.threshold,
     };
-    let render_result = render_pipeline.render(layout_result, &output_config)
+    let render_result = render_pipeline
+        .render(layout_result, &output_config)
         .map_err(|e| format!("渲染失败: {}", e))?;
 
     // 5. 生成 TSPL 指令
-    let tspl_generator = state.tspl_generator.lock()
+    let tspl_generator = state
+        .tspl_generator
+        .lock()
         .map_err(|e| format!("锁定TSPL生成器失败: {}", e))?;
-    let tspl = tspl_generator.generate(
-        render_result,
-        config.page.width_mm,
-        config.page.height_mm,
-    ).map_err(|e| format!("生成TSPL指令失败: {}", e))?;
+    let tspl = tspl_generator
+        .generate(render_result, config.page.width_mm, config.page.height_mm)
+        .map_err(|e| format!("生成TSPL指令失败: {}", e))?;
 
     log::debug!("TSPL指令长度: {} 字节", tspl.len());
 
@@ -238,28 +255,34 @@ pub async fn generate_tspl_v2(
     let resolved_elements = TemplateEngine::resolve(&config, &request.data)
         .map_err(|e| format!("模板解析失败: {}", e))?;
 
-    let mut layout_engine = state.layout_engine.lock()
+    let mut layout_engine = state
+        .layout_engine
+        .lock()
         .map_err(|e| format!("锁定布局引擎失败: {}", e))?;
-    let layout_result = layout_engine.layout(&config, resolved_elements)
+    let layout_result = layout_engine
+        .layout(&config, resolved_elements)
         .map_err(|e| format!("布局计算失败: {}", e))?;
 
-    let mut render_pipeline = state.render_pipeline.lock()
+    let mut render_pipeline = state
+        .render_pipeline
+        .lock()
         .map_err(|e| format!("锁定渲染管道失败: {}", e))?;
     let output_config = OutputConfig {
         mode: request.output_config.mode.clone(),
         threshold: request.output_config.threshold,
     };
-    let render_result = render_pipeline.render(layout_result, &output_config)
+    let render_result = render_pipeline
+        .render(layout_result, &output_config)
         .map_err(|e| format!("渲染失败: {}", e))?;
 
     // 3. 生成 TSPL
-    let tspl_generator = state.tspl_generator.lock()
+    let tspl_generator = state
+        .tspl_generator
+        .lock()
         .map_err(|e| format!("锁定TSPL生成器失败: {}", e))?;
-    let tspl = tspl_generator.generate(
-        render_result,
-        config.page.width_mm,
-        config.page.height_mm,
-    ).map_err(|e| format!("生成TSPL指令失败: {}", e))?;
+    let tspl = tspl_generator
+        .generate(render_result, config.page.width_mm, config.page.height_mm)
+        .map_err(|e| format!("生成TSPL指令失败: {}", e))?;
 
     log::info!("✅ TSPL指令生成成功: {} 字节", tspl.len());
 
@@ -287,8 +310,7 @@ pub async fn load_template_v2(path: Option<String>) -> Result<String, String> {
     };
 
     // 序列化为 JSON
-    serde_json::to_string_pretty(&config)
-        .map_err(|e| format!("序列化模板失败: {}", e))
+    serde_json::to_string_pretty(&config).map_err(|e| format!("序列化模板失败: {}", e))
 }
 
 /// 保存模板配置
@@ -304,11 +326,12 @@ pub async fn save_template_v2(path: String, config_json: String) -> Result<(), S
     log::info!("保存模板配置 (v2): {}", path);
 
     // 反序列化
-    let config: TemplateV2Config = serde_json::from_str(&config_json)
-        .map_err(|e| format!("解析模板配置失败: {}", e))?;
+    let config: TemplateV2Config =
+        serde_json::from_str(&config_json).map_err(|e| format!("解析模板配置失败: {}", e))?;
 
     // 保存到文件
-    config.save_to_file(std::path::Path::new(&path))
+    config
+        .save_to_file(std::path::Path::new(&path))
         .map_err(|e| format!("保存模板失败: {}", e))?;
 
     log::info!("✅ 模板保存成功");

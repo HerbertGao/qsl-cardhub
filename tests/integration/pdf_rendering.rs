@@ -2,8 +2,8 @@
 //
 // 测试完整的 PDF 后端渲染流程
 
-use QSL_CardHub::printer::backend::PrinterBackend;
 use QSL_CardHub::printer::PdfBackend;
+use QSL_CardHub::printer::backend::PrinterBackend;
 use std::path::PathBuf;
 
 /// 确保测试输出目录存在
@@ -228,12 +228,7 @@ fn test_full_rendering_pipeline() {
     let pdf_backend = PdfBackend::new(test_dir.clone()).expect("创建 PDF 后端失败");
 
     // 测试完整的 QSL 卡片（包含所有元素）
-    let full_tspl = generate_qsl_tspl_with_task(
-        "BG7XXX",
-        123,
-        50,
-        "2026年春季活动",
-    );
+    let full_tspl = generate_qsl_tspl_with_task("BG7XXX", 123, 50, "2026年春季活动");
 
     println!("测试完整渲染流程:");
     println!("  - 中文标题: 中国无线电协会业余分会-2区卡片局");
@@ -260,7 +255,11 @@ fn test_full_rendering_pipeline() {
                     if ext == "png" || ext == "pdf" {
                         let metadata = std::fs::metadata(&path).ok();
                         let size = metadata.map(|m| m.len()).unwrap_or(0);
-                        println!("  - {} ({} KB)", path.file_name().unwrap().to_string_lossy(), size / 1024);
+                        println!(
+                            "  - {} ({} KB)",
+                            path.file_name().unwrap().to_string_lossy(),
+                            size / 1024
+                        );
                     }
                 }
             }

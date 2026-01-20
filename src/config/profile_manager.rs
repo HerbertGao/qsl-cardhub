@@ -25,20 +25,16 @@ impl ProfileManager {
     /// - 配置文件读取失败
     pub fn new(config_dir: PathBuf) -> Result<Self> {
         // 确保配置目录存在
-        fs::create_dir_all(&config_dir)
-            .context("无法创建配置目录")?;
+        fs::create_dir_all(&config_dir).context("无法创建配置目录")?;
 
         let profiles_dir = config_dir.join("profiles");
-        fs::create_dir_all(&profiles_dir)
-            .context("无法创建 profiles 目录")?;
+        fs::create_dir_all(&profiles_dir).context("无法创建 profiles 目录")?;
 
         // 读取应用配置
         let config_path = config_dir.join("config.toml");
         let app_config = if config_path.exists() {
-            let content = fs::read_to_string(&config_path)
-                .context("无法读取 config.toml")?;
-            toml::from_str(&content)
-                .context("无法解析 config.toml")?
+            let content = fs::read_to_string(&config_path).context("无法读取 config.toml")?;
+            toml::from_str(&content).context("无法解析 config.toml")?
         } else {
             AppConfig::default()
         };
@@ -83,7 +79,12 @@ impl ProfileManager {
     }
 
     /// 创建新的 Profile
-    pub fn create(&mut self, name: String, printer_name: String, platform: Platform) -> Result<Profile> {
+    pub fn create(
+        &mut self,
+        name: String,
+        printer_name: String,
+        platform: Platform,
+    ) -> Result<Profile> {
         let profile = Profile::new(name, printer_name, platform);
         self.save_profile(&profile)?;
         Ok(profile)
@@ -102,8 +103,7 @@ impl ProfileManager {
     pub fn delete(&mut self, id: &str) -> Result<()> {
         let path = self.profiles_dir.join(format!("{}.toml", id));
         if path.exists() {
-            fs::remove_file(&path)
-                .context("无法删除 Profile 文件")?;
+            fs::remove_file(&path).context("无法删除 Profile 文件")?;
         }
 
         // 如果删除的是默认 Profile，清除默认设置
@@ -134,16 +134,13 @@ impl ProfileManager {
 
     /// 导出 Profile 为 JSON
     pub fn export_profile(&self, id: &str) -> Result<String> {
-        let profile = self.get_by_id(id)?
-            .context("Profile 不存在")?;
-        serde_json::to_string_pretty(&profile)
-            .context("无法序列化 Profile")
+        let profile = self.get_by_id(id)?.context("Profile 不存在")?;
+        serde_json::to_string_pretty(&profile).context("无法序列化 Profile")
     }
 
     /// 从 JSON 导入 Profile
     pub fn import_profile(&mut self, json: &str) -> Result<Profile> {
-        let mut profile: Profile = serde_json::from_str(json)
-            .context("无法解析 JSON")?;
+        let mut profile: Profile = serde_json::from_str(json).context("无法解析 JSON")?;
 
         // 生成新的 ID 避免冲突
         profile.id = uuid::Uuid::new_v4().to_string();
@@ -157,17 +154,14 @@ impl ProfileManager {
 
     /// 从文件加载 Profile
     fn load_profile(&self, path: &PathBuf) -> Result<Profile> {
-        let content = fs::read_to_string(path)
-            .context("无法读取 Profile 文件")?;
-        toml::from_str(&content)
-            .context("无法解析 Profile 文件")
+        let content = fs::read_to_string(path).context("无法读取 Profile 文件")?;
+        toml::from_str(&content).context("无法解析 Profile 文件")
     }
 
     /// 保存 Profile 到文件
     fn save_profile(&self, profile: &Profile) -> Result<()> {
         let path = self.profiles_dir.join(format!("{}.toml", profile.id));
-        let content = toml::to_string_pretty(profile)
-            .context("无法序列化 Profile")?;
+        let content = toml::to_string_pretty(profile).context("无法序列化 Profile")?;
 
         // 添加注释
         let content_with_comment = format!(
@@ -177,24 +171,18 @@ impl ProfileManager {
             content
         );
 
-        fs::write(&path, content_with_comment)
-            .context("无法写入 Profile 文件")?;
+        fs::write(&path, content_with_comment).context("无法写入 Profile 文件")?;
         Ok(())
     }
 
     /// 保存应用配置
     fn save_app_config(&self) -> Result<()> {
         let path = self.config_dir.join("config.toml");
-        let content = toml::to_string_pretty(&self.app_config)
-            .context("无法序列化应用配置")?;
+        let content = toml::to_string_pretty(&self.app_config).context("无法序列化应用配置")?;
 
-        let content_with_comment = format!(
-            "# QSL-CardHub 全局配置\n\n{}",
-            content
-        );
+        let content_with_comment = format!("# QSL-CardHub 全局配置\n\n{}", content);
 
-        fs::write(&path, content_with_comment)
-            .context("无法写入应用配置文件")?;
+        fs::write(&path, content_with_comment).context("无法写入应用配置文件")?;
         Ok(())
     }
 }

@@ -2,7 +2,7 @@
 //
 // 测试完整流程: 配置 → 模板解析 → 布局计算 → 渲染输出
 
-use QSL_CardHub::config::template_v2::{TemplateV2Config, OutputConfig};
+use QSL_CardHub::config::template_v2::{OutputConfig, TemplateV2Config};
 use QSL_CardHub::printer::layout_engine::LayoutEngine;
 use QSL_CardHub::printer::render_pipeline::{RenderPipeline, RenderResult};
 use QSL_CardHub::printer::template_engine::TemplateEngine;
@@ -15,8 +15,7 @@ fn test_end_to_end_mixed_mode() {
 
     // 1. 加载配置
     let config_path = Path::new("config/templates/qsl-card-v2.toml");
-    let config = TemplateV2Config::load_from_file(config_path)
-        .expect("加载配置失败");
+    let config = TemplateV2Config::load_from_file(config_path).expect("加载配置失败");
 
     println!("✓ 加载配置: {}", config.metadata.name);
 
@@ -30,8 +29,7 @@ fn test_end_to_end_mixed_mode() {
     println!("✓ 准备运行时数据");
 
     // 3. 模板解析
-    let resolved_elements = TemplateEngine::resolve(&config, &data)
-        .expect("模板解析失败");
+    let resolved_elements = TemplateEngine::resolve(&config, &data).expect("模板解析失败");
 
     println!("✓ 解析 {} 个元素", resolved_elements.len());
 
@@ -41,7 +39,10 @@ fn test_end_to_end_mixed_mode() {
         .layout(&config, resolved_elements)
         .expect("布局计算失败");
 
-    println!("✓ 布局计算完成: {}x{} dots", layout_result.canvas_width, layout_result.canvas_height);
+    println!(
+        "✓ 布局计算完成: {}x{} dots",
+        layout_result.canvas_width, layout_result.canvas_height
+    );
 
     // 5. 渲染管道
     let mut render_pipeline = RenderPipeline::new().expect("创建渲染管道失败");
@@ -82,7 +83,14 @@ fn test_end_to_end_mixed_mode() {
 
             // 验证所有位图都是1bpp
             for (i, (x, y, bitmap)) in bitmaps.iter().enumerate() {
-                println!("  位图[{}]: {}x{} at ({}, {})", i, bitmap.width(), bitmap.height(), x, y);
+                println!(
+                    "  位图[{}]: {}x{} at ({}, {})",
+                    i,
+                    bitmap.width(),
+                    bitmap.height(),
+                    x,
+                    y
+                );
 
                 // 验证所有像素都是0或255
                 for pixel in bitmap.pixels() {
@@ -106,8 +114,7 @@ fn test_end_to_end_full_bitmap() {
 
     // 1. 加载配置并修改为全位图模式
     let config_path = Path::new("config/templates/qsl-card-v2.toml");
-    let mut config = TemplateV2Config::load_from_file(config_path)
-        .expect("加载配置失败");
+    let mut config = TemplateV2Config::load_from_file(config_path).expect("加载配置失败");
 
     println!("✓ 加载配置: {}", config.metadata.name);
 
@@ -129,11 +136,16 @@ fn test_end_to_end_full_bitmap() {
         threshold: 160,
     };
 
-    let render_result = render_pipeline.render(layout_result, &output_config).unwrap();
+    let render_result = render_pipeline
+        .render(layout_result, &output_config)
+        .unwrap();
 
     // 4. 验证全位图结果
     match render_result {
-        RenderResult::FullBitmap { canvas, canvas_size } => {
+        RenderResult::FullBitmap {
+            canvas,
+            canvas_size,
+        } => {
             println!("  模式: 全位图模式");
             println!("  画布尺寸: {}x{}", canvas.width(), canvas.height());
 
@@ -155,11 +167,18 @@ fn test_end_to_end_full_bitmap() {
             let black_pixels = canvas.pixels().filter(|p| p.0[0] == 0).count();
             let black_ratio = black_pixels as f32 / total_pixels as f32;
 
-            println!("  黑色像素: {} / {} ({:.1}%)", black_pixels, total_pixels, black_ratio * 100.0);
+            println!(
+                "  黑色像素: {} / {} ({:.1}%)",
+                black_pixels,
+                total_pixels,
+                black_ratio * 100.0
+            );
 
             // 合理的黑色像素比例应该在2%-15%之间（文字和条码）
-            assert!(black_ratio > 0.01 && black_ratio < 0.20,
-                "黑色像素比例应该合理");
+            assert!(
+                black_ratio > 0.01 && black_ratio < 0.20,
+                "黑色像素比例应该合理"
+            );
 
             // 可选：保存用于视觉检查
             let test_dir = PathBuf::from("test_output");
@@ -214,7 +233,12 @@ fn test_different_content_variations() {
             Ok(RenderResult::FullBitmap { canvas, .. }) => {
                 let has_content = canvas.pixels().any(|p| p.0[0] == 0);
                 assert!(has_content, "场景 {} 应该有内容", label);
-                println!("  ✓ {} 渲染成功: {}x{}", label, canvas.width(), canvas.height());
+                println!(
+                    "  ✓ {} 渲染成功: {}x{}",
+                    label,
+                    canvas.width(),
+                    canvas.height()
+                );
             }
             Err(e) => panic!("场景 {} 渲染失败: {}", label, e),
             _ => panic!("场景 {} 返回了错误的结果类型", label),

@@ -10,7 +10,6 @@ pub mod windows;
 #[cfg(target_family = "unix")]
 pub mod cups;
 
-pub mod mock;
 pub mod pdf;
 pub mod pdf_v2;
 
@@ -20,7 +19,6 @@ pub use windows::WindowsBackend;
 #[cfg(target_family = "unix")]
 pub use cups::CupsBackend;
 
-pub use mock::MockBackend;
 pub use pdf::PdfBackend;
 pub use pdf_v2::PdfBackendV2;
 

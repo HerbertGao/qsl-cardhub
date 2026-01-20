@@ -43,10 +43,7 @@ pub fn init_logger(log_dir: std::path::PathBuf) -> anyhow::Result<()> {
                 log::Level::Trace => LogLevel::Debug,
             };
 
-            let source = record
-                .module_path()
-                .unwrap_or("unknown")
-                .to_string();
+            let source = record.module_path().unwrap_or("unknown").to_string();
             let message = format!("{}", record.args());
 
             let entry = LogEntry::new(level, source, message);

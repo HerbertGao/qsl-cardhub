@@ -6,7 +6,7 @@
 use super::font_loader::FontLoader;
 use anyhow::Result;
 use image::{GrayImage, ImageBuffer, Luma, RgbImage};
-use rusttype::{point, Font, Scale};
+use rusttype::{Font, Scale, point};
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -282,11 +282,7 @@ impl TextRenderer {
                     let px = bounding_box.min.x + gx as i32;
                     let py = bounding_box.min.y + gy as i32;
 
-                    if px >= 0
-                        && px < img.width() as i32
-                        && py >= 0
-                        && py < img.height() as i32
-                    {
+                    if px >= 0 && px < img.width() as i32 && py >= 0 && py < img.height() as i32 {
                         let pixel = img.get_pixel_mut(px as u32, py as u32);
                         // 混合黑色文本
                         let alpha = gv;

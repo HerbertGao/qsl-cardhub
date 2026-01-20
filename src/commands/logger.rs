@@ -1,6 +1,6 @@
 // 日志相关的 Tauri Commands
 
-use crate::logger::{get_collector, LogEntry, LogLevel};
+use crate::logger::{LogEntry, LogLevel, get_collector};
 
 /// 获取日志列表
 ///
@@ -13,7 +13,9 @@ use crate::logger::{get_collector, LogEntry, LogLevel};
 #[tauri::command]
 pub fn get_logs(level: Option<String>, limit: Option<usize>) -> Result<Vec<LogEntry>, String> {
     let collector = get_collector();
-    let collector = collector.lock().map_err(|e| format!("锁定日志收集器失败: {}", e))?;
+    let collector = collector
+        .lock()
+        .map_err(|e| format!("锁定日志收集器失败: {}", e))?;
 
     // 解析日志级别
     let level_filter = level.map(|s| LogLevel::from_str(&s));
@@ -28,7 +30,9 @@ pub fn get_logs(level: Option<String>, limit: Option<usize>) -> Result<Vec<LogEn
 #[tauri::command]
 pub fn clear_logs() -> Result<(), String> {
     let collector = get_collector();
-    let mut collector = collector.lock().map_err(|e| format!("锁定日志收集器失败: {}", e))?;
+    let mut collector = collector
+        .lock()
+        .map_err(|e| format!("锁定日志收集器失败: {}", e))?;
 
     collector.clear_logs();
 
@@ -44,7 +48,9 @@ pub fn clear_logs() -> Result<(), String> {
 #[tauri::command]
 pub fn export_logs(export_path: String) -> Result<String, String> {
     let collector = get_collector();
-    let collector = collector.lock().map_err(|e| format!("锁定日志收集器失败: {}", e))?;
+    let collector = collector
+        .lock()
+        .map_err(|e| format!("锁定日志收集器失败: {}", e))?;
 
     let export_path_buf = std::path::PathBuf::from(&export_path);
     collector
@@ -60,7 +66,9 @@ pub fn export_logs(export_path: String) -> Result<String, String> {
 #[tauri::command]
 pub fn get_log_file_path() -> Result<Option<String>, String> {
     let collector = get_collector();
-    let collector = collector.lock().map_err(|e| format!("锁定日志收集器失败: {}", e))?;
+    let collector = collector
+        .lock()
+        .map_err(|e| format!("锁定日志收集器失败: {}", e))?;
 
     let path = collector
         .log_file_path()

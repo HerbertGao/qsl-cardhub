@@ -6,8 +6,8 @@
 // - 1bpp位图渲染
 // - 字体度量缓存
 
-use image::{ImageBuffer, Luma, Rgb, RgbImage};
 use QSL_CardHub::printer::text_renderer::TextRenderer;
+use image::{ImageBuffer, Luma, Rgb, RgbImage};
 use std::path::PathBuf;
 
 #[test]
@@ -144,11 +144,14 @@ fn test_text_measurement_accuracy() {
 
     for (text, font_size) in test_cases {
         // 测量文本
-        let (measured_width, measured_height) =
-            text_renderer.measure_text(text, font_size).expect("测量失败");
+        let (measured_width, measured_height) = text_renderer
+            .measure_text(text, font_size)
+            .expect("测量失败");
 
         // 渲染文本
-        let bitmap = text_renderer.render_text(text, font_size).expect("渲染失败");
+        let bitmap = text_renderer
+            .render_text(text, font_size)
+            .expect("渲染失败");
 
         // 比较测量值和实际位图尺寸
         println!(
@@ -230,10 +233,7 @@ fn test_font_metrics_cache_performance() {
     }
     let batch_duration = start.elapsed();
 
-    println!(
-        "批量测量100次 \"{}\": {:?}",
-        chinese_text, batch_duration
-    );
+    println!("批量测量100次 \"{}\": {:?}", chinese_text, batch_duration);
     println!("  平均每次: {:?}", batch_duration / 100);
 
     println!("✅ 字体度量缓存性能测试完成");

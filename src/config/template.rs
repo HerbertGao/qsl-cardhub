@@ -2,9 +2,9 @@
 //
 // 定义 QSL 卡片打印模板的完整配置结构
 
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use anyhow::{Context, Result};
 
 /// 完整的模板配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -190,10 +190,14 @@ impl TemplateConfig {
         let content = std::fs::read_to_string(&path)
             .context(format!("读取模板文件失败: {}", path.display()))?;
 
-        let config: TemplateConfig = toml::from_str(&content)
-            .context(format!("解析模板文件失败: {}", path.display()))?;
+        let config: TemplateConfig =
+            toml::from_str(&content).context(format!("解析模板文件失败: {}", path.display()))?;
 
-        log::info!("✅ 加载模板: {} v{}", config.metadata.name, config.metadata.version);
+        log::info!(
+            "✅ 加载模板: {} v{}",
+            config.metadata.name,
+            config.metadata.version
+        );
 
         Ok(config)
     }
@@ -272,11 +276,9 @@ impl TemplateConfig {
 
     /// 保存模板到 TOML 文件
     pub fn save_to_file(&self, path: PathBuf) -> Result<()> {
-        let toml_str = toml::to_string_pretty(self)
-            .context("序列化模板失败")?;
+        let toml_str = toml::to_string_pretty(self).context("序列化模板失败")?;
 
-        std::fs::write(&path, toml_str)
-            .context(format!("写入模板文件失败: {}", path.display()))?;
+        std::fs::write(&path, toml_str).context(format!("写入模板文件失败: {}", path.display()))?;
 
         log::info!("✅ 保存模板: {} 到 {}", self.metadata.name, path.display());
 

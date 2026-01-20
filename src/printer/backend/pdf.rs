@@ -11,9 +11,9 @@ use anyhow::{Context, Result};
 use image::{ImageBuffer, Rgb, RgbImage};
 use imageproc::drawing::{draw_filled_rect_mut, draw_hollow_rect_mut};
 use imageproc::rect::Rect;
-use std::sync::Mutex;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 /// PDF 打印后端
 ///
@@ -95,7 +95,13 @@ impl PdfBackend {
     ///
     /// 注意：由于依赖版本冲突，PDF 生成功能暂时禁用
     /// 目前只生成 PNG 文件
-    fn image_to_pdf(&self, _img: &RgbImage, _width: u32, _height: u32, _pdf_path: &PathBuf) -> Result<()> {
+    fn image_to_pdf(
+        &self,
+        _img: &RgbImage,
+        _width: u32,
+        _height: u32,
+        _pdf_path: &PathBuf,
+    ) -> Result<()> {
         // TODO: 修复 image/imageproc/printpdf 版本冲突后重新启用
         // 目前暂时返回错误，不影响 PNG 生成
         Err(anyhow::anyhow!("PDF 生成功能暂时禁用（依赖版本冲突）"))
@@ -184,7 +190,11 @@ impl PdfBackend {
     }
 
     /// 渲染所有 TSPL 命令
-    fn render_commands(&self, img: &mut RgbImage, commands: &[(String, Vec<String>)]) -> Result<()> {
+    fn render_commands(
+        &self,
+        img: &mut RgbImage,
+        commands: &[(String, Vec<String>)],
+    ) -> Result<()> {
         log::info!("开始渲染 TSPL 命令，共 {} 条", commands.len());
 
         for (cmd, params) in commands {
@@ -241,7 +251,9 @@ impl PdfBackend {
         };
 
         // 检测是否为中文（用于选择字体）
-        let is_chinese = text.chars().any(|c| c as u32 > 0x4E00 && (c as u32) < 0x9FA5);
+        let is_chinese = text
+            .chars()
+            .any(|c| c as u32 > 0x4E00 && (c as u32) < 0x9FA5);
 
         // 检测是否需要居中（x 坐标接近画布中心 304，范围 280-330）
         let should_center = x >= 280 && x <= 330;
@@ -249,20 +261,22 @@ impl PdfBackend {
         if should_center {
             // 居中渲染
             if let Err(e) = text_renderer.draw_centered_text(
-                img,
-                text,
-                y,
-                font_size,
-                608, // 画布宽度
+                img, text, y, font_size, 608, // 画布宽度
                 is_chinese,
             ) {
                 log::warn!("渲染居中文本失败: {}, 使用占位符", e);
                 let text_width = text.len() as i32 * (font_size as i32 / 2);
                 let text_height = font_size as i32;
-                let rect = Rect::at(x - text_width / 2, y).of_size(text_width as u32, text_height as u32);
+                let rect =
+                    Rect::at(x - text_width / 2, y).of_size(text_width as u32, text_height as u32);
                 draw_hollow_rect_mut(img, rect, Rgb([0u8, 0u8, 0u8]));
             }
-            log::debug!("📝 TEXT (居中) at Y={}: \"{}\" (size: {})", y, text, font_size);
+            log::debug!(
+                "📝 TEXT (居中) at Y={}: \"{}\" (size: {})",
+                y,
+                text,
+                font_size
+            );
         } else {
             // 左对齐渲染
             if let Err(e) = text_renderer.draw_text(img, text, x, y, font_size, is_chinese) {
@@ -272,7 +286,13 @@ impl PdfBackend {
                 let rect = Rect::at(x, y).of_size(text_width as u32, text_height as u32);
                 draw_hollow_rect_mut(img, rect, Rgb([0u8, 0u8, 0u8]));
             }
-            log::debug!("📝 TEXT at ({}, {}): \"{}\" (size: {})", x, y, text, font_size);
+            log::debug!(
+                "📝 TEXT at ({}, {}): \"{}\" (size: {})",
+                x,
+                y,
+                text,
+                font_size
+            );
         }
     }
 
@@ -317,7 +337,12 @@ impl PdfBackend {
             ) {
                 log::warn!("条形码居中渲染失败: {}", e);
             }
-            log::debug!("📊 BARCODE (居中) at Y={}: \"{}\" (height={})", y, data, height);
+            log::debug!(
+                "📊 BARCODE (居中) at Y={}: \"{}\" (height={})",
+                y,
+                data,
+                height
+            );
         } else {
             // 左对齐渲染
             if let Err(e) = barcode_renderer.render_tspl_barcode(img, x, y, height, data) {
@@ -333,7 +358,13 @@ impl PdfBackend {
                     draw_filled_rect_mut(img, bar_rect, Rgb([0u8, 0u8, 0u8]));
                 }
             }
-            log::debug!("📊 BARCODE at ({}, {}): \"{}\" (height={})", x, y, data, height);
+            log::debug!(
+                "📊 BARCODE at ({}, {}): \"{}\" (height={})",
+                x,
+                y,
+                data,
+                height
+            );
         }
     }
 
@@ -371,12 +402,17 @@ impl PdfBackend {
 
         // 绘制外框
         for i in 0..line_width {
-            let rect = Rect::at(x1 + i, y1 + i)
-                .of_size(width.saturating_sub(2 * i as u32), height.saturating_sub(2 * i as u32));
+            let rect = Rect::at(x1 + i, y1 + i).of_size(
+                width.saturating_sub(2 * i as u32),
+                height.saturating_sub(2 * i as u32),
+            );
             draw_hollow_rect_mut(img, rect, Rgb([0u8, 0u8, 0u8]));
         }
 
-        println!("▭ BOX at ({}, {}) to ({}, {}): width {}", x1, y1, x2, y2, line_width);
+        println!(
+            "▭ BOX at ({}, {}) to ({}, {}): width {}",
+            x1, y1, x2, y2, line_width
+        );
     }
 }
 
@@ -394,8 +430,7 @@ impl PrinterBackend for PdfBackend {
         // 将 TSPL 数据解析并生成 PNG/PDF
         let tspl = String::from_utf8_lossy(data);
 
-        let (png_path, pdf_path_opt) = self.render_tspl(&tspl)
-            .context("渲染失败")?;
+        let (png_path, pdf_path_opt) = self.render_tspl(&tspl).context("渲染失败")?;
 
         println!("\n✅ 文件已生成:");
         println!("  PNG: {}", png_path.display());

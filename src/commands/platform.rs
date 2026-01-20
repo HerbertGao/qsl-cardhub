@@ -1,6 +1,6 @@
 // 平台信息 Commands
 
-use crate::utils::platform::{detect_platform, PlatformInfo};
+use crate::utils::platform::{PlatformInfo, detect_platform};
 
 /// 获取平台信息
 ///

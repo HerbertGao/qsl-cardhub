@@ -2,7 +2,7 @@
 //
 // 提供简洁的公共接口供外部调用
 
-use crate::config::template_v2::{TemplateV2Config, OutputConfig};
+use crate::config::template_v2::{OutputConfig, TemplateV2Config};
 use crate::printer::backend::PdfBackendV2;
 use crate::printer::layout_engine::LayoutEngine;
 use crate::printer::render_pipeline::{RenderPipeline, RenderResult};
@@ -88,11 +88,8 @@ impl QslCardGenerator {
 
         // 4. 生成 TSPL
         let tspl_generator = TSPLGeneratorV2::new();
-        let tspl = tspl_generator.generate(
-            render_result,
-            config.page.width_mm,
-            config.page.height_mm,
-        )?;
+        let tspl =
+            tspl_generator.generate(render_result, config.page.width_mm, config.page.height_mm)?;
 
         Ok(tspl)
     }
@@ -242,12 +239,8 @@ mod tests {
         data.insert("sn".to_string(), "001".to_string());
         data.insert("qty".to_string(), "100".to_string());
 
-        let png_path = quick_generate_png(
-            None,
-            &data,
-            temp_dir.path().to_path_buf(),
-            "full_bitmap",
-        );
+        let png_path =
+            quick_generate_png(None, &data, temp_dir.path().to_path_buf(), "full_bitmap");
 
         assert!(png_path.is_ok());
         let path = png_path.unwrap();

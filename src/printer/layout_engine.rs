@@ -2,7 +2,7 @@
 //
 // 负责计算每个元素的精确位置、字号和整体居中布局
 
-use crate::config::template_v2::{TemplateV2Config, PageConfig, LayoutConfig};
+use crate::config::template_v2::{LayoutConfig, PageConfig, TemplateV2Config};
 use crate::printer::template_engine::ResolvedElement;
 use crate::printer::text_renderer::TextRenderer;
 use anyhow::{Context, Result};
@@ -101,8 +101,14 @@ impl LayoutEngine {
 
         // 1. 计算画布和可用区域
         let (canvas_width, canvas_height) = self.calculate_canvas_size(&config.page);
-        let (left_margin, _right_margin, top_margin, _bottom_margin, available_width, available_height) =
-            self.calculate_available_area(&config.page);
+        let (
+            left_margin,
+            _right_margin,
+            top_margin,
+            _bottom_margin,
+            available_width,
+            available_height,
+        ) = self.calculate_available_area(&config.page);
 
         log::debug!(
             "画布尺寸: {}x{} dots, 可用区域: {}x{} dots",
@@ -125,7 +131,8 @@ impl LayoutEngine {
         self.apply_overflow_protection(&mut layouted_elements, available_height, line_gap_dots)?;
 
         // 4. 计算垂直居中
-        let total_content_height = self.calculate_total_content_height(&layouted_elements, line_gap_dots);
+        let total_content_height =
+            self.calculate_total_content_height(&layouted_elements, line_gap_dots);
         let y_offset = if total_content_height < available_height {
             (available_height - total_content_height) / 2
         } else {
@@ -143,7 +150,8 @@ impl LayoutEngine {
 
         // 6. 计算水平居中x坐标
         for element in &mut layouted_elements {
-            element.x = self.calculate_horizontal_center(element.width, available_width, left_margin);
+            element.x =
+                self.calculate_horizontal_center(element.width, available_width, left_margin);
         }
 
         // 7. 处理边框
@@ -225,14 +233,13 @@ impl LayoutEngine {
         let max_height_dots = mm_to_dots(max_height_mm, config.page.dpi);
 
         // 使用二分搜索求最大字号
-        let font_size = self.calculate_max_font_size(
-            &element.content,
-            max_height_dots,
-            available_width,
-        )?;
+        let font_size =
+            self.calculate_max_font_size(&element.content, max_height_dots, available_width)?;
 
         // 测量实际尺寸
-        let (width, height) = self.text_renderer.measure_text(&element.content, font_size)?;
+        let (width, height) = self
+            .text_renderer
+            .measure_text(&element.content, font_size)?;
 
         log::debug!(
             "文本元素 {}: \"{}\" -> {}pt, {}x{} dots",
@@ -338,7 +345,11 @@ impl LayoutEngine {
     }
 
     /// 计算内容块总高度
-    fn calculate_total_content_height(&self, elements: &[LayoutedElement], line_gap_dots: u32) -> u32 {
+    fn calculate_total_content_height(
+        &self,
+        elements: &[LayoutedElement],
+        line_gap_dots: u32,
+    ) -> u32 {
         if elements.is_empty() {
             return 0;
         }
@@ -354,7 +365,12 @@ impl LayoutEngine {
     }
 
     /// 分配y坐标
-    fn assign_y_positions(&self, elements: &mut [LayoutedElement], start_y: u32, line_gap_dots: u32) {
+    fn assign_y_positions(
+        &self,
+        elements: &mut [LayoutedElement],
+        start_y: u32,
+        line_gap_dots: u32,
+    ) {
         let mut current_y = start_y;
 
         for element in elements {

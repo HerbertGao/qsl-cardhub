@@ -14,14 +14,14 @@ mod utils;
 use commands::{
     logger::{clear_logs, export_logs, get_log_file_path, get_logs},
     platform::get_platform_info,
-    printer::{get_printers, print_calibration, print_qsl, PrinterState},
+    printer::{PrinterState, get_printers, print_calibration, print_qsl},
     printer_v2::{
-        generate_tspl_v2, load_template_v2, preview_qsl_v2, print_qsl_v2, save_template_v2,
-        PrinterStateV2,
+        PrinterStateV2, generate_tspl_v2, load_template_v2, preview_qsl_v2, print_qsl_v2,
+        save_template_v2,
     },
     profile::{
-        create_profile, delete_profile, export_profile, get_default_profile_id, get_profile,
-        get_profiles, import_profile, set_default_profile, update_profile, ProfileState,
+        ProfileState, create_profile, delete_profile, export_profile, get_default_profile_id,
+        get_profile, get_profiles, import_profile, set_default_profile, update_profile,
     },
 };
 use config::ProfileManager;
@@ -44,20 +44,19 @@ fn main() {
             println!("📁 日志目录: {}", log_dir.display());
 
             // 初始化日志系统
-            logger::init_logger(log_dir)
-                .map_err(|e| format!("无法初始化日志系统: {}", e))?;
+            logger::init_logger(log_dir).map_err(|e| format!("无法初始化日志系统: {}", e))?;
 
             // 初始化 ProfileManager
             let profile_manager = ProfileManager::new(config_dir)
                 .map_err(|e| format!("无法初始化配置管理器: {}", e))?;
 
             // 初始化 PrinterManager
-            let printer_manager = PrinterManager::new(output_dir)
-                .map_err(|e| format!("无法初始化打印管理器: {}", e))?;
+            let printer_manager =
+                PrinterManager::new().map_err(|e| format!("无法初始化打印管理器: {}", e))?;
 
             // 初始化 PrinterStateV2
-            let printer_state_v2 = PrinterStateV2::new()
-                .map_err(|e| format!("无法初始化打印管理器v2: {}", e))?;
+            let printer_state_v2 =
+                PrinterStateV2::new().map_err(|e| format!("无法初始化打印管理器v2: {}", e))?;
 
             // 管理应用状态
             app.manage(ProfileState {

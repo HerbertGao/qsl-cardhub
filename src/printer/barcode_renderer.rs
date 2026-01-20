@@ -37,8 +37,7 @@ impl BarcodeRenderer {
         let prefixed_data = format!("\u{0181}{}", data);
 
         // 创建条形码编码器
-        let barcode = Code128::new(&prefixed_data)
-            .context("创建 Code128 条形码失败")?;
+        let barcode = Code128::new(&prefixed_data).context("创建 Code128 条形码失败")?;
 
         // 获取编码
         let encoded = barcode.encode();
@@ -70,12 +69,7 @@ impl BarcodeRenderer {
             }
         }
 
-        log::debug!(
-            "渲染条形码位图: \"{}\" -> {}x{} dots",
-            data,
-            width,
-            height
-        );
+        log::debug!("渲染条形码位图: \"{}\" -> {}x{} dots", data, width, height);
 
         Ok(bitmap)
     }
@@ -106,8 +100,7 @@ impl BarcodeRenderer {
         log::debug!("原始数据: '{}', 添加前缀后: '{}'", data, prefixed_data);
 
         // 创建 Code128 条形码编码器
-        let barcode = Code128::new(&prefixed_data)
-            .context("创建 Code128 条形码失败")?;
+        let barcode = Code128::new(&prefixed_data).context("创建 Code128 条形码失败")?;
 
         // 获取条形码的二进制表示（1=黑条，0=白条）
         let encoded = barcode.encode();
@@ -226,8 +219,7 @@ impl BarcodeRenderer {
     ) -> Result<()> {
         // 先编码以获取实际的条数
         let prefixed_data = format!("\u{0181}{}", code);
-        let barcode = Code128::new(&prefixed_data)
-            .context("创建 Code128 条形码失败")?;
+        let barcode = Code128::new(&prefixed_data).context("创建 Code128 条形码失败")?;
         let encoded = barcode.encode();
 
         // 计算每个条的宽度
