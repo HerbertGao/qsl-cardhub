@@ -147,13 +147,19 @@ const clearLogs = async () => {
       }
     )
 
+    loading.value = true
     await invoke('clear_logs')
+
+    // 清空前端日志列表
+    logs.value = []
+
     ElMessage.success('日志已清空')
-    await refreshLogs()
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error(`清空日志失败: ${error}`)
     }
+  } finally {
+    loading.value = false
   }
 }
 

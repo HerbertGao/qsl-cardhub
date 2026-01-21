@@ -47,7 +47,18 @@ qsl-cardhub/
 │   ├── config.toml        # 全局配置
 │   ├── profiles/          # Profile 配置
 │   └── templates/         # 打印模板（v0.5）
+├── scripts/               # 构建和工具脚本
+│   ├── build.sh          # macOS/Linux 构建脚本
+│   ├── build.ps1         # Windows 构建脚本
+│   ├── build.bat         # Windows CMD 入口
+│   └── sync-version.sh   # 版本同步脚本
+├── .github/              # GitHub 配置
+│   └── workflows/        # GitHub Actions 工作流
+│       ├── build.yml     # PR 构建验证
+│       ├── release.yml   # 版本发布
+│       └── README.md     # 工作流文档
 ├── output/                # Mock 打印输出
+├── dist/                  # 构建产物目录
 ├── tests/                 # 测试文件
 └── Cargo.toml            # Rust 依赖配置
 ```
@@ -105,6 +116,37 @@ cargo tauri dev
 
 ### 生产构建
 
+#### 方式一：使用构建脚本（推荐）
+
+**macOS/Linux:**
+```bash
+./scripts/build.sh
+```
+
+**Windows:**
+```powershell
+.\scripts\build.ps1
+```
+
+或使用 CMD：
+```cmd
+.\scripts\build.bat
+```
+
+构建脚本会自动：
+- 检查依赖（Node.js、npm、Rust、cargo）
+- 验证版本一致性
+- 构建前端
+- 打包 Tauri 应用
+- 将产物复制到 `dist/` 目录
+
+**产物命名格式：**
+- macOS: `qsl-cardhub-v{version}-macos-universal.dmg`
+- Windows x64: `qsl-cardhub-v{version}-windows-x64.msi`
+- Windows ARM64: `qsl-cardhub-v{version}-windows-arm64.msi`
+
+#### 方式二：手动构建
+
 ```bash
 # 构建前端
 cd web
@@ -115,7 +157,66 @@ cd ..
 cargo tauri build
 ```
 
-构建产物位于 `src-tauri/target/release/bundle/`
+构建产物位于 `target/release/bundle/`
+
+## 版本管理与发布
+
+### 版本同步
+
+项目使用 `Cargo.toml` 作为版本号的单一数据源。修改版本号后,使用同步脚本更新其他配置文件：
+
+```bash
+./scripts/sync-version.sh
+```
+
+这会将版本号从 `Cargo.toml` 同步到 `tauri.conf.json`。
+
+### 发布新版本
+
+发布流程使用 GitHub Actions 自动化：
+
+```bash
+# 1. 更新版本号
+# 编辑 Cargo.toml，修改 version = "x.y.z"
+
+# 2. 同步版本号
+./scripts/sync-version.sh
+
+# 3. 提交版本更新
+git add Cargo.toml tauri.conf.json
+git commit -m "chore: bump version to x.y.z"
+git push origin master
+
+# 4. 创建并推送标签
+git tag vx.y.z
+git push origin vx.y.z
+```
+
+推送标签后，GitHub Actions 会自动：
+- 在 macOS、Windows x64 和 Windows ARM64 平台构建
+- 创建 GitHub Release
+- 上传构建产物
+- 生成 Release Notes
+
+**支持的平台：**
+- macOS Universal (Intel + Apple Silicon)
+- Windows x64
+- Windows ARM64
+
+### CI/CD 工作流
+
+项目包含两个 GitHub Actions 工作流：
+
+1. **build.yml** - PR 构建验证
+   - 触发：Pull Request 到 master 分支
+   - 功能：并行构建所有平台，上传 Artifacts
+   - 产物保留时间：90 天
+
+2. **release.yml** - 版本发布
+   - 触发：推送 `v*` 格式的标签
+   - 功能：构建并发布到 GitHub Release
+
+详细说明请参考 [GitHub Actions 文档](.github/workflows/README.md)。
 
 ## 配置文件
 
@@ -131,15 +232,22 @@ cargo tauri build
 
 ```
 config/
-├── config.toml           # 全局配置
-└── profiles/
+├── config.toml           # 全局配置（首次启动自动创建）
+├── templates/            # 打印模板目录
+│   └── default.toml      # 默认模板（从应用资源自动复制）
+└── profiles/             # 打印配置文件目录
     ├── uuid-1.toml       # 配置 1
     └── uuid-2.toml       # 配置 2
 ```
 
+**注意**：
+- 生产环境下，首次启动应用时会自动从应用资源目录复制 `default.toml` 模板到用户配置目录
+- `config.toml` 会由应用自动创建和管理
+- 用户可以在 `templates/` 目录下添加自定义模板文件
+
 ### 示例配置
 
-参见 `config/profiles/example.toml`
+参见 `config/profiles/.example.toml` 和 `config/templates/default.toml`
 
 ## 架构设计
 
@@ -213,5 +321,5 @@ MIT License
 
 ## 联系方式
 
-- 作者: Herbert Gao
+- 作者: Herbert Software
 - 项目: https://github.com/HerbertGao/qsl-cardhub

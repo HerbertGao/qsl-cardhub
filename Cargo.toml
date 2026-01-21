@@ -2,7 +2,7 @@
 name = "qsl-cardhub"
 version = "0.1.0"
 edition = "2024"
-authors = ["Herbert Gao"]
+authors = ["Herbert Software"]
 description = "业余无线电 QSL 卡片打印工具"
 
 # 生产构建优化

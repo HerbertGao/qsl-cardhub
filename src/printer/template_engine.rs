@@ -56,9 +56,8 @@ impl TemplateEngine {
         data: &HashMap<String, String>,
     ) -> Result<Vec<ResolvedElement>> {
         log::info!(
-            "开始解析模板: {} (v{}), 共 {} 个元素",
+            "开始解析模板: {}, 共 {} 个元素",
             config.metadata.name,
-            config.metadata.version,
             config.elements.len()
         );
         log::debug!("运行时数据键: {:?}", data.keys().collect::<Vec<_>>());

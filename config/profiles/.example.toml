@@ -1,24 +1,19 @@
 # qsl-cardhub 打印配置示例
 # 配置名称: 示例配置
-# 创建时间: 2026-01-20 12:00:00
+# 创建时间: 2026-01-21 14:00:00 (UTC+8)
 
 id = "example-profile-id"
 name = "示例配置"
-created_at = "2026-01-20T12:00:00Z"
-updated_at = "2026-01-20T12:00:00Z"
+task_name = "CRSA 2区卡片"  # 可选字段
+created_at = "2026-01-21T14:00:00+08:00"
+updated_at = "2026-01-21T14:00:00+08:00"
 
 [platform]
 os = "macOS"
 arch = "arm64"
 
 [printer]
-model = "Deli DL-888C"
 name = "Deli DL-888C"
 
-[paper]
-width = 76
-height = 130
-
 [template]
-name = "QSL Card v1"
-version = "1.0"
+path = "default.toml"

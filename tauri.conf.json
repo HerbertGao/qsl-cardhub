@@ -5,9 +5,9 @@
   "identifier": "com.herbertgao.qsl-cardhub",
   "build": {
     "devUrl": "http://localhost:5173",
-    "frontendDist": "../web/dist",
+    "frontendDist": "web/dist",
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm --prefix ./web run build"
+    "beforeBuildCommand": "npm run build"
   },
   "app": {
     "windows": [
@@ -26,13 +26,21 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["dmg", "msi"],
     "icon": [
       "assets/icons/32x32.png",
       "assets/icons/128x128.png",
       "assets/icons/128x128@2x.png",
       "assets/icons/icon.icns",
       "assets/icons/icon.ico"
+    ],
+    "publisher": "Herbert Software",
+    "copyright": "Copyright © 2026 Herbert Software. All rights reserved.",
+    "category": "Utility",
+    "shortDescription": "QSL 卡片打印工具",
+    "longDescription": "QSL CardHub 是一个专业的 QSL 卡片设计和打印工具，支持自定义模板、批量打印和多种导出格式。",
+    "resources": [
+      "config/templates/*"
     ]
   }
 }

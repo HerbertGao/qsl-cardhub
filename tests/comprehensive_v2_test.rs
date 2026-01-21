@@ -25,7 +25,6 @@ fn test_comprehensive_qsl_card_generation() {
     let config = TemplateConfig::load_from_file(config_path).expect("加载配置文件失败");
 
     println!("  ✓ 模板名称: {}", config.metadata.name);
-    println!("  ✓ 模板版本: {}", config.metadata.version);
     println!(
         "  ✓ 纸张尺寸: {}x{} mm",
         config.page.width_mm, config.page.height_mm

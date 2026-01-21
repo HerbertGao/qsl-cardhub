@@ -73,3 +73,4 @@ src-tauri/WixTools/
 
 logs/
 test_output/
+/dist/

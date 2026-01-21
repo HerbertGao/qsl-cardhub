@@ -119,7 +119,7 @@
     <!-- 打印机信息 -->
     <el-alert
       v-if="currentProfileInfo"
-      :title="`打印机: ${currentProfileInfo.printer.name} | 纸张: ${currentProfileInfo.paper.width}×${currentProfileInfo.paper.height}mm`"
+      :title="`打印机: ${currentProfileInfo.printer.name} | 模板: ${currentProfileInfo.template_display_name || currentProfileInfo.template.path}`"
       type="info"
       :closable="false"
       style="margin-top: 20px"

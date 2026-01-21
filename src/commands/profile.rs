@@ -40,6 +40,7 @@ pub async fn get_profile(
 #[tauri::command]
 pub async fn create_profile(
     name: String,
+    task_name: Option<String>,
     printer_name: String,
     platform: Platform,
     state: State<'_, ProfileState>,
@@ -49,7 +50,7 @@ pub async fn create_profile(
         .lock()
         .map_err(|e| format!("锁定失败: {}", e))?;
     manager
-        .create(name, printer_name, platform)
+        .create(name, task_name, printer_name, platform)
         .map_err(|e| format!("创建配置失败: {}", e))
 }
 
@@ -130,4 +131,14 @@ pub async fn import_profile(
     manager
         .import_profile(&json)
         .map_err(|e| format!("导入配置失败: {}", e))
+}
+
+/// 获取默认模板的显示名称
+#[tauri::command]
+pub async fn get_default_template_name(state: State<'_, ProfileState>) -> Result<String, String> {
+    let manager = state
+        .manager
+        .lock()
+        .map_err(|e| format!("锁定失败: {}", e))?;
+    Ok(manager.get_default_template_name())
 }
