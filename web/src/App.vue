@@ -3,7 +3,7 @@
     <!-- 顶部标题栏 -->
     <el-header style="background: #409EFF; padding: 0">
       <div style="display: flex; align-items: center; height: 100%; padding: 0 30px">
-        <h2 style="margin: 0; flex: 1; color: white">QSL-CardHub</h2>
+        <h2 style="margin: 0; flex: 1; color: white">qsl-cardhub</h2>
         <span style="font-size: 14px; opacity: 0.9; color: white">业余无线电卡片打印系统</span>
       </div>
     </el-header>
@@ -30,6 +30,11 @@
             <span>配置管理</span>
           </el-menu-item>
 
+          <el-menu-item index="template">
+            <el-icon><Edit /></el-icon>
+            <span>模板设置</span>
+          </el-menu-item>
+
           <el-menu-item index="logs">
             <el-icon><Document /></el-icon>
             <span>日志查看</span>
@@ -50,7 +55,10 @@
         <PrintView v-if="activeMenu === 'print'" />
 
         <!-- 配置管理页面 -->
-        <ConfigView v-if="activeMenu === 'config'" />
+        <ConfigView v-if="activeMenu === 'config'" :autoOpenNewDialog="shouldAutoOpenNewConfig" />
+
+        <!-- 模板设置页面 -->
+        <TemplateView v-if="activeMenu === 'template'" />
 
         <!-- 日志查看页面 -->
         <LogView v-if="activeMenu === 'logs'" />
@@ -64,12 +72,15 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
 import PrintView from './views/PrintView.vue'
 import ConfigView from './views/ConfigView.vue'
+import TemplateView from './views/TemplateView.vue'
 import LogView from './views/LogView.vue'
 import AboutView from './views/AboutView.vue'
 
 const activeMenu = ref('print')
+const shouldAutoOpenNewConfig = ref(false)
 
 const handleMenuSelect = (index) => {
   activeMenu.value = index
@@ -79,16 +90,19 @@ const handleMenuSelect = (index) => {
 onMounted(async () => {
   try {
     // 调用后端 API 获取配置列表
-    const result = await window.eel.get_profiles()()
+    const profiles = await invoke('get_profiles')
+    const defaultId = await invoke('get_default_profile_id')
 
-    // 如果没有配置或没有默认配置，跳转到配置页面
-    if (!result.profiles || result.profiles.length === 0 || !result.default_id) {
+    // 如果没有配置或没有默认配置，跳转到配置页面并自动打开新建弹框
+    if (!profiles || profiles.length === 0 || !defaultId) {
       activeMenu.value = 'config'
+      shouldAutoOpenNewConfig.value = true
     }
   } catch (error) {
     console.error('获取配置失败:', error)
-    // 出错时也跳转到配置页面
+    // 出错时也跳转到配置页面并自动打开新建弹框
     activeMenu.value = 'config'
+    shouldAutoOpenNewConfig.value = true
   }
 })
 </script>

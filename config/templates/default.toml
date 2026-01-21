@@ -1,0 +1,76 @@
+[metadata]
+template_version = "2.0"
+name = "QSL Card v2"
+version = "1.0"
+description = "标准 QSL 卡片模板，76mm × 130mm，包含中文标题"
+
+[page]
+dpi = 203
+width_mm = 76.0
+height_mm = 130.0
+margin_left_mm = 4.0
+margin_right_mm = 4.0
+margin_top_mm = 4.0
+margin_bottom_mm = 4.0
+border = true
+border_thickness_mm = 0.3
+
+[layout]
+align_h = "center"
+align_v = "top"
+gap_mm = 5.0
+line_gap_mm = 5.0
+
+[fonts]
+cn_bold = "SourceHanSansSC-Bold.otf"
+en_bold = "LiberationSans-Bold.ttf"
+fallback_bold = "SourceHanSansSC-Bold.otf"
+
+[[elements]]
+id = "title"
+type = "text"
+source = "fixed"
+value = "中国无线电协会业余分会-2区卡片局"
+max_height_mm = 10.0
+
+[[elements]]
+id = "subtitle"
+type = "text"
+source = "input"
+key = "task_name"
+max_height_mm = 10.0
+
+[[elements]]
+id = "callsign"
+type = "text"
+source = "input"
+key = "callsign"
+max_height_mm = 28.0
+
+[[elements]]
+id = "barcode"
+type = "barcode"
+source = "computed"
+format = "{callsign}"
+barcode_type = "code128"
+height_mm = 18.0
+quiet_zone_mm = 2.0
+human_readable = false
+
+[[elements]]
+id = "sn"
+type = "text"
+source = "computed"
+format = "SN: {sn}"
+max_height_mm = 22.0
+
+[[elements]]
+id = "qty"
+type = "text"
+source = "computed"
+format = "QTY: {qty}"
+max_height_mm = 22.0
+
+[output]
+mode = "text_bitmap_plus_native_barcode"
+threshold = 160

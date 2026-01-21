@@ -2,7 +2,7 @@
 
 ## 目的
 
-本规范定义了 QSL-CardHub Rust 版本的 Tauri 应用框架集成需求。Tauri 是一个用于构建跨平台桌面应用的框架，使用 Rust 作为后端、Web 技术作为前端。本规范确保 Tauri 应用正确初始化、前后端通信正常、窗口管理正确，以及构建和打包流程完善。
+本规范定义了 qsl-cardhub Rust 版本的 Tauri 应用框架集成需求。Tauri 是一个用于构建跨平台桌面应用的框架，使用 Rust 作为后端、Web 技术作为前端。本规范确保 Tauri 应用正确初始化、前后端通信正常、窗口管理正确，以及构建和打包流程完善。
 
 ## 新增需求
 
@@ -15,7 +15,7 @@
 - **当** 用户运行 Tauri 应用
 - **那么** 应用应在 500ms 内启动
 - **并且** 应显示主窗口（800x600 像素）
-- **并且** 窗口标题应为"QSL-CardHub"
+- **并且** 窗口标题应为"qsl-cardhub"
 - **并且** 应加载 Vue 3 前端界面
 
 #### 场景:应用状态初始化
@@ -114,7 +114,7 @@
 
 - **当** 应用启动时
 - **那么** 主窗口应符合以下配置：
-  - 标题："QSL-CardHub"
+  - 标题："qsl-cardhub"
   - 宽度：1200px
   - 高度：800px
   - 最小宽度：800px
@@ -195,9 +195,9 @@
 
 - **当** 查看应用配置
 - **那么** 应包含以下元数据：
-  - productName: "QSL-CardHub"
+  - productName: "qsl-cardhub"
   - version: "0.1.0"
-  - identifier: "com.herbert.qsl-cardhub"
+  - identifier: "com.herbertgao.qsl-cardhub"
   - copyright: "© 2026 Herbert Software"
 
 #### 场景:窗口配置

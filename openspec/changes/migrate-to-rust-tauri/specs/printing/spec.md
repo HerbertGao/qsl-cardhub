@@ -2,7 +2,7 @@
 
 ## 目的
 
-本规范定义了 QSL-CardHub Rust 版本的打印功能需求。使用 Rust 实现 TSPL 指令生成和跨平台打印支持，保持与 Python 版的功能一致性。本规范在 Python 版的基础上，利用 Rust 的类型系统和条件编译特性优化打印实现。
+本规范定义了 qsl-cardhub Rust 版本的打印功能需求。使用 Rust 实现 TSPL 指令生成和跨平台打印支持，保持与 Python 版的功能一致性。本规范在 Python 版的基础上，利用 Rust 的类型系统和条件编译特性优化打印实现。
 
 ## 修改需求
 

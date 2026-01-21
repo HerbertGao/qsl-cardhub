@@ -2,7 +2,7 @@
 
 ## 目的
 
-本规范定义了 QSL-CardHub Rust 版本的跨平台兼容性需求。使用 Rust 的条件编译和 Tauri 的跨平台 API 实现 Windows、macOS、Linux 三大平台的支持。本规范在 Python 版的基础上，简化依赖管理，统一平台抽象层。
+本规范定义了 qsl-cardhub Rust 版本的跨平台兼容性需求。使用 Rust 的条件编译和 Tauri 的跨平台 API 实现 Windows、macOS、Linux 三大平台的支持。本规范在 Python 版的基础上，简化依赖管理，统一平台抽象层。
 
 ## 修改需求
 
@@ -126,9 +126,9 @@
 - **当** 系统访问 profiles.json
 - **那么** 应使用 `tauri::api::path::app_data_dir()` 获取应用数据目录
 - **并且** 路径应为：
-  - Windows: `%APPDATA%/QSL-CardHub/profiles.json`
-  - macOS: `~/Library/Application Support/QSL-CardHub/profiles.json`
-  - Linux: `~/.config/QSL-CardHub/profiles.json`
+  - Windows: `%APPDATA%/qsl-cardhub/profiles.json`
+  - macOS: `~/Library/Application Support/qsl-cardhub/profiles.json`
+  - Linux: `~/.config/qsl-cardhub/profiles.json`
 - **并且** 使用 `PathBuf::join()` 拼接路径
 
 #### 场景:输出文件路径
