@@ -237,6 +237,13 @@ pub fn get_card(id: &str) -> Result<Option<Card>, AppError> {
 }
 
 /// 分发卡片
+///
+/// 允许对任意状态的卡片执行分发操作：
+/// - 待分发(pending) → 已分发(distributed)：首次分发
+/// - 已分发(distributed) → 已分发(distributed)：修改分发信息
+/// - 已退回(returned) → 已分发(distributed)：重新分发
+///
+/// 分发信息和退回信息独立存储在 metadata 中，互不覆盖。
 pub fn distribute_card(
     id: &str,
     method: String,
@@ -248,7 +255,7 @@ pub fn distribute_card(
     // 获取卡片
     let card = get_card(id)?.ok_or_else(|| AppError::ProfileNotFound(format!("卡片不存在: {}", id)))?;
 
-    // 构建元数据
+    // 构建元数据（保留已有的退回信息）
     let distribution = DistributionInfo {
         method,
         address,
@@ -276,13 +283,20 @@ pub fn distribute_card(
 }
 
 /// 退卡
+///
+/// 允许对任意状态的卡片执行退回操作：
+/// - 待分发(pending) → 已退回(returned)：直接退回
+/// - 已分发(distributed) → 已退回(returned)：分发后退回
+/// - 已退回(returned) → 已退回(returned)：修改退回信息
+///
+/// 分发信息和退回信息独立存储在 metadata 中，互不覆盖。
 pub fn return_card(id: &str, method: String, remarks: Option<String>) -> Result<Card, AppError> {
     let conn = get_connection()?;
 
     // 获取卡片
     let card = get_card(id)?.ok_or_else(|| AppError::ProfileNotFound(format!("卡片不存在: {}", id)))?;
 
-    // 构建元数据
+    // 构建元数据（保留已有的分发信息）
     let return_info = ReturnInfo {
         method,
         remarks,
