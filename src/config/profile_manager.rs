@@ -92,11 +92,23 @@ impl ProfileManager {
     pub fn create(
         &mut self,
         name: String,
+        task_name: Option<String>,
         printer_name: String,
         platform: Platform,
     ) -> Result<Profile> {
-        let profile = Profile::new(name, printer_name, platform);
+        let mut profile = Profile::new(name, printer_name, platform);
+        // 设置任务名称
+        profile.task_name = task_name;
+        // 加载模板显示名称
+        profile.template_display_name = self.load_template_display_name(&profile.template.path);
         self.save_profile(&profile)?;
+
+        // 如果当前没有默认配置，自动将新建的配置设置为默认配置
+        if self.app_config.default_profile_id.is_none() {
+            self.app_config.default_profile_id = Some(profile.id.clone());
+            self.save_app_config()?;
+        }
+
         Ok(profile)
     }
 
@@ -160,18 +172,47 @@ impl ProfileManager {
         Ok(profile)
     }
 
+    /// 获取默认模板的显示名称
+    pub fn get_default_template_name(&self) -> String {
+        self.load_template_display_name("default.toml")
+            .unwrap_or_else(|| "默认模板".to_string())
+    }
+
     // ========== 私有方法 ==========
 
     /// 从文件加载 Profile
     fn load_profile(&self, path: &PathBuf) -> Result<Profile> {
         let content = fs::read_to_string(path).context("无法读取 Profile 文件")?;
-        toml::from_str(&content).context("无法解析 Profile 文件")
+        let mut profile: Profile = toml::from_str(&content).context("无法解析 Profile 文件")?;
+
+        // 加载模板显示名称
+        profile.template_display_name = self.load_template_display_name(&profile.template.path);
+
+        Ok(profile)
+    }
+
+    /// 加载模板显示名称
+    fn load_template_display_name(&self, template_path: &str) -> Option<String> {
+        let template_file = self.config_dir.join("templates").join(template_path);
+        if !template_file.exists() {
+            return None;
+        }
+
+        let content = fs::read_to_string(&template_file).ok()?;
+        let template_config: super::template::TemplateConfig = toml::from_str(&content).ok()?;
+
+        Some(template_config.metadata.name)
     }
 
     /// 保存 Profile 到文件
     fn save_profile(&self, profile: &Profile) -> Result<()> {
         let path = self.profiles_dir.join(format!("{}.toml", profile.id));
-        let content = toml::to_string_pretty(profile).context("无法序列化 Profile")?;
+
+        // 保存前清空运行时字段，避免写入配置文件
+        let mut profile_to_save = profile.clone();
+        profile_to_save.template_display_name = None;
+
+        let content = toml::to_string_pretty(&profile_to_save).context("无法序列化 Profile")?;
 
         // 添加注释
         let content_with_comment = format!(

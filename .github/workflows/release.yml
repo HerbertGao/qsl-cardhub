@@ -1,0 +1,168 @@
+name: Release
+
+on:
+  # Tag 推送时触发（格式：v*）
+  push:
+    tags:
+      - 'v*'
+
+  # 手动触发
+  workflow_dispatch:
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    name: 创建 Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 获取版本号
+        id: get_version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            VERSION=$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: 创建 Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: qsl-cardhub v${{ steps.get_version.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+
+  build-and-upload:
+    name: 构建并上传 ${{ matrix.platform }}
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS Apple Silicon (ARM64)
+          - platform: macos-arm64
+            os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: qsl-cardhub-v${{ needs.create-release.outputs.version }}-macos-arm64.dmg
+            bundle_path: target/aarch64-apple-darwin/release/bundle/dmg
+
+          # macOS Intel (x86_64)
+          - platform: macos-x64
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+            artifact_name: qsl-cardhub-v${{ needs.create-release.outputs.version }}-macos-x64.dmg
+            bundle_path: target/x86_64-apple-darwin/release/bundle/dmg
+
+          # Windows x64
+          - platform: windows-x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: qsl-cardhub-v${{ needs.create-release.outputs.version }}-windows-x64.msi
+            bundle_path: target/x86_64-pc-windows-msvc/release/bundle/msi
+
+          # Windows ARM64
+          - platform: windows-arm64
+            os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            artifact_name: qsl-cardhub-v${{ needs.create-release.outputs.version }}-windows-arm64.msi
+            bundle_path: target/aarch64-pc-windows-msvc/release/bundle/msi
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Rust 缓存
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-cargo-
+
+      - name: 安装前端依赖
+        working-directory: web
+        run: npm ci
+
+      - name: 构建前端
+        working-directory: web
+        run: npm run build
+
+      - name: 安装 Tauri CLI
+        run: cargo install tauri-cli --version "^2.0" --locked --force
+
+      - name: 构建 Tauri 应用
+        run: cargo tauri build --target ${{ matrix.target }}
+
+      - name: 准备产物 (macOS)
+        if: startsWith(matrix.platform, 'macos')
+        run: |
+          mkdir -p dist
+          DMG_PATH=$(find ${{ matrix.bundle_path }} -name "*.dmg" | head -n 1)
+          cp "$DMG_PATH" "dist/${{ matrix.artifact_name }}"
+          echo "ARTIFACT_PATH=dist/${{ matrix.artifact_name }}" >> $GITHUB_ENV
+
+      - name: 准备产物 (Windows)
+        if: startsWith(matrix.platform, 'windows')
+        shell: bash
+        run: |
+          mkdir -p dist
+          MSI_PATH=$(find ${{ matrix.bundle_path }} -name "*.msi" | head -n 1)
+          cp "$MSI_PATH" "dist/${{ matrix.artifact_name }}"
+          echo "ARTIFACT_PATH=dist/${{ matrix.artifact_name }}" >> $GITHUB_ENV
+
+      - name: 上传到 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.create-release.outputs.version }}
+          files: ${{ env.ARTIFACT_PATH }}
+
+  release-summary:
+    name: 发布总结
+    needs: [create-release, build-and-upload]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: 检查发布状态
+        run: |
+          echo "📦 Release: v${{ needs.create-release.outputs.version }}"
+          if [ "${{ needs.build-and-upload.result }}" == "success" ]; then
+            echo "✅ 所有平台构建并上传成功"
+            echo ""
+            echo "下载地址："
+            echo "https://github.com/${{ github.repository }}/releases/tag/v${{ needs.create-release.outputs.version }}"
+            exit 0
+          else
+            echo "❌ 部分平台构建失败"
+            exit 1
+          fi

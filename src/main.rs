@@ -17,10 +17,12 @@ use commands::{
     printer::{PrinterState, generate_tspl, get_printers, get_template_config, load_template, preview_qsl, print_qsl, save_template, save_template_config},
     profile::{
         ProfileState, create_profile, delete_profile, export_profile, get_default_profile_id,
-        get_profile, get_profiles, import_profile, set_default_profile, update_profile,
+        get_default_template_name, get_profile, get_profiles, import_profile, set_default_profile,
+        update_profile,
     },
 };
 use config::ProfileManager;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
@@ -37,6 +39,12 @@ fn main() {
             println!("📁 配置目录: {}", config_dir.display());
             println!("📁 输出目录: {}", output_dir.display());
             println!("📁 日志目录: {}", log_dir.display());
+
+            // 生产模式：初始化用户配置目录，从应用资源复制默认配置
+            #[cfg(not(debug_assertions))]
+            {
+                init_user_config(app, &config_dir)?;
+            }
 
             // 初始化日志系统
             logger::init_logger(log_dir).map_err(|e| format!("无法初始化日志系统: {}", e))?;
@@ -71,6 +79,7 @@ fn main() {
             delete_profile,
             set_default_profile,
             get_default_profile_id,
+            get_default_template_name,
             export_profile,
             import_profile,
             // 打印机管理
@@ -156,4 +165,92 @@ fn get_log_dir() -> Result<PathBuf, String> {
         let config_dir = get_config_dir()?;
         Ok(config_dir.join("logs"))
     }
+}
+
+/// 初始化用户配置目录（仅在生产模式）
+/// 从应用资源目录复制默认配置到用户配置目录
+#[cfg(not(debug_assertions))]
+fn init_user_config(app: &tauri::App, config_dir: &PathBuf) -> Result<(), String> {
+    use std::io::Write;
+
+    // 创建配置目录结构
+    let templates_dir = config_dir.join("templates");
+    fs::create_dir_all(&templates_dir)
+        .map_err(|e| format!("无法创建模板目录: {}", e))?;
+
+    // 获取应用资源目录路径
+    let resource_path = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("无法获取资源目录: {}", e))?;
+
+    // 复制默认模板文件（如果不存在）
+    let default_template_src = resource_path.join("config/templates/default.toml");
+    let default_template_dst = templates_dir.join("default.toml");
+
+    if !default_template_dst.exists() {
+        if default_template_src.exists() {
+            fs::copy(&default_template_src, &default_template_dst)
+                .map_err(|e| format!("无法复制默认模板: {}", e))?;
+            println!("✅ 已复制默认模板到: {}", default_template_dst.display());
+        } else {
+            // 如果资源文件也不存在，创建一个基本的默认模板
+            println!("⚠️  资源目录中未找到默认模板，创建基础模板");
+            let basic_template = r#"[metadata]
+template_version = "2.0"
+name = "76mm × 130mm 标准模板"
+description = "标准 QSL 卡片模板"
+
+[page]
+dpi = 203
+width_mm = 76.0
+height_mm = 130.0
+margin_left_mm = 4.0
+margin_right_mm = 4.0
+margin_top_mm = 4.0
+margin_bottom_mm = 4.0
+border = true
+border_thickness_mm = 0.3
+
+[layout]
+align_h = "center"
+align_v = "top"
+gap_mm = 5.0
+line_gap_mm = 5.0
+
+[fonts]
+cn_bold = "SourceHanSansSC-Bold.otf"
+en_bold = "LiberationSans-Bold.ttf"
+fallback_bold = "SourceHanSansSC-Bold.otf"
+
+[[elements]]
+id = "title"
+type = "text"
+source = "fixed"
+value = "中国无线电协会业余分会-2区卡片局"
+max_height_mm = 10.0
+
+[[elements]]
+id = "callsign"
+type = "text"
+source = "input"
+key = "callsign"
+max_height_mm = 28.0
+
+[output]
+mode = "text_bitmap_plus_native_barcode"
+threshold = 160
+"#;
+            let mut file = fs::File::create(&default_template_dst)
+                .map_err(|e| format!("无法创建默认模板文件: {}", e))?;
+            file.write_all(basic_template.as_bytes())
+                .map_err(|e| format!("无法写入默认模板文件: {}", e))?;
+            println!("✅ 已创建基础默认模板: {}", default_template_dst.display());
+        }
+    }
+
+    // config.toml 由 ProfileManager 自动创建，不需要预先复制
+    println!("📝 config.toml 将由 ProfileManager 自动创建");
+
+    Ok(())
 }

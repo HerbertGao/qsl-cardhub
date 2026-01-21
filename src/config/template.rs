@@ -32,9 +32,6 @@ pub struct TemplateMetadata {
     pub template_version: String,
     /// 模板名称
     pub name: String,
-    /// 版本号
-    #[serde(default = "default_version")]
-    pub version: String,
     /// 描述
     #[serde(default)]
     pub description: String,
@@ -42,10 +39,6 @@ pub struct TemplateMetadata {
 
 fn default_template_version() -> String {
     "2.0".to_string()
-}
-
-fn default_version() -> String {
-    "1.0".to_string()
 }
 
 /// 页面配置
@@ -188,7 +181,6 @@ impl TemplateConfig {
             metadata: TemplateMetadata {
                 template_version: "2.0".to_string(),
                 name: "QSL Card v2".to_string(),
-                version: "1.0".to_string(),
                 description: "标准 QSL 卡片模板，76mm × 130mm，包含中文标题".to_string(),
             },
             page: PageConfig {
@@ -318,9 +310,8 @@ impl TemplateConfig {
         config.validate()?;
 
         log::info!(
-            "✅ 加载v2模板: {} v{} (模板版本: {})",
+            "✅ 加载v2模板: {} (模板版本: {})",
             config.metadata.name,
-            config.metadata.version,
             config.metadata.template_version
         );
 
@@ -433,7 +424,6 @@ mod tests {
             metadata: TemplateMetadata {
                 template_version: "2.0".to_string(),
                 name: "Test Template".to_string(),
-                version: "1.0".to_string(),
                 description: "Test description".to_string(),
             },
             page: PageConfig {
@@ -499,7 +489,6 @@ mod tests {
             metadata: TemplateMetadata {
                 template_version: "2.0".to_string(),
                 name: "Test".to_string(),
-                version: "1.0".to_string(),
                 description: "".to_string(),
             },
             page: PageConfig {

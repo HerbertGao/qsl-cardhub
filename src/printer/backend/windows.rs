@@ -12,7 +12,7 @@ use anyhow::{Context, Result};
 use windows::core::PWSTR;
 
 #[cfg(target_os = "windows")]
-use windows::Win32::Foundation::{BOOL, HANDLE};
+use windows::Win32::Foundation::HANDLE;
 
 #[cfg(target_os = "windows")]
 use windows::Win32::Graphics::Printing::{
@@ -48,7 +48,6 @@ impl PrinterBackend for WindowsBackend {
                 None,
                 2, // PRINTER_INFO_2W
                 None,
-                0,
                 &mut needed,
                 &mut returned,
             );
@@ -65,8 +64,7 @@ impl PrinterBackend for WindowsBackend {
                 PRINTER_ENUM_LOCAL,
                 None,
                 2,
-                Some(buffer.as_mut_ptr() as *mut u8),
-                needed,
+                Some(buffer.as_mut_slice()),
                 &mut needed,
                 &mut returned,
             )
@@ -113,7 +111,7 @@ impl PrinterBackend for WindowsBackend {
                 pDatatype: PWSTR::null(),
             };
 
-            let job_id = StartDocPrinterW(printer_handle, 1, &mut doc_info as *mut _ as *mut u8);
+            let job_id = StartDocPrinterW(printer_handle, 1, &doc_info);
             if job_id == 0 {
                 ClosePrinter(printer_handle);
                 anyhow::bail!("无法开始打印文档");

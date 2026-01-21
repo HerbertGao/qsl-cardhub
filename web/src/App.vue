@@ -71,7 +71,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import PrintView from './views/PrintView.vue'
 import ConfigView from './views/ConfigView.vue'
@@ -86,15 +86,22 @@ const handleMenuSelect = (index) => {
   activeMenu.value = index
 }
 
+// 监听菜单切换，重置自动打开新建配置的标志
+watch(activeMenu, (newMenu, oldMenu) => {
+  // 当离开配置页面时，重置标志，避免下次进入时重复打开
+  if (oldMenu === 'config' && newMenu !== 'config') {
+    shouldAutoOpenNewConfig.value = false
+  }
+})
+
 // 启动时检查配置状态
 onMounted(async () => {
   try {
     // 调用后端 API 获取配置列表
     const profiles = await invoke('get_profiles')
-    const defaultId = await invoke('get_default_profile_id')
 
-    // 如果没有配置或没有默认配置，跳转到配置页面并自动打开新建弹框
-    if (!profiles || profiles.length === 0 || !defaultId) {
+    // 如果没有任何配置，跳转到配置页面并自动打开新建弹框
+    if (!profiles || profiles.length === 0) {
       activeMenu.value = 'config'
       shouldAutoOpenNewConfig.value = true
     }
@@ -147,8 +154,8 @@ body {
 }
 
 .el-menu-item {
-  border-radius: 8px;
-  margin: 4px 15px;
+  border-radius: 0 8px 8px 0;
+  margin: 4px 0;
 }
 
 .el-menu-item.is-active {

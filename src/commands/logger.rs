@@ -29,13 +29,17 @@ pub fn get_logs(level: Option<String>, limit: Option<usize>) -> Result<Vec<LogEn
 /// 清空内存日志
 #[tauri::command]
 pub fn clear_logs() -> Result<(), String> {
-    let collector = get_collector();
-    let mut collector = collector
-        .lock()
-        .map_err(|e| format!("锁定日志收集器失败: {}", e))?;
+    {
+        let collector = get_collector();
+        let mut collector = collector
+            .lock()
+            .map_err(|e| format!("锁定日志收集器失败: {}", e))?;
 
-    collector.clear_logs();
+        collector.clear_logs();
+        // 锁在这里自动释放
+    }
 
+    // 在释放锁之后再记录日志，避免死锁
     log::info!("内存日志已清空");
 
     Ok(())

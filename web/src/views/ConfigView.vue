@@ -58,8 +58,6 @@
             <span style="font-weight: bold">配置详情</span>
             <div v-if="selectedConfig">
               <el-button type="primary" size="small" @click="handleSaveConfig">保存修改</el-button>
-              <el-button size="small" @click="handleExportConfig">导出</el-button>
-              <el-button size="small" @click="handleImportConfig">导入</el-button>
             </div>
           </div>
         </template>
@@ -94,10 +92,6 @@
             />
           </el-form-item>
 
-          <el-form-item label="打印机型号">
-            <el-input :value="selectedConfig.printer.model" disabled />
-          </el-form-item>
-
           <el-form-item label="打印机名称">
             <div style="display: flex; gap: 10px; width: 100%">
               <el-select
@@ -120,16 +114,9 @@
             </div>
           </el-form-item>
 
-          <el-form-item label="纸张规格">
-            <el-input
-              :value="`${selectedConfig.paper.width}mm × ${selectedConfig.paper.height}mm`"
-              disabled
-            />
-          </el-form-item>
-
           <el-form-item label="打印模板">
             <el-input
-              :value="`${selectedConfig.template.name} (${selectedConfig.template.version})`"
+              :value="selectedConfig.template_display_name || selectedConfig.template.path"
               disabled
             />
           </el-form-item>
@@ -159,10 +146,6 @@
         <el-input :value="platformInfo" disabled />
       </el-form-item>
 
-      <el-form-item label="打印机型号">
-        <el-input value="Deli DL-888C" disabled />
-      </el-form-item>
-
       <el-form-item label="打印机名称" required>
         <el-select v-model="newConfigForm.printerName" placeholder="请选择打印机" style="width: 100%">
           <el-option
@@ -174,12 +157,8 @@
         </el-select>
       </el-form-item>
 
-      <el-form-item label="纸张规格">
-        <el-input value="76mm × 130mm" disabled />
-      </el-form-item>
-
       <el-form-item label="打印模板">
-        <el-input value="标准模板 (v1)" disabled />
+        <el-input :value="defaultTemplateName" disabled />
       </el-form-item>
     </el-form>
 
@@ -220,6 +199,7 @@ const availablePrinters = ref([])
 const defaultProfileId = ref('')
 const newConfigDialogVisible = ref(false)
 const platformInfo = ref('')
+const defaultTemplateName = ref('加载中...')
 
 const newConfigForm = ref({
   name: '',
@@ -264,6 +244,15 @@ const loadPrinters = async () => {
   }
 }
 
+const loadDefaultTemplate = async () => {
+  try {
+    defaultTemplateName.value = await invoke('get_default_template_name')
+  } catch (error) {
+    console.error('获取默认模板失败:', error)
+    defaultTemplateName.value = '默认模板'
+  }
+}
+
 const refreshPrinters = async () => {
   await loadPrinters()
   ElMessage.success('打印机列表已刷新')
@@ -279,8 +268,8 @@ const handleConfigSelect = (configId) => {
       task_name: config.task_name || '',
       printer: { ...config.printer },
       platform: { ...config.platform },
-      paper: { ...config.paper },
-      template: { ...config.template }
+      template: { ...config.template },
+      template_display_name: config.template_display_name
     }
   }
 }
@@ -315,6 +304,7 @@ const handleCreateConfig = async () => {
     // 创建配置
     await invoke('create_profile', {
       name: newConfigForm.value.name,
+      taskName: newConfigForm.value.taskName?.trim() || null,
       printerName: newConfigForm.value.printerName,
       platform: platform
     })
@@ -446,6 +436,7 @@ onMounted(async () => {
   await loadProfiles()
   await loadPlatformInfo()
   await loadPrinters()
+  await loadDefaultTemplate()
 
   // 如果需要自动打开新建配置对话框
   if (props.autoOpenNewDialog) {

@@ -1,7 +1,6 @@
 [metadata]
 template_version = "2.0"
-name = "QSL Card v2"
-version = "1.0"
+name = "76mm × 130mm 标准模板"
 description = "标准 QSL 卡片模板，76mm × 130mm，包含中文标题"
 
 [page]
