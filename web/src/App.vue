@@ -12,38 +12,57 @@
       <!-- 左侧导航 -->
       <el-aside width="220px" style="background: #f5f5f5; border-right: 1px solid #e0e0e0">
         <el-menu
-          :default-active="activeMenu"
-          @select="handleMenuSelect"
-          style="border: none; background: #f5f5f5"
+            :default-active="activeMenu"
+            @select="handleMenuSelect"
+            style="border: none; background: #f5f5f5"
         >
           <div style="padding: 20px 15px 15px; font-weight: bold; color: #666; font-size: 13px">
             功能菜单
           </div>
 
-          <el-menu-item index="print">
-            <el-icon><Printer /></el-icon>
-            <span>打印</span>
-          </el-menu-item>
-
-          <el-menu-item index="config">
-            <el-icon><Setting /></el-icon>
-            <span>配置管理</span>
-          </el-menu-item>
-
-          <el-menu-item index="template">
-            <el-icon><Edit /></el-icon>
-            <span>模板设置</span>
-          </el-menu-item>
-
-          <el-menu-item index="logs">
-            <el-icon><Document /></el-icon>
-            <span>日志查看</span>
+          <el-menu-item index="cards">
+            <el-icon>
+              <Box/>
+            </el-icon>
+            <span>卡片管理</span>
           </el-menu-item>
 
           <el-divider style="margin: 20px 0"></el-divider>
 
+          <el-menu-item index="print">
+            <el-icon>
+              <Printer/>
+            </el-icon>
+            <span>打印</span>
+          </el-menu-item>
+
+          <el-menu-item index="config">
+            <el-icon>
+              <Setting/>
+            </el-icon>
+            <span>打印配置</span>
+          </el-menu-item>
+
+          <el-menu-item index="template">
+            <el-icon>
+              <Edit/>
+            </el-icon>
+            <span>打印模板</span>
+          </el-menu-item>
+
+          <el-divider style="margin: 20px 0"></el-divider>
+
+          <el-menu-item index="logs">
+            <el-icon>
+              <Document/>
+            </el-icon>
+            <span>日志</span>
+          </el-menu-item>
+
           <el-menu-item index="about">
-            <el-icon><InfoFilled /></el-icon>
+            <el-icon>
+              <InfoFilled/>
+            </el-icon>
             <span>关于</span>
           </el-menu-item>
         </el-menu>
@@ -52,34 +71,38 @@
       <!-- 主内容区 -->
       <el-main style="background: #fff">
         <!-- 打印页面 -->
-        <PrintView v-if="activeMenu === 'print'" />
+        <PrintView v-if="activeMenu === 'print'"/>
 
         <!-- 配置管理页面 -->
-        <ConfigView v-if="activeMenu === 'config'" :autoOpenNewDialog="shouldAutoOpenNewConfig" />
+        <ConfigView v-if="activeMenu === 'config'" :autoOpenNewDialog="shouldAutoOpenNewConfig"/>
 
         <!-- 模板设置页面 -->
-        <TemplateView v-if="activeMenu === 'template'" />
+        <TemplateView v-if="activeMenu === 'template'"/>
+
+        <!-- 卡片管理页面 -->
+        <CardManagementView v-if="activeMenu === 'cards'"/>
 
         <!-- 日志查看页面 -->
-        <LogView v-if="activeMenu === 'logs'" />
+        <LogView v-if="activeMenu === 'logs'"/>
 
         <!-- 关于页面 -->
-        <AboutView v-if="activeMenu === 'about'" />
+        <AboutView v-if="activeMenu === 'about'"/>
       </el-main>
     </el-container>
   </el-container>
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
-import { invoke } from '@tauri-apps/api/core'
-import PrintView from './views/PrintView.vue'
-import ConfigView from './views/ConfigView.vue'
-import TemplateView from './views/TemplateView.vue'
-import LogView from './views/LogView.vue'
-import AboutView from './views/AboutView.vue'
+import {onMounted, ref, watch} from 'vue'
+import {invoke} from '@tauri-apps/api/core'
+import PrintView from '@/views/PrintView.vue'
+import ConfigView from '@/views/ConfigView.vue'
+import TemplateView from '@/views/TemplateView.vue'
+import CardManagementView from '@/views/CardManagementView.vue'
+import LogView from '@/views/LogView.vue'
+import AboutView from '@/views/AboutView.vue'
 
-const activeMenu = ref('print')
+const activeMenu = ref('cards')
 const shouldAutoOpenNewConfig = ref(false)
 
 const handleMenuSelect = (index) => {
@@ -123,7 +146,7 @@ onMounted(async () => {
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
-    'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   color: #303133;

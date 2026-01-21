@@ -4,15 +4,21 @@
       <h1>日志查看</h1>
       <div class="header-actions">
         <el-button @click="refreshLogs" :loading="loading">
-          <el-icon><Refresh /></el-icon>
+          <el-icon>
+            <Refresh/>
+          </el-icon>
           刷新
         </el-button>
         <el-button @click="clearLogs" type="warning">
-          <el-icon><Delete /></el-icon>
+          <el-icon>
+            <Delete/>
+          </el-icon>
           清空
         </el-button>
         <el-button @click="exportLogs" type="primary">
-          <el-icon><Download /></el-icon>
+          <el-icon>
+            <Download/>
+          </el-icon>
           导出
         </el-button>
       </div>
@@ -35,26 +41,28 @@
         <div class="filter-item">
           <label>显示数量：</label>
           <el-select v-model="logLimit" @change="refreshLogs" style="width: 120px">
-            <el-option label="50 条" :value="50" />
-            <el-option label="100 条" :value="100" />
-            <el-option label="200 条" :value="200" />
-            <el-option label="500 条" :value="500" />
-            <el-option label="全部" :value="null" />
+            <el-option label="50 条" :value="50"/>
+            <el-option label="100 条" :value="100"/>
+            <el-option label="200 条" :value="200"/>
+            <el-option label="500 条" :value="500"/>
+            <el-option label="全部" :value="null"/>
           </el-select>
         </div>
 
         <div class="filter-item">
           <el-switch
-            v-model="autoRefresh"
-            active-text="自动刷新"
-            @change="toggleAutoRefresh"
+              v-model="autoRefresh"
+              active-text="自动刷新"
+              @change="toggleAutoRefresh"
           />
         </div>
       </div>
 
       <div class="log-file-info" v-if="logFilePath">
         <el-text size="small" type="info">
-          <el-icon><Document /></el-icon>
+          <el-icon>
+            <Document/>
+          </el-icon>
           日志文件：{{ logFilePath }}
         </el-text>
       </div>
@@ -63,11 +71,11 @@
     <!-- 日志表格 -->
     <el-card style="margin-top: 20px">
       <el-table
-        :data="logs"
-        stripe
-        style="width: 100%"
-        :max-height="600"
-        v-loading="loading"
+          :data="logs"
+          stripe
+          style="width: 100%"
+          :max-height="600"
+          v-loading="loading"
       >
         <el-table-column prop="timestamp" label="时间" width="180">
           <template #default="{ row }">
@@ -83,15 +91,15 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="source" label="来源" width="150" />
+        <el-table-column prop="source" label="来源" width="150"/>
 
-        <el-table-column prop="message" label="消息" show-overflow-tooltip />
+        <el-table-column prop="message" label="消息" show-overflow-tooltip/>
       </el-table>
 
       <el-empty
-        v-if="!loading && logs.length === 0"
-        description="暂无日志"
-        :image-size="100"
+          v-if="!loading && logs.length === 0"
+          description="暂无日志"
+          :image-size="100"
       />
 
       <div class="log-stats" v-if="logs.length > 0">
@@ -104,11 +112,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Delete, Download, Document } from '@element-plus/icons-vue'
-import { invoke } from '@tauri-apps/api/core'
-import { save } from '@tauri-apps/plugin-dialog'
+import {onMounted, onUnmounted, ref} from 'vue'
+import {ElMessage, ElMessageBox} from 'element-plus'
+import {Delete, Document, Download, Refresh} from '@element-plus/icons-vue'
+import {invoke} from '@tauri-apps/api/core'
+import {save} from '@tauri-apps/plugin-dialog'
 
 // 响应式状态
 const logs = ref([])
@@ -126,7 +134,7 @@ const refreshLogs = async () => {
     const level = selectedLevel.value || null
     const limit = logLimit.value
 
-    logs.value = await invoke('get_logs', { level, limit })
+    logs.value = await invoke('get_logs', {level, limit})
   } catch (error) {
     ElMessage.error(`获取日志失败: ${error}`)
   } finally {
@@ -138,13 +146,13 @@ const refreshLogs = async () => {
 const clearLogs = async () => {
   try {
     await ElMessageBox.confirm(
-      '确定要清空内存日志吗？日志文件不会被删除。',
-      '确认清空',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
+        '确定要清空内存日志吗？日志文件不会被删除。',
+        '确认清空',
+        {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning'
+        }
     )
 
     loading.value = true
@@ -183,7 +191,7 @@ const exportLogs = async () => {
       return // 用户取消
     }
 
-    await invoke('export_logs', { exportPath })
+    await invoke('export_logs', {exportPath})
     ElMessage.success(`日志已导出到: ${exportPath}`)
   } catch (error) {
     ElMessage.error(`导出日志失败: ${error}`)
