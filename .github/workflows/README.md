@@ -100,10 +100,11 @@ git push origin v0.4.0
 - Node.js: 20.x
 
 ### macOS x64 (Intel)
-- Runner: `macos-13` (Intel 芯片)
+- Runner: `macos-15-intel` (macOS 15 Sequoia, Intel 芯片)
 - Target: `x86_64-apple-darwin`
 - Rust: 最新稳定版
 - Node.js: 20.x
+- 注：已从 macos-13 升级，避免使用已弃用的 runner
 
 ### Windows x64
 - Runner: `windows-latest`
