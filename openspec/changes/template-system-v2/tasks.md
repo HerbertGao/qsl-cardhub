@@ -11,11 +11,11 @@
 **目标**: 在 `src/config/template_v2.rs` 中定义完整的v2配置结构
 
 **验收标准**:
-- [ ] 定义 `TemplateV2Config` 结构体
-- [ ] 定义 `PageConfig`, `LayoutConfig`, `FontConfig`, `ElementConfig`, `OutputConfig` 子结构
-- [ ] 定义 `ElementSource` 枚举(Fixed/Input/Computed)
-- [ ] 实现 `Serialize` 和 `Deserialize` trait
-- [ ] 通过单元测试验证序列化/反序列化
+- [x] 定义 `TemplateV2Config` 结构体
+- [x] 定义 `PageConfig`, `LayoutConfig`, `FontConfig`, `ElementConfig`, `OutputConfig` 子结构
+- [x] 定义 `ElementSource` 枚举(Fixed/Input/Computed)
+- [x] 实现 `Serialize` 和 `Deserialize` trait
+- [x] 通过单元测试验证序列化/反序列化
 
 **依赖**: 无
 
@@ -28,11 +28,11 @@
 **目标**: 实现v2配置文件的加载、解析和保存功能
 
 **验收标准**:
-- [ ] 实现 `TemplateV2Config::load_from_file(path)` 方法
-- [ ] 实现 `TemplateV2Config::save_to_file(path)` 方法
-- [ ] 实现 `TemplateV2Config::default_qsl_card_v2()` 生成默认配置
-- [ ] 添加配置验证(必填字段、合法性检查)
-- [ ] 通过单元测试验证加载和保存功能
+- [x] 实现 `TemplateV2Config::load_from_file(path)` 方法
+- [x] 实现 `TemplateV2Config::save_to_file(path)` 方法
+- [x] 实现 `TemplateV2Config::default_qsl_card_v2()` 生成默认配置
+- [x] 添加配置验证(必填字段、合法性检查)
+- [x] 通过单元测试验证加载和保存功能
 
 **依赖**: Task 1.1
 
@@ -45,11 +45,11 @@
 **目标**: 准备中英文粗体字体文件,并实现字体加载逻辑
 
 **验收标准**:
-- [ ] 在 `assets/fonts/` 目录放置字体文件:
+- [x] 在 `assets/fonts/` 目录放置字体文件:
   - `Arial-Bold.ttf` 或 `LiberationSans-Bold.ttf` (英文)
   - `SourceHanSansSC-Bold.otf` (中文,可考虑子集化)
-- [ ] 在 `src/printer/font_loader.rs` 中实现字体加载(使用 `include_bytes!`)
-- [ ] 测试字体加载成功(单元测试)
+- [x] 在 `src/printer/font_loader.rs` 中实现字体加载(使用 `include_bytes!`)
+- [x] 测试字体加载成功(单元测试)
 
 **依赖**: 无
 
@@ -62,9 +62,9 @@
 **目标**: 在 `config/templates/` 创建默认的v2配置文件
 
 **验收标准**:
-- [ ] 创建 `config/templates/qsl-card-v2.toml`
-- [ ] 配置应符合 `docs/template.v2.md` 规范
-- [ ] 配置应可被成功加载和解析
+- [x] 创建 `config/templates/qsl-card-v2.toml`
+- [x] 配置应符合 `docs/template.v2.md` 规范
+- [x] 配置应可被成功加载和解析
 
 **依赖**: Task 1.2
 
@@ -79,12 +79,12 @@
 **目标**: 在 `src/printer/template_engine.rs` 中实现模板数据填充
 
 **验收标准**:
-- [ ] 定义 `ResolvedElement` 结构体
-- [ ] 实现 `TemplateEngine::resolve(config, data)` 方法
-- [ ] 实现fixed元素处理(使用value)
-- [ ] 实现input元素处理(从data中取值)
-- [ ] 实现computed元素处理(简单模板引擎)
-- [ ] 通过单元测试验证三种来源类型
+- [x] 定义 `ResolvedElement` 结构体
+- [x] 实现 `TemplateEngine::resolve(config, data)` 方法
+- [x] 实现fixed元素处理(使用value)
+- [x] 实现input元素处理(从data中取值)
+- [x] 实现computed元素处理(简单模板引擎)
+- [x] 通过单元测试验证三种来源类型
 
 **依赖**: Task 1.1, Task 1.2
 
@@ -97,11 +97,11 @@
 **目标**: 实现 `{field}` 占位符替换逻辑
 
 **验收标准**:
-- [ ] 实现 `resolve_format(format, data)` 方法
-- [ ] 支持多个占位符替换
-- [ ] 支持数字和布尔类型自动转换
-- [ ] 缺少字段时返回明确错误
-- [ ] 通过单元测试验证
+- [x] 实现 `resolve_format(format, data)` 方法
+- [x] 支持多个占位符替换
+- [x] 支持数字和布尔类型自动转换
+- [x] 缺少字段时返回明确错误
+- [x] 通过单元测试验证
 
 **依赖**: Task 2.1
 
@@ -114,10 +114,10 @@
 **目标**: 增强模板引擎的可观测性
 
 **验收标准**:
-- [ ] 添加DEBUG级别日志(记录每个元素的解析)
-- [ ] 添加INFO级别日志(解析完成摘要)
-- [ ] 完善错误信息(缺少字段、类型错误等)
-- [ ] 通过集成测试验证
+- [x] 添加DEBUG级别日志(记录每个元素的解析)
+- [x] 添加INFO级别日志(解析完成摘要)
+- [x] 完善错误信息(缺少字段、类型错误等)
+- [x] 通过集成测试验证
 
 **依赖**: Task 2.2
 
@@ -132,10 +132,10 @@
 **目标**: 改造现有的 `src/printer/text_renderer.rs` 支持中英文字体自动切换
 
 **验收标准**:
-- [ ] 在 `TextRenderer` 结构体中添加 `cn_font`, `en_font`, `fallback_font` 字段
-- [ ] 实现 `select_font_for_char(c: char) -> &Font` 方法
-- [ ] 实现CJK字符判断逻辑
-- [ ] 通过单元测试验证字体选择
+- [x] 在 `TextRenderer` 结构体中添加 `cn_font`, `en_font`, `fallback_font` 字段
+- [x] 实现 `select_font_for_char(c: char) -> &Font` 方法
+- [x] 实现CJK字符判断逻辑
+- [x] 通过单元测试验证字体选择
 
 **依赖**: Task 1.3
 
@@ -148,10 +148,10 @@
 **目标**: 实现准确的文本宽高度量,支持中英文混排
 
 **验收标准**:
-- [ ] 实现 `measure_text(text, font_size) -> (u32, u32)` 方法
-- [ ] 支持纯英文、纯中文、混排三种情况
-- [ ] 累加宽度、取最大高度
-- [ ] 通过单元测试验证(不同文本、不同字号)
+- [x] 实现 `measure_text(text, font_size) -> (u32, u32)` 方法
+- [x] 支持纯英文、纯中文、混排三种情况
+- [x] 累加宽度、取最大高度
+- [x] 通过单元测试验证(不同文本、不同字号)
 
 **依赖**: Task 3.1
 
@@ -164,10 +164,10 @@
 **目标**: 实现文本到1bpp黑白位图的渲染
 
 **验收标准**:
-- [ ] 实现 `render_text(text, font_size) -> ImageBuffer` 方法
-- [ ] 支持混排文本的字形拼接
-- [ ] 实现灰度转1bpp阈值转换(threshold=160)
-- [ ] 通过组件测试验证(检查像素值为0或255)
+- [x] 实现 `render_text(text, font_size) -> ImageBuffer` 方法
+- [x] 支持混排文本的字形拼接
+- [x] 实现灰度转1bpp阈值转换(threshold=160)
+- [x] 通过组件测试验证(检查像素值为0或255)
 
 **依赖**: Task 3.2
 
@@ -180,10 +180,10 @@
 **目标**: 优化性能,缓存字符度量结果
 
 **验收标准**:
-- [ ] 添加 `metrics_cache: Mutex<HashMap<(char, u32), CharMetrics>>` 字段
-- [ ] 在 `measure_text` 中使用缓存
-- [ ] 实现LRU淘汰策略(可选,初版可用固定大小)
-- [ ] 通过性能测试验证(缓存命中率、查询耗时)
+- [x] 添加 `metrics_cache: Mutex<HashMap<(char, u32), CharMetrics>>` 字段
+- [x] 在 `measure_text` 中使用缓存
+- [x] 实现LRU淘汰策略(可选,初版可用固定大小)
+- [x] 通过性能测试验证(缓存命中率、查询耗时)
 
 **依赖**: Task 3.2
 
@@ -196,11 +196,11 @@
 **目标**: 完善文本渲染的测试覆盖
 
 **验收标准**:
-- [ ] 单元测试: 字体选择、尺寸测量、位图渲染
-- [ ] 组件测试: 使用 `tests/components/text_rendering.rs`
-- [ ] 测试不同字号(8pt ~ 120pt)
-- [ ] 测试不同语言(英文、中文、混排)
-- [ ] 测试边界情况(空字符串、特殊字符)
+- [x] 单元测试: 字体选择、尺寸测量、位图渲染
+- [x] 组件测试: 使用 `tests/components/text_rendering.rs`
+- [x] 测试不同字号(8pt ~ 120pt)
+- [x] 测试不同语言(英文、中文、混排)
+- [x] 测试边界情况(空字符串、特殊字符)
 
 **依赖**: Task 3.3
 
@@ -215,10 +215,10 @@
 **目标**: 在 `src/printer/layout_engine.rs` 中实现基础的尺寸转换
 
 **验收标准**:
-- [ ] 创建 `LayoutEngine` 结构体
-- [ ] 实现 `calculate_canvas_size(page_config) -> (u32, u32)` (mm -> dots)
-- [ ] 实现 `calculate_available_area(page_config) -> (left, right, top, bottom)` (扣除边距)
-- [ ] 通过单元测试验证(203 DPI, 76×130mm)
+- [x] 创建 `LayoutEngine` 结构体
+- [x] 实现 `calculate_canvas_size(page_config) -> (u32, u32)` (mm -> dots)
+- [x] 实现 `calculate_available_area(page_config) -> (left, right, top, bottom)` (扣除边距)
+- [x] 通过单元测试验证(203 DPI, 76×130mm)
 
 **依赖**: Task 1.1
 
@@ -231,11 +231,11 @@
 **目标**: 实现核心的字号计算算法
 
 **验收标准**:
-- [ ] 实现 `calculate_max_font_size(content, max_height, available_width, font) -> f32` 方法
-- [ ] 使用二分搜索(范围8-120pt,精度0.5pt)
-- [ ] 依赖 `TextRenderer::measure_text` 进行字体度量
-- [ ] 通过单元测试验证(不同文本长度、不同高度预算)
-- [ ] 性能测试: 单次计算 < 10ms
+- [x] 实现 `calculate_max_font_size(content, max_height, available_width, font) -> f32` 方法
+- [x] 使用二分搜索(范围8-120pt,精度0.5pt)
+- [x] 依赖 `TextRenderer::measure_text` 进行字体度量
+- [x] 通过单元测试验证(不同文本长度、不同高度预算)
+- [x] 性能测试: 单次计算 < 10ms
 
 **依赖**: Task 3.2, Task 4.1
 
@@ -248,10 +248,10 @@
 **目标**: 实现整体内容块的垂直居中布局
 
 **验收标准**:
-- [ ] 实现 `calculate_total_content_height(elements, line_gap) -> u32` 方法
-- [ ] 实现 `calculate_vertical_offset(available_height, total_height) -> u32` 方法
-- [ ] 实现 `assign_y_positions(elements, y_offset, line_gap)` 方法
-- [ ] 通过单元测试验证(累加高度、间距计算)
+- [x] 实现 `calculate_total_content_height(elements, line_gap) -> u32` 方法
+- [x] 实现 `calculate_vertical_offset(available_height, total_height) -> u32` 方法
+- [x] 实现 `assign_y_positions(elements, y_offset, line_gap)` 方法
+- [x] 通过单元测试验证(累加高度、间距计算)
 
 **依赖**: Task 4.1
 
@@ -264,10 +264,10 @@
 **目标**: 实现元素的水平居中
 
 **验收标准**:
-- [ ] 实现 `calculate_horizontal_center(element_width, available_width, left_margin) -> u32` 方法
-- [ ] 支持文本元素(基于测量宽度)
-- [ ] 支持条形码元素(基于估算宽度+quiet_zone)
-- [ ] 通过单元测试验证
+- [x] 实现 `calculate_horizontal_center(element_width, available_width, left_margin) -> u32` 方法
+- [x] 支持文本元素(基于测量宽度)
+- [x] 支持条形码元素(基于估算宽度+quiet_zone)
+- [x] 通过单元测试验证
 
 **依赖**: Task 3.2, Task 4.1
 
@@ -280,11 +280,11 @@
 **目标**: 实现溢出检测和全局缩放
 
 **验收标准**:
-- [ ] 实现 `apply_overflow_protection(elements, available_height, line_gap)` 方法
-- [ ] 检测内容总高度是否超出可用高度
-- [ ] 计算缩放比例并应用到所有元素
-- [ ] 缩放后重新计算y坐标
-- [ ] 通过单元测试验证(溢出和不溢出场景)
+- [x] 实现 `apply_overflow_protection(elements, available_height, line_gap)` 方法
+- [x] 检测内容总高度是否超出可用高度
+- [x] 计算缩放比例并应用到所有元素
+- [x] 缩放后重新计算y坐标
+- [x] 通过单元测试验证(溢出和不溢出场景)
 
 **依赖**: Task 4.3
 
@@ -297,11 +297,11 @@
 **目标**: 整合所有布局逻辑,输出 `LayoutResult`
 
 **验收标准**:
-- [ ] 定义 `LayoutResult` 和 `LayoutedElement` 结构体
-- [ ] 实现 `layout(config, resolved_elements) -> LayoutResult` 方法
-- [ ] 依次调用: 字号计算、y坐标分配、x坐标计算、防溢出校验
-- [ ] 处理边框配置(如果启用)
-- [ ] 通过集成测试验证(完整流程)
+- [x] 定义 `LayoutResult` 和 `LayoutedElement` 结构体
+- [x] 实现 `layout(config, resolved_elements) -> LayoutResult` 方法
+- [x] 依次调用: 字号计算、y坐标分配、x坐标计算、防溢出校验
+- [x] 处理边框配置(如果启用)
+- [x] 通过集成测试验证(完整流程)
 
 **依赖**: Task 4.2, Task 4.3, Task 4.4, Task 4.5
 
@@ -314,9 +314,9 @@
 **目标**: 验证布局引擎性能
 
 **验收标准**:
-- [ ] 布局计算总耗时 < 50ms
-- [ ] 二分搜索字号计算 < 10ms
-- [ ] 使用 `cargo bench` 或手动计时
+- [x] 布局计算总耗时 < 50ms
+- [x] 二分搜索字号计算 < 10ms
+- [x] 使用 `cargo bench` 或手动计时
 
 **依赖**: Task 4.6
 
@@ -331,9 +331,9 @@
 **目标**: 定义 `RenderResult` 枚举和相关结构
 
 **验收标准**:
-- [ ] 定义 `RenderResult::MixedMode` 和 `RenderResult::FullBitmap` 枚举
-- [ ] 定义 `BarcodeElement` 结构体
-- [ ] 添加必要的字段(bitmaps, native_barcodes, canvas, canvas_size, border)
+- [x] 定义 `RenderResult::MixedMode` 和 `RenderResult::FullBitmap` 枚举
+- [x] 定义 `BarcodeElement` 结构体
+- [x] 添加必要的字段(bitmaps, native_barcodes, canvas, canvas_size, border)
 
 **依赖**: 无
 
@@ -346,10 +346,10 @@
 **目标**: 在 `src/printer/render_pipeline.rs` 中实现渲染协调
 
 **验收标准**:
-- [ ] 创建 `RenderPipeline` 结构体
-- [ ] 实现 `render(layout_result, output_config) -> RenderResult` 方法
-- [ ] 根据 `output.mode` 分支到不同渲染模式
-- [ ] 通过单元测试验证分支逻辑
+- [x] 创建 `RenderPipeline` 结构体
+- [x] 实现 `render(layout_result, output_config) -> RenderResult` 方法
+- [x] 根据 `output.mode` 分支到不同渲染模式
+- [x] 通过单元测试验证分支逻辑
 
 **依赖**: Task 5.1
 
@@ -362,11 +362,11 @@
 **目标**: 实现文本位图+原生条码的渲染模式
 
 **验收标准**:
-- [ ] 实现 `render_mixed_mode(layout) -> RenderResult` 方法
-- [ ] 遍历文本元素,调用 `TextRenderer::render_text` 生成位图
-- [ ] 保留条形码元素信息(不渲染为位图)
-- [ ] 返回 `RenderResult::MixedMode`
-- [ ] 通过单元测试验证
+- [x] 实现 `render_mixed_mode(layout) -> RenderResult` 方法
+- [x] 遍历文本元素,调用 `TextRenderer::render_text` 生成位图
+- [x] 保留条形码元素信息(不渲染为位图)
+- [x] 返回 `RenderResult::MixedMode`
+- [x] 通过单元测试验证
 
 **依赖**: Task 3.3, Task 5.2
 
@@ -379,13 +379,13 @@
 **目标**: 实现全部渲染为位图的模式
 
 **验收标准**:
-- [ ] 实现 `render_full_bitmap(layout) -> RenderResult` 方法
-- [ ] 创建白色背景画布
-- [ ] 叠加所有文本位图
-- [ ] 渲染条形码为位图并叠加
-- [ ] 绘制边框(如果启用)
-- [ ] 返回 `RenderResult::FullBitmap`
-- [ ] 通过单元测试验证
+- [x] 实现 `render_full_bitmap(layout) -> RenderResult` 方法
+- [x] 创建白色背景画布
+- [x] 叠加所有文本位图
+- [x] 渲染条形码为位图并叠加
+- [x] 绘制边框(如果启用)
+- [x] 返回 `RenderResult::FullBitmap`
+- [x] 通过单元测试验证
 
 **依赖**: Task 3.3, Task 5.2, 现有的 `BarcodeRenderer`
 
@@ -398,10 +398,10 @@
 **目标**: 实现画布合成辅助函数
 
 **验收标准**:
-- [ ] 实现 `create_canvas(width, height)` 创建白色背景
-- [ ] 实现 `overlay(canvas, bitmap, x, y)` 叠加位图(处理边界)
-- [ ] 实现 `draw_border(canvas, border_config)` 绘制边框
-- [ ] 通过单元测试验证(边界情况、透明度)
+- [x] 实现 `create_canvas(width, height)` 创建白色背景
+- [x] 实现 `overlay(canvas, bitmap, x, y)` 叠加位图(处理边界)
+- [x] 实现 `draw_border(canvas, border_config)` 绘制边框
+- [x] 通过单元测试验证(边界情况、透明度)
 
 **依赖**: Task 5.4
 
@@ -416,12 +416,12 @@
 **目标**: 重构 `src/printer/backend/pdf.rs` 为接收渲染结果
 
 **验收标准**:
-- [ ] 移除TSPL解析逻辑(parse_tspl, parse_tspl_line, render_commands)
-- [ ] 新增 `render(result: RenderResult) -> Result<PathBuf>` 方法
-- [ ] 处理 `RenderResult::MixedMode`: 叠加位图+渲染条码
-- [ ] 处理 `RenderResult::FullBitmap`: 直接使用画布
-- [ ] 保存为PNG(PDF生成暂时禁用)
-- [ ] 通过集成测试验证
+- [x] 移除TSPL解析逻辑(parse_tspl, parse_tspl_line, render_commands)
+- [x] 新增 `render(result: RenderResult) -> Result<PathBuf>` 方法
+- [x] 处理 `RenderResult::MixedMode`: 叠加位图+渲染条码
+- [x] 处理 `RenderResult::FullBitmap`: 直接使用画布
+- [x] 保存为PNG(PDF生成暂时禁用)
+- [x] 通过集成测试验证
 
 **依赖**: Task 5.5
 
@@ -434,12 +434,12 @@
 **目标**: 重构TSPL生成器从 `RenderResult` 生成指令
 
 **验收标准**:
-- [ ] 在 `src/printer/backend/mod.rs` 或新建 `tspl_backend.rs`
-- [ ] 实现 `render(result: RenderResult) -> Result<String>` 方法
-- [ ] 处理 `RenderResult::MixedMode`: 生成BITMAP + BARCODE指令
-- [ ] 处理 `RenderResult::FullBitmap`: 生成整张BITMAP指令
-- [ ] 实现 `encode_bitmap_1bpp(bitmap)` 位图编码
-- [ ] 通过单元测试验证TSPL格式
+- [x] 在 `src/printer/backend/mod.rs` 或新建 `tspl_backend.rs`
+- [x] 实现 `render(result: RenderResult) -> Result<String>` 方法
+- [x] 处理 `RenderResult::MixedMode`: 生成BITMAP + BARCODE指令
+- [x] 处理 `RenderResult::FullBitmap`: 生成整张BITMAP指令
+- [x] 实现 `encode_bitmap_1bpp(bitmap)` 位图编码
+- [x] 通过单元测试验证TSPL格式
 
 **依赖**: Task 5.5
 
@@ -452,11 +452,11 @@
 **目标**: 将1bpp位图编码为TSPL格式
 
 **验收标准**:
-- [ ] 实现 `encode_bitmap_1bpp(bitmap) -> String` 方法
-- [ ] 每8个像素打包为1个字节(从高位到低位)
-- [ ] 转换为十六进制字符串
-- [ ] 处理行尾不足8位的情况
-- [ ] 通过单元测试验证(对比手工编码结果)
+- [x] 实现 `encode_bitmap_1bpp(bitmap) -> String` 方法
+- [x] 每8个像素打包为1个字节(从高位到低位)
+- [x] 转换为十六进制字符串
+- [x] 处理行尾不足8位的情况
+- [x] 通过单元测试验证(对比手工编码结果)
 
 **依赖**: Task 6.2
 
@@ -471,11 +471,11 @@
 **目标**: 改造 `src/commands/printer.rs` 中的打印命令
 
 **验收标准**:
-- [ ] 更新 `print_qsl_card` Tauri命令
-- [ ] 调用流程: 加载配置 -> 模板引擎 -> 布局引擎 -> 渲染管线 -> 后端输出
-- [ ] 支持指定输出模式(PDF/Printer)
-- [ ] 处理错误并返回给前端
-- [ ] 通过端到端测试验证
+- [x] 更新 `print_qsl_card` Tauri命令
+- [x] 调用流程: 加载配置 -> 模板引擎 -> 布局引擎 -> 渲染管线 -> 后端输出
+- [x] 支持指定输出模式(PDF/Printer)
+- [x] 处理错误并返回给前端
+- [x] 通过端到端测试验证
 
 **依赖**: Task 6.1, Task 6.2
 
@@ -488,10 +488,10 @@
 **目标**: 更新 `web/src/views/PrintView.vue` 使用新配置格式
 
 **验收标准**:
-- [ ] 前端调用打印命令时传递运行时数据(callsign, sn, qty)
-- [ ] 适配新的错误格式
-- [ ] 更新UI提示(如"正在渲染..." vs "正在生成TSPL...")
-- [ ] 通过手动测试验证
+- [x] 前端调用打印命令时传递运行时数据(callsign, sn, qty)
+- [x] 适配新的错误格式
+- [x] 更新UI提示(如"正在渲染..." vs "正在生成TSPL...")
+- [x] 通过手动测试验证
 
 **依赖**: Task 7.1
 
@@ -506,11 +506,11 @@
 **目标**: 验证完整打印流程
 
 **验收标准**:
-- [ ] 使用默认v2配置文件
-- [ ] 提供不同运行时数据(不同呼号、不同长度)
-- [ ] 测试PDF输出(检查PNG文件)
-- [ ] 测试打印机输出(检查TSPL指令格式)
-- [ ] 对比方案A和方案B的输出
+- [x] 使用默认v2配置文件
+- [x] 提供不同运行时数据(不同呼号、不同长度)
+- [x] 测试PDF输出(检查PNG文件)
+- [x] 测试打印机输出(检查TSPL指令格式)
+- [x] 对比方案A和方案B的输出
 
 **依赖**: Task 7.1
 
@@ -523,10 +523,10 @@
 **目标**: 测试和优化整体性能
 
 **验收标准**:
-- [ ] 测试完整渲染流程耗时
-- [ ] 目标: 配置加载 < 10ms, 模板引擎 < 20ms, 布局 < 50ms, 渲染 < 200ms
-- [ ] 识别性能瓶颈并优化
-- [ ] 验证字体度量缓存效果
+- [x] 测试完整渲染流程耗时
+- [x] 目标: 配置加载 < 10ms, 模板引擎 < 20ms, 布局 < 50ms, 渲染 < 200ms
+- [x] 识别性能瓶颈并优化
+- [x] 验证字体度量缓存效果
 
 **依赖**: Task 8.1
 
@@ -539,12 +539,12 @@
 **目标**: 测试各种边界情况
 
 **验收标准**:
-- [ ] 超长文本(自动缩小字号)
-- [ ] 超高内容块(触发全局缩放)
-- [ ] 空字符串、特殊字符
-- [ ] 缺少运行时字段
-- [ ] 损坏的配置文件
-- [ ] 所有错误应有清晰的错误信息
+- [x] 超长文本(自动缩小字号)
+- [x] 超高内容块(触发全局缩放)
+- [x] 空字符串、特殊字符
+- [x] 缺少运行时字段
+- [x] 损坏的配置文件
+- [x] 所有错误应有清晰的错误信息
 
 **依赖**: Task 8.1
 
@@ -557,10 +557,10 @@
 **目标**: 验证条形码可扫描性
 
 **验收标准**:
-- [ ] 生成PDF输出
-- [ ] 打印或使用手机扫描条形码
-- [ ] 验证扫描结果与输入一致
-- [ ] 测试不同呼号长度的条形码
+- [x] 生成PDF输出
+- [x] 打印或使用手机扫描条形码
+- [x] 验证扫描结果与输入一致
+- [x] 测试不同呼号长度的条形码
 
 **依赖**: Task 8.1
 
@@ -575,10 +575,10 @@
 **目标**: 编写v2配置格式的使用文档
 
 **验收标准**:
-- [ ] 更新 `README.md` 说明新特性
-- [ ] 编写 `docs/template-v2-guide.md` 配置指南
-- [ ] 提供配置示例和最佳实践
-- [ ] 说明两种渲染模式的差异
+- [x] 更新 `README.md` 说明新特性
+- [x] 编写 `docs/template-v2-guide.md` 配置指南
+- [x] 提供配置示例和最佳实践
+- [x] 说明两种渲染模式的差异
 
 **依赖**: Task 8.1
 
@@ -591,9 +591,9 @@
 **目标**: 更新架构文档和API文档
 
 **验收标准**:
-- [ ] 更新 `ARCHITECTURE.md` 反映新架构
-- [ ] 添加模块级文档注释(Rust doc comments)
-- [ ] 生成API文档: `cargo doc --no-deps --open`
+- [x] 更新 `ARCHITECTURE.md` 反映新架构
+- [x] 添加模块级文档注释(Rust doc comments)
+- [x] 生成API文档: `cargo doc --no-deps --open`
 
 **依赖**: Task 9.1
 
@@ -606,10 +606,10 @@
 **目标**: 移除废弃代码,完善注释
 
 **验收标准**:
-- [ ] 移除旧的v1相关代码(如果不再需要)
-- [ ] 添加模块级和函数级文档注释(中文)
-- [ ] 运行 `cargo clippy` 修复警告
-- [ ] 运行 `cargo fmt` 格式化代码
+- [x] 移除旧的v1相关代码(如果不再需要)
+- [x] 添加模块级和函数级文档注释(中文)
+- [x] 运行 `cargo clippy` 修复警告
+- [x] 运行 `cargo fmt` 格式化代码
 
 **依赖**: Task 9.2
 
@@ -622,11 +622,11 @@
 **目标**: 发布包含v2模板系统的新版本
 
 **验收标准**:
-- [ ] 更新 `Cargo.toml` 版本号为 0.2.0
-- [ ] 更新 `tauri.conf.json` 版本号
-- [ ] 编写 CHANGELOG.md
-- [ ] 创建Git标签: `git tag v0.2.0`
-- [ ] 构建发布包: `cargo tauri build`
+- [x] 更新 `Cargo.toml` 版本号为 0.2.0
+- [x] 更新 `tauri.conf.json` 版本号
+- [x] 编写 CHANGELOG.md
+- [x] 创建Git标签: `git tag v0.2.0`
+- [x] 构建发布包: `cargo tauri build`
 
 **依赖**: Task 9.3
 
