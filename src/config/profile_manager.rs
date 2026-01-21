@@ -47,6 +47,8 @@ impl ProfileManager {
     }
 
     /// 获取所有 Profile
+    ///
+    /// 注意: 会自动过滤以 `.` 开头的隐藏配置文件（如 `.example.toml`）
     pub fn get_all(&self) -> Result<Vec<Profile>> {
         let mut profiles = Vec::new();
 
@@ -54,6 +56,14 @@ impl ProfileManager {
         if let Ok(entries) = fs::read_dir(&self.profiles_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
+
+                // 跳过以 `.` 开头的隐藏文件
+                if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                    if file_name.starts_with('.') {
+                        continue;
+                    }
+                }
+
                 if path.extension().and_then(|s| s.to_str()) == Some("toml") {
                     if let Ok(profile) = self.load_profile(&path) {
                         profiles.push(profile);
@@ -165,7 +175,7 @@ impl ProfileManager {
 
         // 添加注释
         let content_with_comment = format!(
-            "# QSL-CardHub 打印配置\n# 配置名称: {}\n# 创建时间: {}\n\n{}",
+            "# qsl-cardhub 打印配置\n# 配置名称: {}\n# 创建时间: {}\n\n{}",
             profile.name,
             profile.created_at.format("%Y-%m-%d %H:%M:%S"),
             content
@@ -180,9 +190,155 @@ impl ProfileManager {
         let path = self.config_dir.join("config.toml");
         let content = toml::to_string_pretty(&self.app_config).context("无法序列化应用配置")?;
 
-        let content_with_comment = format!("# QSL-CardHub 全局配置\n\n{}", content);
+        let content_with_comment = format!("# qsl-cardhub 全局配置\n\n{}", content);
 
         fs::write(&path, content_with_comment).context("无法写入应用配置文件")?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_get_all_filters_hidden_files() {
+        // 创建临时目录
+        let temp_dir = TempDir::new().unwrap();
+        let profiles_dir = temp_dir.path().join("profiles");
+        fs::create_dir_all(&profiles_dir).unwrap();
+
+        // 创建一个正常配置文件
+        let normal_profile = Profile::new(
+            "Normal Profile".to_string(),
+            "Test Printer".to_string(),
+            Platform {
+                os: "macOS".to_string(),
+                arch: "arm64".to_string(),
+            },
+        );
+        let normal_path = profiles_dir.join(format!("{}.toml", normal_profile.id));
+        let content = toml::to_string_pretty(&normal_profile).unwrap();
+        fs::write(&normal_path, content).unwrap();
+
+        // 创建一个隐藏配置文件（以 `.` 开头）
+        let hidden_profile = Profile::new(
+            "Hidden Profile".to_string(),
+            "Test Printer".to_string(),
+            Platform {
+                os: "macOS".to_string(),
+                arch: "arm64".to_string(),
+            },
+        );
+        let hidden_path = profiles_dir.join(".example.toml");
+        let content = toml::to_string_pretty(&hidden_profile).unwrap();
+        fs::write(&hidden_path, content).unwrap();
+
+        // 创建 ProfileManager
+        let manager = ProfileManager::new(temp_dir.path().to_path_buf()).unwrap();
+
+        // 调用 get_all()
+        let profiles = manager.get_all().unwrap();
+
+        // 验证：应该只返回正常配置文件，不包含隐藏文件
+        assert_eq!(profiles.len(), 1);
+        assert_eq!(profiles[0].name, "Normal Profile");
+    }
+
+    #[test]
+    fn test_get_all_with_only_hidden_files() {
+        // 创建临时目录
+        let temp_dir = TempDir::new().unwrap();
+        let profiles_dir = temp_dir.path().join("profiles");
+        fs::create_dir_all(&profiles_dir).unwrap();
+
+        // 只创建隐藏配置文件
+        let hidden_profile = Profile::new(
+            "Hidden Profile".to_string(),
+            "Test Printer".to_string(),
+            Platform {
+                os: "macOS".to_string(),
+                arch: "arm64".to_string(),
+            },
+        );
+        let hidden_path = profiles_dir.join(".example.toml");
+        let content = toml::to_string_pretty(&hidden_profile).unwrap();
+        fs::write(&hidden_path, content).unwrap();
+
+        // 创建 ProfileManager
+        let manager = ProfileManager::new(temp_dir.path().to_path_buf()).unwrap();
+
+        // 调用 get_all()
+        let profiles = manager.get_all().unwrap();
+
+        // 验证：应该返回空列表
+        assert_eq!(profiles.len(), 0);
+    }
+
+    #[test]
+    fn test_get_all_with_empty_directory() {
+        // 创建临时目录
+        let temp_dir = TempDir::new().unwrap();
+
+        // 创建 ProfileManager
+        let manager = ProfileManager::new(temp_dir.path().to_path_buf()).unwrap();
+
+        // 调用 get_all()
+        let profiles = manager.get_all().unwrap();
+
+        // 验证：应该返回空列表
+        assert_eq!(profiles.len(), 0);
+    }
+
+    #[test]
+    fn test_get_all_with_mixed_files() {
+        // 创建临时目录
+        let temp_dir = TempDir::new().unwrap();
+        let profiles_dir = temp_dir.path().join("profiles");
+        fs::create_dir_all(&profiles_dir).unwrap();
+
+        // 创建2个正常配置文件
+        for i in 1..=2 {
+            let profile = Profile::new(
+                format!("Profile {}", i),
+                "Test Printer".to_string(),
+                Platform {
+                os: "macOS".to_string(),
+                arch: "arm64".to_string(),
+            },
+            );
+            let path = profiles_dir.join(format!("{}.toml", profile.id));
+            let content = toml::to_string_pretty(&profile).unwrap();
+            fs::write(&path, content).unwrap();
+        }
+
+        // 创建2个隐藏配置文件
+        let hidden_files = vec![".example.toml", ".backup.toml"];
+        for file_name in hidden_files {
+            let profile = Profile::new(
+                "Hidden Profile".to_string(),
+                "Test Printer".to_string(),
+                Platform {
+                os: "macOS".to_string(),
+                arch: "arm64".to_string(),
+            },
+            );
+            let path = profiles_dir.join(file_name);
+            let content = toml::to_string_pretty(&profile).unwrap();
+            fs::write(&path, content).unwrap();
+        }
+
+        // 创建 ProfileManager
+        let manager = ProfileManager::new(temp_dir.path().to_path_buf()).unwrap();
+
+        // 调用 get_all()
+        let profiles = manager.get_all().unwrap();
+
+        // 验证：应该只返回2个正常配置文件
+        assert_eq!(profiles.len(), 2);
+        for profile in &profiles {
+            assert!(!profile.name.contains("Hidden"));
+        }
     }
 }

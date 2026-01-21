@@ -1,6 +1,6 @@
 // 测试标题修复
 
-use QSL_CardHub::api::quick_generate_png;
+use qsl_cardhub::api::quick_generate_png;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -19,7 +19,7 @@ fn test_title_not_overlapping_border() {
     data.insert("sn".to_string(), "001".to_string());
     data.insert("qty".to_string(), "500".to_string());
 
-    let config_path = Path::new("config/templates/qsl-card-v2.toml");
+    let config_path = Path::new("../config/templates/default.toml");
     let png_path = quick_generate_png(Some(config_path), &data, output_dir.clone(), "full_bitmap")
         .expect("生成PNG失败");
 

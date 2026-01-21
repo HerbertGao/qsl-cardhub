@@ -236,9 +236,19 @@ const handlePrint = async () => {
     // 调用 Tauri API
     await invoke('print_qsl', {
       printerName: profile.printer.name,
-      callsign: printForm.value.callsign,
-      serial: currentSerial,
-      qty: printForm.value.qty
+      request: {
+        template_path: null,  // 使用默认模板
+        data: {
+          task_name: profile.task_name || '',
+          callsign: printForm.value.callsign,
+          sn: String(currentSerial).padStart(3, '0'),
+          qty: String(printForm.value.qty)
+        },
+        output_config: {
+          mode: "text_bitmap_plus_native_barcode",
+          threshold: 160
+        }
+      }
     })
 
     ElMessage.success('打印成功')

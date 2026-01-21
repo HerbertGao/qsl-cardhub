@@ -2,12 +2,12 @@
 //
 // 测试 PDF 和 TSPL 后端与渲染管道的集成
 
-use QSL_CardHub::config::template::{OutputConfig, TemplateConfig};
-use QSL_CardHub::printer::backend::PdfBackend;
-use QSL_CardHub::printer::layout_engine::LayoutEngine;
-use QSL_CardHub::printer::render_pipeline::RenderPipeline;
-use QSL_CardHub::printer::template_engine::TemplateEngine;
-use QSL_CardHub::printer::tspl::TSPLGenerator;
+use qsl_cardhub::config::template::{OutputConfig, TemplateConfig};
+use qsl_cardhub::printer::backend::PdfBackend;
+use qsl_cardhub::printer::layout_engine::LayoutEngine;
+use qsl_cardhub::printer::render_pipeline::RenderPipeline;
+use qsl_cardhub::printer::template_engine::TemplateEngine;
+use qsl_cardhub::printer::tspl::TSPLGenerator;
 use std::collections::HashMap;
 use std::path::Path;
 use tempfile::TempDir;
@@ -196,7 +196,7 @@ fn test_backend_with_config_file() {
     println!("\n========== 后端集成测试: 使用配置文件 ==========");
 
     // 从配置文件加载
-    let config_path = Path::new("config/templates/qsl-card-v2.toml");
+    let config_path = Path::new("../../config/templates/default.toml");
     let config = TemplateConfig::load_from_file(config_path).expect("加载配置文件失败");
 
     let mut data = HashMap::new();

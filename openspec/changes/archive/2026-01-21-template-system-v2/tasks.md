@@ -62,7 +62,7 @@
 **目标**: 在 `config/templates/` 创建默认的v2配置文件
 
 **验收标准**:
-- [x] 创建 `config/templates/qsl-card-v2.toml`
+- [x] 创建 `config/templates/default.toml`
 - [x] 配置应符合 `docs/template.v2.md` 规范
 - [x] 配置应可被成功加载和解析
 

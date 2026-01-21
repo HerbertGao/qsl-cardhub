@@ -14,7 +14,7 @@
 
 #### 场景: 加载v2版本的模板配置文件
 
-- **给定** 存在一个符合v2格式的TOML配置文件 `config/templates/qsl-card-v2.toml`
+- **给定** 存在一个符合v2格式的TOML配置文件 `config/templates/default.toml`
 - **当** 调用 `TemplateV2Config::load_from_file(path)` 加载配置
 - **则** 应成功解析配置文件
 - **并且** 返回的配置对象包含以下部分:

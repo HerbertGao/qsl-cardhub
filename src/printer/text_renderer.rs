@@ -72,20 +72,12 @@ impl TextRenderer {
         }
 
         let scale = Scale::uniform(font_size);
-        let font_size_u32 = font_size as u32;
-
-        let mut total_width = 0.0;
-        let mut max_height = 0;
+        let mut x_offset = 0.0;
+        let mut min_x = 0i32;
+        let mut max_x = 0i32;
+        let mut max_height = 0u32;
 
         for c in text.chars() {
-            // 检查缓存
-            if let Some(metrics) = self.get_cached_metrics(c, font_size_u32) {
-                total_width += metrics.width as f32;
-                max_height = max_height.max(metrics.height);
-                continue;
-            }
-
-            // 测量字符
             let font_name = if Self::is_cjk(c) {
                 "chinese"
             } else {
@@ -93,22 +85,29 @@ impl TextRenderer {
             };
             let font = self.font_loader.load_font(font_name)?;
 
+            let v_metrics = font.v_metrics(scale);
             let glyph = font.glyph(c).scaled(scale);
             let h_metrics = glyph.h_metrics();
-            let width = h_metrics.advance_width as u32;
 
-            // 获取字体垂直度量
-            let v_metrics = font.v_metrics(scale);
+            // 计算实际的像素边界框
+            let positioned_glyph = glyph.positioned(point(x_offset, v_metrics.ascent));
+            if let Some(bb) = positioned_glyph.pixel_bounding_box() {
+                min_x = min_x.min(bb.min.x);
+                max_x = max_x.max(bb.max.x);
+            }
+
+            // 计算高度
             let height = (v_metrics.ascent - v_metrics.descent).ceil() as u32;
-
-            // 缓存度量信息
-            self.cache_metrics(c, font_size_u32, CharMetrics { width, height });
-
-            total_width += width as f32;
             max_height = max_height.max(height);
+
+            x_offset += h_metrics.advance_width;
         }
 
-        Ok((total_width.ceil() as u32, max_height))
+        // 实际像素宽度 = max_x - min_x
+        // 如果min_x < 0，说明字形向左延伸，需要额外的空间
+        let width = (max_x - min_x) as u32;
+
+        Ok((width, max_height))
     }
 
     /// 渲染文本为1bpp位图
@@ -131,9 +130,34 @@ impl TextRenderer {
         // 2. 创建白色画布
         let mut canvas = ImageBuffer::from_pixel(width, height, Luma([255u8]));
 
-        // 3. 渲染文本
+        // 3. 计算最小x偏移（用于处理字形向左延伸的情况）
         let scale = Scale::uniform(font_size);
         let mut x_offset = 0.0;
+        let mut min_x = 0i32;
+
+        // 先计算min_x
+        for c in text.chars() {
+            let font_name = if Self::is_cjk(c) {
+                "chinese"
+            } else {
+                "english"
+            };
+            let font = self.font_loader.load_font(font_name)?;
+            let v_metrics = font.v_metrics(scale);
+            let glyph = font.glyph(c).scaled(scale);
+            let h_metrics = glyph.h_metrics();
+
+            let positioned_glyph = glyph.positioned(point(x_offset, v_metrics.ascent));
+            if let Some(bb) = positioned_glyph.pixel_bounding_box() {
+                min_x = min_x.min(bb.min.x);
+            }
+
+            x_offset += h_metrics.advance_width;
+        }
+
+        // 4. 渲染文本（考虑min_x偏移）
+        x_offset = 0.0;
+        let x_adjust = -min_x;  // 如果min_x < 0，向右偏移
 
         for c in text.chars() {
             let font_name = if Self::is_cjk(c) {
@@ -150,7 +174,7 @@ impl TextRenderer {
             let positioned_glyph = glyph.positioned(point(x_offset, v_metrics.ascent));
             if let Some(bounding_box) = positioned_glyph.pixel_bounding_box() {
                 positioned_glyph.draw(|x, y, v| {
-                    let px = (x as i32 + bounding_box.min.x) as u32;
+                    let px = ((x as i32 + bounding_box.min.x + x_adjust) as u32);
                     let py = (y as i32 + bounding_box.min.y) as u32;
 
                     if px < width && py < height {
@@ -165,7 +189,7 @@ impl TextRenderer {
             x_offset += h_metrics.advance_width;
         }
 
-        // 4. 应用阈值转换为1bpp
+        // 5. 应用阈值转换为1bpp
         let threshold = 160; // 默认阈值
         Ok(Self::apply_threshold(canvas, threshold))
     }

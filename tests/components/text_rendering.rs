@@ -6,7 +6,7 @@
 // - 1bpp位图渲染
 // - 字体度量缓存
 
-use QSL_CardHub::printer::text_renderer::TextRenderer;
+use qsl_cardhub::printer::text_renderer::TextRenderer;
 use image::{ImageBuffer, Luma, Rgb, RgbImage};
 use std::path::PathBuf;
 

@@ -1,4 +1,4 @@
-// QSL-CardHub - Rust + Tauri 版本
+// qsl-cardhub
 //
 // 业余无线电 QSL 卡片打印工具
 
@@ -14,7 +14,7 @@ mod utils;
 use commands::{
     logger::{clear_logs, export_logs, get_log_file_path, get_logs},
     platform::get_platform_info,
-    printer::{PrinterState, generate_tspl, load_template, preview_qsl, print_qsl, save_template},
+    printer::{PrinterState, generate_tspl, get_printers, get_template_config, load_template, preview_qsl, print_qsl, save_template, save_template_config},
     profile::{
         ProfileState, create_profile, delete_profile, export_profile, get_default_profile_id,
         get_profile, get_profiles, import_profile, set_default_profile, update_profile,
@@ -56,7 +56,7 @@ fn main() {
 
             app.manage(printer_state);
 
-            println!("✅ QSL-CardHub 初始化完成");
+            println!("✅ qsl-cardhub 初始化完成");
 
             Ok(())
         })
@@ -74,11 +74,14 @@ fn main() {
             export_profile,
             import_profile,
             // 打印机管理
+            get_printers,
             preview_qsl,
             print_qsl,
             generate_tspl,
             load_template,
             save_template,
+            get_template_config,
+            save_template_config,
             // 日志管理
             get_logs,
             clear_logs,
@@ -104,17 +107,17 @@ fn get_config_dir() -> Result<PathBuf, String> {
         let home_dir = dirs::home_dir().ok_or("无法获取用户主目录")?;
 
         let config_dir = if cfg!(target_os = "windows") {
-            // Windows: %APPDATA%/QSL-CardHub
-            home_dir.join("AppData").join("Roaming").join("QSL-CardHub")
+            // Windows: %APPDATA%/qsl-cardhub
+            home_dir.join("AppData").join("Roaming").join("qsl-cardhub")
         } else if cfg!(target_os = "macos") {
-            // macOS: ~/Library/Application Support/QSL-CardHub
+            // macOS: ~/Library/Application Support/qsl-cardhub
             home_dir
                 .join("Library")
                 .join("Application Support")
-                .join("QSL-CardHub")
+                .join("qsl-cardhub")
         } else {
-            // Linux: ~/.config/QSL-CardHub
-            home_dir.join(".config").join("QSL-CardHub")
+            // Linux: ~/.config/qsl-cardhub
+            home_dir.join(".config").join("qsl-cardhub")
         };
 
         Ok(config_dir)

@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "QSL-CardHub",
+  "productName": "qsl-cardhub",
   "version": "0.1.0",
   "identifier": "com.herbertgao.qsl-cardhub",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "QSL-CardHub",
+        "title": "qsl-cardhub",
         "width": 1200,
         "height": 800,
         "resizable": true,

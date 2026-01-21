@@ -2,9 +2,9 @@
 //
 // 测试从配置文件到布局结果的完整流程
 
-use QSL_CardHub::config::template::TemplateConfig;
-use QSL_CardHub::printer::layout_engine::LayoutEngine;
-use QSL_CardHub::printer::template_engine::TemplateEngine;
+use qsl_cardhub::config::template::TemplateConfig;
+use qsl_cardhub::printer::layout_engine::LayoutEngine;
+use qsl_cardhub::printer::template_engine::TemplateEngine;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -13,7 +13,7 @@ fn test_complete_template_to_layout_flow() {
     println!("\n========== 模板到布局完整流程测试 ==========");
 
     // 1. 加载v2配置文件
-    let config_path = Path::new("config/templates/qsl-card-v2.toml");
+    let config_path = Path::new("../../config/templates/default.toml");
     let config = TemplateConfig::load_from_file(config_path).expect("加载配置文件失败");
 
     println!("✓ 加载配置: {}", config.metadata.name);

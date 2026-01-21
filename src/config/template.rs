@@ -607,7 +607,7 @@ mod tests {
 
     #[test]
     fn test_load_qsl_card_toml() {
-        let config_path = Path::new("config/templates/qsl-card-v2.toml");
+        let config_path = Path::new("../../config/templates/default.toml");
         let config = TemplateConfig::load_from_file(config_path)
             .expect("应该成功加载v2配置");
 

@@ -1,6 +1,6 @@
 # API v2 使用指南
 
-QSL-CardHub v2 提供了完整的 Rust API 和 Tauri 命令接口，用于生成和打印 QSL 卡片。
+qsl-cardhub v2 提供了完整的 Rust API 和 Tauri 命令接口，用于生成和打印 QSL 卡片。
 
 ## 目录
 - [Rust API](#rust-api)
@@ -315,7 +315,7 @@ use std::path::Path;
 fn main() {
     // 加载自定义模板
     let mut config = TemplateV2Config::load_from_file(
-        Path::new("config/templates/qsl-card-v2.toml")
+        Path::new("config/templates/default.toml")
     ).unwrap();
 
     // 修改配置
@@ -415,4 +415,4 @@ async function generatePreview() {
 
 - [模板配置文档](./template.v2.md)
 - [架构文档](../ARCHITECTURE.md)
-- [GitHub Issues](https://github.com/your-repo/QSL-CardHub/issues)
+- [GitHub Issues](https://github.com/HerbertGao/qsl-cardhub/issues)

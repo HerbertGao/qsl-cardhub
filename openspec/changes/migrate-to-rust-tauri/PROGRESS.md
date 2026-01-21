@@ -1,4 +1,4 @@
-# QSL-CardHub Rust+Tauri 迁移进度报告
+# qsl-cardhub Rust+Tauri 迁移进度报告
 
 ## 📅 更新日期：2026-01-20
 
@@ -540,7 +540,7 @@
 
 如有问题或建议，请通过以下方式联系：
 
-- **项目地址**：/Users/herbertgao/RustroverProjects/QSL-CardHub
+- **项目地址**：/Users/herbertgao/RustroverProjects/qsl-cardhub
 - **Python 版参考**：/Users/herbertgao/PycharmProjects/QSL-CardHub
 
 ---

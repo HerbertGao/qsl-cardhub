@@ -2,8 +2,8 @@
 //
 // 测试从配置加载到 PNG/TSPL 生成的完整流程
 
-use QSL_CardHub::api::{QslCardGenerator, quick_generate_png, quick_generate_tspl};
-use QSL_CardHub::config::template::{OutputConfig, TemplateConfig};
+use qsl_cardhub::api::{QslCardGenerator, quick_generate_png, quick_generate_tspl};
+use qsl_cardhub::config::template::{OutputConfig, TemplateConfig};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -15,7 +15,7 @@ fn test_comprehensive_qsl_card_generation() {
 
     // 步骤 1: 加载模板配置
     println!("📋 步骤 1: 加载模板配置");
-    let config_path = Path::new("config/templates/qsl-card-v2.toml");
+    let config_path = Path::new("../config/templates/default.toml");
     assert!(
         config_path.exists(),
         "配置文件不存在: {}",

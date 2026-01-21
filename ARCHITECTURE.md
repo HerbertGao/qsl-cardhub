@@ -1,8 +1,8 @@
-# QSL-CardHub 架构文档
+# qsl-cardhub 架构文档
 
 ## 概述
 
-本文档描述 QSL-CardHub Rust + Tauri 版本的架构设计和模块组织。
+本文档描述 qsl-cardhub Rust + Tauri 版本的架构设计和模块组织。
 
 ## 架构图
 

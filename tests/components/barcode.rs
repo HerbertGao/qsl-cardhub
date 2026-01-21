@@ -1,6 +1,6 @@
 // 条形码编码和渲染测试
 
-use QSL_CardHub::printer::barcode_renderer::BarcodeRenderer;
+use qsl_cardhub::printer::barcode_renderer::BarcodeRenderer;
 use barcoders::sym::code128::Code128;
 use image::{ImageBuffer, Rgb, RgbImage};
 use std::path::PathBuf;

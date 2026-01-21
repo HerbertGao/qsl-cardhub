@@ -1,6 +1,6 @@
 // 字体加载测试
 
-use QSL_CardHub::printer::font_loader::FontLoader;
+use qsl_cardhub::printer::font_loader::FontLoader;
 
 #[test]
 fn test_font_loading() {

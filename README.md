@@ -1,10 +1,10 @@
-# QSL-CardHub - Rust + Tauri 版本
+# qsl-cardhub - Rust + Tauri 版本
 
 > 业余无线电 QSL 卡片打印工具
 
 ## 简介
 
-QSL-CardHub 是一款专为业余无线电爱好者设计的 QSL 卡片打印工具。Rust + Tauri 版本提供了更快的启动速度、更小的体积和更好的跨平台支持。
+qsl-cardhub 是一款专为业余无线电爱好者设计的 QSL 卡片打印工具。Rust + Tauri 版本提供了更快的启动速度、更小的体积和更好的跨平台支持。
 
 ### 主要特性
 
@@ -18,7 +18,7 @@ QSL-CardHub 是一款专为业余无线电爱好者设计的 QSL 卡片打印工
 ## 项目结构
 
 ```
-QSL-CardHub/
+qsl-cardhub/
 ├── src/                    # Rust 后端代码
 │   ├── commands/          # Tauri Commands（API 层）
 │   │   ├── platform.rs    # 平台信息
@@ -123,9 +123,9 @@ cargo tauri build
 
 - **开发模式**: 项目根目录 `config/`
 - **生产模式**:
-  - Windows: `%APPDATA%/QSL-CardHub/`
-  - macOS: `~/Library/Application Support/QSL-CardHub/`
-  - Linux: `~/.config/QSL-CardHub/`
+  - Windows: `%APPDATA%/qsl-cardhub/`
+  - macOS: `~/Library/Application Support/qsl-cardhub/`
+  - Linux: `~/.config/qsl-cardhub/`
 
 ### 配置文件结构
 
@@ -170,7 +170,7 @@ async fn my_command(param: String) -> Result<String, String> {
 cargo test
 
 # 运行特定模块测试
-cargo test --package QSL-CardHub --lib config::tests
+cargo test --package qsl-cardhub --lib config::tests
 ```
 
 ### 代码格式化
@@ -214,4 +214,4 @@ MIT License
 ## 联系方式
 
 - 作者: Herbert Gao
-- 项目: https://github.com/yourusername/QSL-CardHub
+- 项目: https://github.com/HerbertGao/qsl-cardhub

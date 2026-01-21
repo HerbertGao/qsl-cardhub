@@ -2,10 +2,10 @@
 //
 // 测试完整流程: 配置 → 模板解析 → 布局计算 → 渲染输出
 
-use QSL_CardHub::config::template::{OutputConfig, TemplateConfig};
-use QSL_CardHub::printer::layout_engine::LayoutEngine;
-use QSL_CardHub::printer::render_pipeline::{RenderPipeline, RenderResult};
-use QSL_CardHub::printer::template_engine::TemplateEngine;
+use qsl_cardhub::config::template::{OutputConfig, TemplateConfig};
+use qsl_cardhub::printer::layout_engine::LayoutEngine;
+use qsl_cardhub::printer::render_pipeline::{RenderPipeline, RenderResult};
+use qsl_cardhub::printer::template_engine::TemplateEngine;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -14,7 +14,7 @@ fn test_end_to_end_mixed_mode() {
     println!("\n========== 端到端测试: 混合模式 ==========");
 
     // 1. 加载配置
-    let config_path = Path::new("config/templates/qsl-card-v2.toml");
+    let config_path = Path::new("../../config/templates/default.toml");
     let config = TemplateConfig::load_from_file(config_path).expect("加载配置失败");
 
     println!("✓ 加载配置: {}", config.metadata.name);
@@ -113,7 +113,7 @@ fn test_end_to_end_full_bitmap() {
     println!("\n========== 端到端测试: 全位图模式 ==========");
 
     // 1. 加载配置并修改为全位图模式
-    let config_path = Path::new("config/templates/qsl-card-v2.toml");
+    let config_path = Path::new("../../config/templates/default.toml");
     let mut config = TemplateConfig::load_from_file(config_path).expect("加载配置失败");
 
     println!("✓ 加载配置: {}", config.metadata.name);

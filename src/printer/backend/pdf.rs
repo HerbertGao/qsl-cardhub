@@ -2,6 +2,7 @@
 //
 // 接收 RenderResult 并生成 PNG/PDF 文件
 
+use super::PrinterBackend;
 use crate::printer::barcode_renderer::BarcodeRenderer;
 use crate::printer::render_pipeline::{BarcodeElement, RenderResult};
 use anyhow::{Context, Result};
@@ -25,8 +26,11 @@ pub struct PdfBackend {
 impl PdfBackend {
     /// 创建新的 PDF 后端
     pub fn new(output_dir: PathBuf) -> Result<Self> {
+        log::info!("📁 PDF后端输出目录: {}", output_dir.display());
+
         // 确保输出目录存在
         if !output_dir.exists() {
+            log::info!("创建输出目录: {}", output_dir.display());
             fs::create_dir_all(&output_dir).context("创建输出目录失败")?;
         }
 
@@ -38,10 +42,25 @@ impl PdfBackend {
 
     /// 使用 Downloads 目录创建后端
     pub fn with_downloads_dir() -> Result<Self> {
-        let downloads_dir = dirs::download_dir()
-            .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")));
+        let downloads_dir = dirs::download_dir();
+        let home_dir = dirs::home_dir();
 
-        Self::new(downloads_dir)
+        log::info!("尝试获取下载目录: {:?}", downloads_dir);
+        log::info!("尝试获取主目录: {:?}", home_dir);
+
+        let output_dir = downloads_dir
+            .unwrap_or_else(|| home_dir.unwrap_or_else(|| PathBuf::from(".")));
+
+        log::info!("最终使用的输出目录: {}", output_dir.display());
+
+        Self::new(output_dir)
+    }
+
+    /// 使用临时目录创建后端（用于预览）
+    pub fn with_temp_dir() -> Result<Self> {
+        let temp_dir = std::env::temp_dir();
+        log::info!("使用临时目录: {}", temp_dir.display());
+        Self::new(temp_dir)
     }
 
     /// 渲染 RenderResult 并保存为文件
@@ -79,12 +98,25 @@ impl PdfBackend {
         let filename = format!("qsl_{}.png", timestamp);
         let png_path = self.output_dir.join(&filename);
 
+        log::info!("📝 准备保存PNG文件");
+        log::info!("   输出目录: {}", self.output_dir.display());
+        log::info!("   文件名: {}", filename);
+        log::info!("   完整路径: {}", png_path.display());
+
         // 保存PNG
         rgb_canvas
             .save(&png_path)
             .with_context(|| format!("保存PNG到 {} 失败", png_path.display()))?;
 
-        log::info!("✅ 保存PNG: {}", png_path.display());
+        log::info!("✅ PNG文件已成功保存到: {}", png_path.display());
+
+        // 验证文件是否真的存在
+        if png_path.exists() {
+            let metadata = fs::metadata(&png_path)?;
+            log::info!("   文件大小: {} 字节", metadata.len());
+        } else {
+            log::warn!("⚠️  文件保存后无法找到: {}", png_path.display());
+        }
 
         Ok(png_path)
     }
@@ -285,5 +317,21 @@ mod tests {
 
         assert!(png_path.exists());
         println!("保存到: {}", png_path.display());
+    }
+}
+
+/// PrinterBackend trait 实现
+impl PrinterBackend for PdfBackend {
+    fn name(&self) -> &str {
+        "PDF后端"
+    }
+
+    fn list_printers(&self) -> Result<Vec<String>> {
+        Ok(vec!["PDF 测试打印机".to_string()])
+    }
+
+    fn send_raw(&self, _printer_name: &str, _data: &[u8]) -> Result<()> {
+        // PDF 后端不支持发送原始数据
+        anyhow::bail!("PDF 后端不支持打印，仅用于预览")
     }
 }

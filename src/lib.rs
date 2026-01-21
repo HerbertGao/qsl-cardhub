@@ -1,4 +1,4 @@
-// QSL-CardHub 库入口
+// qsl-cardhub 库入口
 //
 // 导出公共模块以供测试使用
 

@@ -1,4 +1,4 @@
-# QSL-CardHub 前端项目
+# qsl-cardhub 前端项目
 
 基于 **Vite + Vue 3 + Element Plus** 的现代化前端项目。
 

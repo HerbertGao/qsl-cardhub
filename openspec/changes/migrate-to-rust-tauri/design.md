@@ -225,8 +225,8 @@ use std::path::PathBuf;
 use std::fs;
 
 pub struct ProfileManager {
-    config_dir: PathBuf,      // ~/.config/QSL-CardHub/
-    profiles_dir: PathBuf,    // ~/.config/QSL-CardHub/profiles/
+    config_dir: PathBuf,      // ~/.config/qsl-cardhub/
+    profiles_dir: PathBuf,    // ~/.config/qsl-cardhub/profiles/
     app_config: AppConfig,    // 全局配置
 }
 
@@ -550,16 +550,16 @@ try {
 
 - **开发环境**：项目根目录 `config/`
 - **生产环境**：
-  - Windows: `%APPDATA%/QSL-CardHub/`
-  - macOS: `~/Library/Application Support/QSL-CardHub/`
-  - Linux: `~/.config/QSL-CardHub/`
+  - Windows: `%APPDATA%/qsl-cardhub/`
+  - macOS: `~/Library/Application Support/qsl-cardhub/`
+  - Linux: `~/.config/qsl-cardhub/`
 
 使用 Tauri 的 `app_data_dir()` API 获取路径。
 
 ### 配置文件结构
 
 ```
-~/.config/QSL-CardHub/
+~/.config/qsl-cardhub/
 ├── config.toml           # 全局配置
 └── profiles/
     ├── uuid-1.toml       # 配置 1
@@ -572,7 +572,7 @@ try {
 #### 全局配置 (config.toml)
 
 ```toml
-# QSL-CardHub 全局配置
+# qsl-cardhub 全局配置
 
 default_profile_id = "550e8400-e29b-41d4-a716-446655440000"
 
@@ -586,7 +586,7 @@ y = 100
 #### 配置文件 (profiles/uuid.toml)
 
 ```toml
-# QSL-CardHub 打印配置
+# qsl-cardhub 打印配置
 
 id = "550e8400-e29b-41d4-a716-446655440000"
 name = "默认配置"

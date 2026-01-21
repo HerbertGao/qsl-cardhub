@@ -2,7 +2,7 @@
 
 ## 目的
 
-本规范定义了 QSL-CardHub Rust 版本的配置管理功能需求。配置管理使用 Rust 的类型系统和 serde 进行数据序列化，提供类型安全的配置操作。本规范在 Python 版的基础上保持功能一致性，同时利用 Rust 的优势提升性能和可靠性。
+本规范定义了 qsl-cardhub Rust 版本的配置管理功能需求。配置管理使用 Rust 的类型系统和 serde 进行数据序列化，提供类型安全的配置操作。本规范在 Python 版的基础上保持功能一致性，同时利用 Rust 的优势提升性能和可靠性。
 
 ## 修改需求
 
@@ -188,12 +188,12 @@
 
 - **当** 系统访问配置文件
 - **那么** 文件路径应为：
-  - Windows: `%APPDATA%/QSL-CardHub/`
-  - macOS: `~/Library/Application Support/QSL-CardHub/`
-  - Linux: `~/.config/QSL-CardHub/`
+  - Windows: `%APPDATA%/qsl-cardhub/`
+  - macOS: `~/Library/Application Support/qsl-cardhub/`
+  - Linux: `~/.config/qsl-cardhub/`
 - **并且** 目录结构应为：
   ```
-  QSL-CardHub/
+  qsl-cardhub/
   ├── config.toml
   └── profiles/
       ├── uuid-1.toml
@@ -240,7 +240,7 @@
 - **当** 系统创建新配置文件
 - **那么** 应在 TOML 文件顶部添加注释：
   ```toml
-  # QSL-CardHub 打印配置
+  # qsl-cardhub 打印配置
   # 创建时间: 2026-01-20
   ```
 - **并且** 关键字段应有行内注释说明

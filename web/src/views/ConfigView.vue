@@ -102,6 +102,7 @@
             <div style="display: flex; gap: 10px; width: 100%">
               <el-select
                 v-model="selectedConfig.printer.name"
+                placeholder="请选择打印机"
                 style="flex: 1; min-width: 0"
                 :fit-input-width="true"
                 :popper-options="{ strategy: 'fixed' }"
@@ -163,7 +164,7 @@
       </el-form-item>
 
       <el-form-item label="打印机名称" required>
-        <el-select v-model="newConfigForm.printerName" style="width: 100%">
+        <el-select v-model="newConfigForm.printerName" placeholder="请选择打印机" style="width: 100%">
           <el-option
             v-for="printer in availablePrinters"
             :key="printer"
@@ -190,10 +191,27 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
 import { invoke } from '@tauri-apps/api/core'
+
+// Props
+const props = defineProps({
+  autoOpenNewDialog: {
+    type: Boolean,
+    default: false
+  }
+})
+
+// 生成默认配置名称（格式：配置YYYYMMDD）
+const getDefaultConfigName = () => {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `配置${year}${month}${day}`
+}
 
 const profiles = ref([])
 const selectedConfigId = ref('')
@@ -269,7 +287,7 @@ const handleConfigSelect = (configId) => {
 
 const handleNewConfig = () => {
   newConfigForm.value = {
-    name: '',
+    name: getDefaultConfigName(),
     taskName: '',
     printerName: availablePrinters.value[0] || ''
   }
@@ -428,5 +446,11 @@ onMounted(async () => {
   await loadProfiles()
   await loadPlatformInfo()
   await loadPrinters()
+
+  // 如果需要自动打开新建配置对话框
+  if (props.autoOpenNewDialog) {
+    await nextTick()
+    handleNewConfig()
+  }
 })
 </script>

@@ -536,7 +536,7 @@ impl TemplateConfig {
 ```bash
 cargo run --bin migrate-template -- \
     --input config/templates/qsl-card-v1.toml \
-    --output config/templates/qsl-card-v2.toml
+    --output config/templates/default.toml
 ```
 
 迁移逻辑:

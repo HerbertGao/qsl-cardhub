@@ -102,20 +102,21 @@ impl LayoutEngine {
         // 1. 计算画布和可用区域
         let (canvas_width, canvas_height) = self.calculate_canvas_size(&config.page);
         let (
-            left_margin,
-            _right_margin,
-            top_margin,
-            _bottom_margin,
+            content_left,
+            _content_right,
+            content_top,
+            _content_bottom,
             available_width,
             available_height,
         ) = self.calculate_available_area(&config.page);
 
         log::debug!(
-            "画布尺寸: {}x{} dots, 可用区域: {}x{} dots",
+            "画布尺寸: {}x{} dots, 内容区域: 左{}右{}, 宽{} dots",
             canvas_width,
             canvas_height,
-            available_width,
-            available_height
+            content_left,
+            _content_right,
+            available_width
         );
 
         // 2. 为每个元素计算尺寸和字号
@@ -130,38 +131,80 @@ impl LayoutEngine {
         // 3. 全局防溢出校验
         self.apply_overflow_protection(&mut layouted_elements, available_height, line_gap_dots)?;
 
-        // 4. 计算垂直居中
+        // 4. 计算垂直对齐偏移
         let total_content_height =
             self.calculate_total_content_height(&layouted_elements, line_gap_dots);
         let y_offset = if total_content_height < available_height {
-            (available_height - total_content_height) / 2
+            match config.layout.align_v.as_str() {
+                "top" => 0,
+                "bottom" => available_height - total_content_height,
+                "center" | _ => (available_height - total_content_height) / 2,
+            }
         } else {
             0
         };
 
         log::debug!(
-            "内容总高度: {} dots, 垂直偏移: {} dots",
+            "内容总高度: {} dots, 垂直对齐: {}, 偏移: {} dots",
             total_content_height,
+            config.layout.align_v,
             y_offset
         );
 
         // 5. 分配y坐标
-        self.assign_y_positions(&mut layouted_elements, top_margin + y_offset, line_gap_dots);
+        let gap_dots = mm_to_dots(config.layout.gap_mm, config.page.dpi);
+        self.assign_y_positions(&mut layouted_elements, content_top + y_offset, line_gap_dots, gap_dots);
 
-        // 6. 计算水平居中x坐标
+        // 6. 计算水平对齐x坐标
         for element in &mut layouted_elements {
-            element.x =
-                self.calculate_horizontal_center(element.width, available_width, left_margin);
+            element.x = self.calculate_horizontal_position(
+                element.width,
+                available_width,
+                content_left,
+                &config.layout.align_h,
+            );
+            log::debug!(
+                "元素 {} 水平对齐: x={}, width={}, 右边界={}",
+                element.id,
+                element.x,
+                element.width,
+                element.x + element.width
+            );
         }
 
         // 7. 处理边框
         let border = if config.page.border {
+            // 边框应该绘制在 margin 边界，而不是内容区域边界
+            let border_x = mm_to_dots(config.page.margin_left_mm, config.page.dpi);
+            let border_y = mm_to_dots(config.page.margin_top_mm, config.page.dpi);
+            let border_width = canvas_width
+                - mm_to_dots(config.page.margin_left_mm, config.page.dpi)
+                - mm_to_dots(config.page.margin_right_mm, config.page.dpi);
+            let border_height = canvas_height
+                - mm_to_dots(config.page.margin_top_mm, config.page.dpi)
+                - mm_to_dots(config.page.margin_bottom_mm, config.page.dpi);
+            let border_thickness = mm_to_dots(config.page.border_thickness_mm, config.page.dpi);
+
+            log::debug!(
+                "边框配置: x={}, y={}, width={}, height={}, thickness={}",
+                border_x,
+                border_y,
+                border_width,
+                border_height,
+                border_thickness
+            );
+            log::debug!(
+                "内容区域应在边框内: 左边界={} (border_x + thickness), 右边界={} (border_x + width - thickness)",
+                border_x + border_thickness,
+                border_x + border_width - border_thickness
+            );
+
             Some(BorderConfig {
-                x: left_margin,
-                y: top_margin,
-                width: available_width,
-                height: available_height,
-                thickness: mm_to_dots(config.page.border_thickness_mm, config.page.dpi),
+                x: border_x,
+                y: border_y,
+                width: border_width,
+                height: border_height,
+                thickness: border_thickness,
             })
         } else {
             None
@@ -189,15 +232,31 @@ impl LayoutEngine {
     /// # 返回
     /// (left, right, top, bottom, available_width, available_height) in dots
     fn calculate_available_area(&self, page_config: &PageConfig) -> (u32, u32, u32, u32, u32, u32) {
-        let left = mm_to_dots(page_config.margin_left_mm, page_config.dpi);
+        let mut left = mm_to_dots(page_config.margin_left_mm, page_config.dpi);
         let right_margin = mm_to_dots(page_config.margin_right_mm, page_config.dpi);
-        let top = mm_to_dots(page_config.margin_top_mm, page_config.dpi);
+        let mut top = mm_to_dots(page_config.margin_top_mm, page_config.dpi);
         let bottom_margin = mm_to_dots(page_config.margin_bottom_mm, page_config.dpi);
 
         let (canvas_width, canvas_height) = self.calculate_canvas_size(page_config);
 
-        let right = canvas_width - right_margin;
-        let bottom = canvas_height - bottom_margin;
+        let mut right = canvas_width - right_margin;
+        let mut bottom = canvas_height - bottom_margin;
+
+        // 如果启用边框，内容区域需要再向内缩进边框宽度，避免内容被边框遮挡
+        if page_config.border {
+            let border_thickness = mm_to_dots(page_config.border_thickness_mm, page_config.dpi);
+            // 边框绘制在 margin 区域的内侧，内容需要在边框内侧
+            left += border_thickness;
+            right -= border_thickness;
+            top += border_thickness;
+            bottom -= border_thickness;
+
+            log::debug!(
+                "边框已启用，厚度: {}mm ({}dots)，内容区域向内缩进",
+                page_config.border_thickness_mm,
+                border_thickness
+            );
+        }
 
         let available_width = right - left;
         let available_height = bottom - top;
@@ -232,9 +291,18 @@ impl LayoutEngine {
 
         let max_height_dots = mm_to_dots(max_height_mm, config.page.dpi);
 
+        // 为文字留出安全边距（左右各留出约1mm的空间）
+        // 这样可以避免文字太靠近边框
+        let safe_margin = mm_to_dots(1.0, config.page.dpi);  // 约 8 dots
+        let safe_available_width = if available_width > safe_margin {
+            available_width - safe_margin
+        } else {
+            available_width
+        };
+
         // 使用二分搜索求最大字号
         let font_size =
-            self.calculate_max_font_size(&element.content, max_height_dots, available_width)?;
+            self.calculate_max_font_size(&element.content, max_height_dots, safe_available_width)?;
 
         // 测量实际尺寸
         let (width, height) = self
@@ -370,23 +438,51 @@ impl LayoutEngine {
         elements: &mut [LayoutedElement],
         start_y: u32,
         line_gap_dots: u32,
+        extra_gap_dots: u32,
     ) {
         let mut current_y = start_y;
+        let mut prev_element_type: Option<ElementType> = None;
 
         for element in elements {
+            // 如果前一个元素和当前元素类型不同，且涉及条形码，添加额外间距
+            if let Some(prev_type) = prev_element_type {
+                if (prev_type == ElementType::Text && element.element_type == ElementType::Barcode)
+                    || (prev_type == ElementType::Barcode && element.element_type == ElementType::Text)
+                {
+                    current_y += extra_gap_dots;
+                }
+            }
+
             element.y = current_y;
             current_y += element.height + line_gap_dots;
+            prev_element_type = Some(element.element_type.clone());
         }
     }
 
     /// 计算水平居中x坐标
+    /// 计算水平对齐的x坐标
+    fn calculate_horizontal_position(
+        &self,
+        element_width: u32,
+        available_width: u32,
+        left_margin: u32,
+        align: &str,
+    ) -> u32 {
+        match align {
+            "left" => left_margin,
+            "right" => left_margin + available_width - element_width,
+            "center" | _ => left_margin + (available_width - element_width) / 2,
+        }
+    }
+
+    /// 计算水平居中（保留用于测试兼容性）
     fn calculate_horizontal_center(
         &self,
         element_width: u32,
         available_width: u32,
         left_margin: u32,
     ) -> u32 {
-        left_margin + (available_width - element_width) / 2
+        self.calculate_horizontal_position(element_width, available_width, left_margin, "center")
     }
 
     /// 全局防溢出校验和缩放
@@ -579,7 +675,7 @@ mod tests {
             },
         ];
 
-        engine.assign_y_positions(&mut elements, 100, 16);
+        engine.assign_y_positions(&mut elements, 100, 16, 0); // extra_gap_dots = 0
 
         assert_eq!(elements[0].y, 100);
         assert_eq!(elements[1].y, 196); // 100 + 80 + 16
