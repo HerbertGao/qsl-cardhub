@@ -11,7 +11,7 @@
 - 手动触发（workflow_dispatch）
 
 **功能**：
-- 在 macOS、Windows x64 和 Windows ARM64 平台并行构建
+- 在 macOS (ARM64 + x64)、Windows (x64 + ARM64) 平台并行构建
 - 上传构建产物到 GitHub Artifacts
 - 用于 PR 验证和测试
 
@@ -21,7 +21,7 @@
 - Git 标签推送（格式：`v*`，如 `v0.4.0`）
 
 **功能**：
-- 在 macOS、Windows x64 和 Windows ARM64 平台并行构建
+- 在 macOS (ARM64 + x64)、Windows (x64 + ARM64) 平台并行构建
 - 自动创建 GitHub Release
 - 上传构建产物到 Release
 - 自动生成 Release Notes
@@ -86,26 +86,37 @@ git push origin v0.4.0
 ### Release（版本发布）
 
 发布构建会创建 GitHub Release：
-- macOS: `qsl-cardhub-v{version}-macos-universal.dmg`
+- macOS ARM64: `qsl-cardhub-v{version}-macos-arm64.dmg`
+- macOS x64: `qsl-cardhub-v{version}-macos-x64.dmg`
 - Windows x64: `qsl-cardhub-v{version}-windows-x64.msi`
 - Windows ARM64: `qsl-cardhub-v{version}-windows-arm64.msi`
 
 ## 构建环境
 
-### macOS
-- Runner: `macos-latest`
+### macOS ARM64 (Apple Silicon)
+- Runner: `macos-latest` (M1/M2/M3 芯片)
+- Target: `aarch64-apple-darwin`
+- Rust: 最新稳定版
+- Node.js: 20.x
+
+### macOS x64 (Intel)
+- Runner: `macos-13` (Intel 芯片)
+- Target: `x86_64-apple-darwin`
 - Rust: 最新稳定版
 - Node.js: 20.x
 
 ### Windows x64
 - Runner: `windows-latest`
+- Target: `x86_64-pc-windows-msvc`
 - Rust: 最新稳定版
 - Node.js: 20.x
 
 ### Windows ARM64
-- Runner: `windows-11-arm` (public preview)
+- Runner: `windows-11-arm` (Public Preview)
+- Target: `aarch64-pc-windows-msvc`
 - Rust: 最新稳定版
 - Node.js: 20.x
+- 注：自 2025-04-14 起对公共仓库免费开放
 
 ## 缓存策略
 
