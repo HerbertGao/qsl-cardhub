@@ -6,12 +6,17 @@
 
 mod commands;
 mod config;
+mod db;
 mod error;
 mod logger;
 mod printer;
 mod utils;
 
 use commands::{
+    cards::{
+        create_card_cmd, delete_card_cmd, distribute_card_cmd, get_card_cmd, list_cards_cmd,
+        return_card_cmd,
+    },
     logger::{clear_logs, export_logs, get_log_file_path, get_logs},
     platform::get_platform_info,
     printer::{PrinterState, generate_tspl, get_printers, get_template_config, load_template, preview_qsl, print_qsl, save_template, save_template_config},
@@ -19,6 +24,10 @@ use commands::{
         ProfileState, create_profile, delete_profile, export_profile, get_default_profile_id,
         get_default_template_name, get_profile, get_profiles, import_profile, set_default_profile,
         update_profile,
+    },
+    projects::{
+        create_project_cmd, delete_project_cmd, get_project_cmd, list_projects_cmd,
+        update_project_cmd,
     },
 };
 use config::ProfileManager;
@@ -48,6 +57,9 @@ fn main() {
 
             // 初始化日志系统
             logger::init_logger(log_dir).map_err(|e| format!("无法初始化日志系统: {}", e))?;
+
+            // 初始化数据库
+            db::init_database().map_err(|e| format!("无法初始化数据库: {}", e))?;
 
             // 初始化 ProfileManager
             let profile_manager = ProfileManager::new(config_dir)
@@ -96,6 +108,19 @@ fn main() {
             clear_logs,
             export_logs,
             get_log_file_path,
+            // 项目管理
+            create_project_cmd,
+            list_projects_cmd,
+            get_project_cmd,
+            update_project_cmd,
+            delete_project_cmd,
+            // 卡片管理
+            create_card_cmd,
+            list_cards_cmd,
+            get_card_cmd,
+            distribute_card_cmd,
+            return_card_cmd,
+            delete_card_cmd,
         ])
         .run(tauri::generate_context!())
         .expect("运行 Tauri 应用时出错");

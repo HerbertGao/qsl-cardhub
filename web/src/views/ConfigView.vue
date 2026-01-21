@@ -9,7 +9,9 @@
           <div style="display: flex; justify-content: space-between; align-items: center">
             <span style="font-weight: bold">配置列表</span>
             <el-button type="primary" size="small" @click="handleNewConfig">
-              <el-icon><Plus /></el-icon>
+              <el-icon>
+                <Plus/>
+              </el-icon>
               新建
             </el-button>
           </div>
@@ -19,10 +21,10 @@
           <el-menu-item v-for="profile in profiles" :key="profile.id" :index="profile.id">
             <span>{{ profile.name }}</span>
             <el-tag
-              v-if="profile.id === defaultProfileId"
-              size="small"
-              type="success"
-              style="margin-left: 10px"
+                v-if="profile.id === defaultProfileId"
+                size="small"
+                type="success"
+                style="margin-left: 10px"
             >
               默认
             </el-tag>
@@ -31,20 +33,20 @@
 
         <div style="margin-top: 15px; display: flex; gap: 10px">
           <el-button
-            size="small"
-            type="danger"
-            @click="handleDeleteConfig"
-            :disabled="!selectedConfigId"
-            style="flex: 1"
+              size="small"
+              type="danger"
+              @click="handleDeleteConfig"
+              :disabled="!selectedConfigId"
+              style="flex: 1"
           >
             删除
           </el-button>
           <el-button
-            size="small"
-            type="success"
-            @click="handleSetDefault"
-            :disabled="!selectedConfigId"
-            style="flex: 1"
+              size="small"
+              type="success"
+              @click="handleSetDefault"
+              :disabled="!selectedConfigId"
+              style="flex: 1"
           >
             设为默认
           </el-button>
@@ -64,60 +66,62 @@
 
         <!-- 空状态提示 -->
         <el-empty
-          v-if="!selectedConfig"
-          description="请从左侧选择一个配置或新建配置"
-          :image-size="120"
+            v-if="!selectedConfig"
+            description="请从左侧选择一个配置或新建配置"
+            :image-size="120"
         />
 
         <!-- 配置表单 -->
         <el-form v-else-if="selectedConfig" :model="selectedConfig" label-width="120px" style="max-width: 800px">
           <el-form-item label="配置名称">
-            <el-input v-model="selectedConfig.name" />
+            <el-input v-model="selectedConfig.name"/>
           </el-form-item>
 
           <el-form-item label="任务名称">
             <el-input
-              v-model="selectedConfig.task_name"
-              placeholder="请输入任务名称（可选）"
-              maxlength="50"
-              show-word-limit
-              clearable
+                v-model="selectedConfig.task_name"
+                placeholder="请输入任务名称（可选）"
+                maxlength="50"
+                show-word-limit
+                clearable
             />
           </el-form-item>
 
           <el-form-item label="操作系统">
             <el-input
-              :value="`${selectedConfig.platform.os} (${selectedConfig.platform.arch})`"
-              disabled
+                :value="`${selectedConfig.platform.os} (${selectedConfig.platform.arch})`"
+                disabled
             />
           </el-form-item>
 
           <el-form-item label="打印机名称">
             <div style="display: flex; gap: 10px; width: 100%">
               <el-select
-                v-model="selectedConfig.printer.name"
-                placeholder="请选择打印机"
-                style="flex: 1; min-width: 0"
-                :fit-input-width="true"
-                :popper-options="{ strategy: 'fixed' }"
+                  v-model="selectedConfig.printer.name"
+                  placeholder="请选择打印机"
+                  style="flex: 1; min-width: 0"
+                  :fit-input-width="true"
+                  :popper-options="{ strategy: 'fixed' }"
               >
                 <el-option
-                  v-for="printer in availablePrinters"
-                  :key="printer"
-                  :label="printer"
-                  :value="printer"
+                    v-for="printer in availablePrinters"
+                    :key="printer"
+                    :label="printer"
+                    :value="printer"
                 />
               </el-select>
               <el-button @click="refreshPrinters">
-                <el-icon><Refresh /></el-icon>
+                <el-icon>
+                  <Refresh/>
+                </el-icon>
               </el-button>
             </div>
           </el-form-item>
 
           <el-form-item label="打印模板">
             <el-input
-              :value="selectedConfig.template_display_name || selectedConfig.template.path"
-              disabled
+                :value="selectedConfig.template_display_name || selectedConfig.template.path"
+                disabled
             />
           </el-form-item>
         </el-form>
@@ -129,36 +133,36 @@
   <el-dialog v-model="newConfigDialogVisible" title="新建配置文件" width="500px">
     <el-form :model="newConfigForm" label-width="120px">
       <el-form-item label="配置名称" required>
-        <el-input v-model="newConfigForm.name" placeholder="请输入配置名称" />
+        <el-input v-model="newConfigForm.name" placeholder="请输入配置名称"/>
       </el-form-item>
 
       <el-form-item label="任务名称">
         <el-input
-          v-model="newConfigForm.taskName"
-          placeholder="请输入任务名称（可选）"
-          maxlength="50"
-          show-word-limit
-          clearable
+            v-model="newConfigForm.taskName"
+            placeholder="请输入任务名称（可选）"
+            maxlength="50"
+            show-word-limit
+            clearable
         />
       </el-form-item>
 
       <el-form-item label="操作系统">
-        <el-input :value="platformInfo" disabled />
+        <el-input :value="platformInfo" disabled/>
       </el-form-item>
 
       <el-form-item label="打印机名称" required>
         <el-select v-model="newConfigForm.printerName" placeholder="请选择打印机" style="width: 100%">
           <el-option
-            v-for="printer in availablePrinters"
-            :key="printer"
-            :label="printer"
-            :value="printer"
+              v-for="printer in availablePrinters"
+              :key="printer"
+              :label="printer"
+              :value="printer"
           />
         </el-select>
       </el-form-item>
 
       <el-form-item label="打印模板">
-        <el-input :value="defaultTemplateName" disabled />
+        <el-input :value="defaultTemplateName" disabled/>
       </el-form-item>
     </el-form>
 
@@ -170,10 +174,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh } from '@element-plus/icons-vue'
-import { invoke } from '@tauri-apps/api/core'
+import {nextTick, onMounted, ref} from 'vue'
+import {ElMessage, ElMessageBox} from 'element-plus'
+import {Plus, Refresh} from '@element-plus/icons-vue'
+import {invoke} from '@tauri-apps/api/core'
 
 // Props
 const props = defineProps({
@@ -266,9 +270,9 @@ const handleConfigSelect = (configId) => {
     selectedConfig.value = {
       ...config,
       task_name: config.task_name || '',
-      printer: { ...config.printer },
-      platform: { ...config.platform },
-      template: { ...config.template },
+      printer: {...config.printer},
+      platform: {...config.platform},
+      template: {...config.template},
       template_display_name: config.template_display_name
     }
   }
@@ -391,7 +395,7 @@ const handleExportConfig = async () => {
       id: selectedConfigId.value
     })
 
-    const blob = new Blob([jsonData], { type: 'application/json' })
+    const blob = new Blob([jsonData], {type: 'application/json'})
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url

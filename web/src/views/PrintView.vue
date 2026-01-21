@@ -4,27 +4,27 @@
       <h1 style="margin: 0">QSL 卡片打印</h1>
       <div style="display: flex; gap: 10px; align-items: center">
         <el-select
-          v-model="currentProfile"
-          placeholder="选择配置"
-          size="default"
-          style="width: 200px"
+            v-model="currentProfile"
+            placeholder="选择配置"
+            size="default"
+            style="width: 200px"
         >
           <template #prefix>
             <span style="color: #999; font-size: 12px">配置:</span>
           </template>
           <el-option
-            v-for="profile in profiles"
-            :key="profile.id"
-            :label="profile.name"
-            :value="profile.id"
+              v-for="profile in profiles"
+              :key="profile.id"
+              :label="profile.name"
+              :value="profile.id"
           />
         </el-select>
         <el-button
-          size="default"
-          :loading="loadingProfiles"
-          :icon="Refresh"
-          @click="handleRefreshProfiles"
-          title="刷新配置列表"
+            size="default"
+            :loading="loadingProfiles"
+            :icon="Refresh"
+            @click="handleRefreshProfiles"
+            title="刷新配置列表"
         />
       </div>
     </div>
@@ -38,7 +38,9 @@
     <el-card shadow="hover" style="margin-top: 30px">
       <template #header>
         <div style="display: flex; align-items: center">
-          <el-icon style="margin-right: 8px"><Edit /></el-icon>
+          <el-icon style="margin-right: 8px">
+            <Edit/>
+          </el-icon>
           <span style="font-weight: bold">输入信息</span>
         </div>
       </template>
@@ -46,29 +48,29 @@
       <el-form :model="printForm" label-width="160px" style="max-width: 600px">
         <el-form-item label="呼号 / CALLSIGN" required>
           <el-input
-            v-model="printForm.callsign"
-            placeholder="请输入呼号"
-            clearable
+              v-model="printForm.callsign"
+              placeholder="请输入呼号"
+              clearable
           />
         </el-form-item>
 
         <el-form-item label="数量 / QTY" required>
           <el-input-number
-            v-model="printForm.qty"
-            :min="1"
-            :max="100"
-            style="width: 100%"
+              v-model="printForm.qty"
+              :min="1"
+              :max="100"
+              style="width: 100%"
           />
         </el-form-item>
 
         <el-form-item label="序列号 / SERIAL">
           <div style="display: flex; gap: 10px; align-items: center">
             <el-input-number
-              v-model="printForm.serial"
-              :min="1"
-              :max="999"
-              style="flex: 1"
-              @change="handleSerialChange"
+                v-model="printForm.serial"
+                :min="1"
+                :max="999"
+                style="flex: 1"
+                @change="handleSerialChange"
             />
             <el-tag type="info" size="large">预览: {{ formattedSerial }}</el-tag>
             <el-button @click="resetSerial">重置</el-button>
@@ -80,11 +82,11 @@
             跳过包含数字 4 的序列号
           </el-checkbox>
           <el-tooltip
-            content="勾选后，序列号会自动跳过所有包含数字 4 的数字（如 4, 14, 40-49, 140-149 等）"
-            placement="right"
+              content="勾选后，序列号会自动跳过所有包含数字 4 的数字（如 4, 14, 40-49, 140-149 等）"
+              placement="right"
           >
             <el-icon style="margin-left: 5px; cursor: help">
-              <QuestionFilled />
+              <QuestionFilled/>
             </el-icon>
           </el-tooltip>
         </el-form-item>
@@ -92,18 +94,22 @@
         <el-form-item style="text-align: center">
           <el-button-group>
             <el-button
-              type="primary"
-              size="default"
-              :loading="printing"
-              @click="handlePrint"
-              style="width: 150px"
+                type="primary"
+                size="default"
+                :loading="printing"
+                @click="handlePrint"
+                style="width: 150px"
             >
-              <el-icon style="margin-right: 8px"><Printer /></el-icon>
+              <el-icon style="margin-right: 8px">
+                <Printer/>
+              </el-icon>
               {{ printing ? '打印中...' : '打印' }}
             </el-button>
             <el-dropdown trigger="click" @command="handleDropdownCommand">
               <el-button type="primary" size="default">
-                <el-icon><ArrowDown /></el-icon>
+                <el-icon>
+                  <ArrowDown/>
+                </el-icon>
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
@@ -118,20 +124,20 @@
 
     <!-- 打印机信息 -->
     <el-alert
-      v-if="currentProfileInfo"
-      :title="`打印机: ${currentProfileInfo.printer.name} | 模板: ${currentProfileInfo.template_display_name || currentProfileInfo.template.path}`"
-      type="info"
-      :closable="false"
-      style="margin-top: 20px"
+        v-if="currentProfileInfo"
+        :title="`打印机: ${currentProfileInfo.printer.name} | 模板: ${currentProfileInfo.template_display_name || currentProfileInfo.template.path}`"
+        type="info"
+        :closable="false"
+        style="margin-top: 20px"
     />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Refresh, QuestionFilled } from '@element-plus/icons-vue'
-import { invoke } from '@tauri-apps/api/core'
+import {computed, onMounted, ref} from 'vue'
+import {ElMessage} from 'element-plus'
+import {QuestionFilled, Refresh} from '@element-plus/icons-vue'
+import {invoke} from '@tauri-apps/api/core'
 
 const profiles = ref([])
 const currentProfile = ref('')
