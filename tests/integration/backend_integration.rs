@@ -2,12 +2,12 @@
 //
 // 测试 PDF 和 TSPL 后端与渲染管道的集成
 
-use QSL_CardHub::config::template_v2::{OutputConfig, TemplateV2Config};
-use QSL_CardHub::printer::backend::PdfBackendV2;
+use QSL_CardHub::config::template::{OutputConfig, TemplateConfig};
+use QSL_CardHub::printer::backend::PdfBackend;
 use QSL_CardHub::printer::layout_engine::LayoutEngine;
 use QSL_CardHub::printer::render_pipeline::RenderPipeline;
 use QSL_CardHub::printer::template_engine::TemplateEngine;
-use QSL_CardHub::printer::tspl_v2::TSPLGeneratorV2;
+use QSL_CardHub::printer::tspl::TSPLGenerator;
 use std::collections::HashMap;
 use std::path::Path;
 use tempfile::TempDir;
@@ -17,7 +17,7 @@ fn test_pdf_backend_mixed_mode() {
     println!("\n========== PDF后端集成测试: 混合模式 ==========");
 
     // 1. 准备完整流程
-    let config = TemplateV2Config::default_qsl_card_v2();
+    let config = TemplateConfig::default_qsl_card();
     let mut data = HashMap::new();
     data.insert("task_name".to_string(), "CQWW DX Contest".to_string());
     data.insert("callsign".to_string(), "BG7XXX".to_string());
@@ -38,7 +38,7 @@ fn test_pdf_backend_mixed_mode() {
 
     // 3. PDF 后端渲染
     let temp_dir = TempDir::new().unwrap();
-    let mut pdf_backend = PdfBackendV2::new(temp_dir.path().to_path_buf()).unwrap();
+    let mut pdf_backend = PdfBackend::new(temp_dir.path().to_path_buf()).unwrap();
 
     let png_path = pdf_backend.render(render_result).unwrap();
 
@@ -60,7 +60,7 @@ fn test_pdf_backend_mixed_mode() {
 fn test_pdf_backend_full_bitmap() {
     println!("\n========== PDF后端集成测试: 全位图模式 ==========");
 
-    let config = TemplateV2Config::default_qsl_card_v2();
+    let config = TemplateConfig::default_qsl_card();
     let mut data = HashMap::new();
     data.insert("task_name".to_string(), "IARU HF".to_string());
     data.insert("callsign".to_string(), "BD7AA".to_string());
@@ -79,7 +79,7 @@ fn test_pdf_backend_full_bitmap() {
     let render_result = pipeline.render(layout_result, &output_config).unwrap();
 
     let temp_dir = TempDir::new().unwrap();
-    let mut pdf_backend = PdfBackendV2::new(temp_dir.path().to_path_buf()).unwrap();
+    let mut pdf_backend = PdfBackend::new(temp_dir.path().to_path_buf()).unwrap();
 
     let png_path = pdf_backend.render(render_result).unwrap();
 
@@ -97,7 +97,7 @@ fn test_pdf_backend_full_bitmap() {
 fn test_tspl_generator_mixed_mode() {
     println!("\n========== TSPL生成器集成测试: 混合模式 ==========");
 
-    let config = TemplateV2Config::default_qsl_card_v2();
+    let config = TemplateConfig::default_qsl_card();
     let mut data = HashMap::new();
     data.insert("task_name".to_string(), "测试任务".to_string());
     data.insert("callsign".to_string(), "BH1ABC".to_string());
@@ -116,7 +116,7 @@ fn test_tspl_generator_mixed_mode() {
     let render_result = pipeline.render(layout_result, &output_config).unwrap();
 
     // TSPL 生成
-    let generator = TSPLGeneratorV2::new();
+    let generator = TSPLGenerator::new();
     let tspl = generator.generate(render_result, 76.0, 130.0).unwrap();
 
     // 验证 TSPL 内容
@@ -149,7 +149,7 @@ fn test_tspl_generator_mixed_mode() {
 fn test_tspl_generator_full_bitmap() {
     println!("\n========== TSPL生成器集成测试: 全位图模式 ==========");
 
-    let config = TemplateV2Config::default_qsl_card_v2();
+    let config = TemplateConfig::default_qsl_card();
     let mut data = HashMap::new();
     data.insert("task_name".to_string(), "Full Test".to_string());
     data.insert("callsign".to_string(), "BA1CD".to_string());
@@ -167,7 +167,7 @@ fn test_tspl_generator_full_bitmap() {
     };
     let render_result = pipeline.render(layout_result, &output_config).unwrap();
 
-    let generator = TSPLGeneratorV2::new();
+    let generator = TSPLGenerator::new();
     let tspl = generator.generate(render_result, 76.0, 130.0).unwrap();
 
     // 验证 TSPL 内容
@@ -197,7 +197,7 @@ fn test_backend_with_config_file() {
 
     // 从配置文件加载
     let config_path = Path::new("config/templates/qsl-card-v2.toml");
-    let config = TemplateV2Config::load_from_file(config_path).expect("加载配置文件失败");
+    let config = TemplateConfig::load_from_file(config_path).expect("加载配置文件失败");
 
     let mut data = HashMap::new();
     data.insert("task_name".to_string(), "From Config".to_string());
@@ -219,14 +219,14 @@ fn test_backend_with_config_file() {
 
     // 测试 PDF 后端
     let temp_dir = TempDir::new().unwrap();
-    let mut pdf_backend = PdfBackendV2::new(temp_dir.path().to_path_buf()).unwrap();
+    let mut pdf_backend = PdfBackend::new(temp_dir.path().to_path_buf()).unwrap();
     let png_path = pdf_backend.render(render_result.clone()).unwrap();
 
     assert!(png_path.exists());
     println!("✓ PDF后端: {}", png_path.display());
 
     // 测试 TSPL 生成
-    let generator = TSPLGeneratorV2::new();
+    let generator = TSPLGenerator::new();
     let tspl = generator.generate(render_result, 76.0, 130.0).unwrap();
 
     assert!(tspl.contains("BITMAP"));
@@ -241,9 +241,9 @@ fn test_backend_with_config_file() {
 fn test_multiple_cards_batch() {
     println!("\n========== 批量卡片生成测试 ==========");
 
-    let config = TemplateV2Config::default_qsl_card_v2();
+    let config = TemplateConfig::default_qsl_card();
     let temp_dir = TempDir::new().unwrap();
-    let mut pdf_backend = PdfBackendV2::new(temp_dir.path().to_path_buf()).unwrap();
+    let mut pdf_backend = PdfBackend::new(temp_dir.path().to_path_buf()).unwrap();
 
     let test_cases = vec![
         ("BG7XXX", "001", "100"),

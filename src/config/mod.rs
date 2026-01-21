@@ -10,11 +10,7 @@
 pub mod models;
 pub mod profile_manager;
 pub mod template;
-pub mod template_manager;
-pub mod template_v2;
 
 pub use models::{Platform, Profile};
 pub use profile_manager::ProfileManager;
-pub use template::*;
-pub use template_manager::*;
-pub use template_v2::TemplateV2Config;
+pub use template::TemplateConfig;

@@ -14,18 +14,13 @@ mod utils;
 use commands::{
     logger::{clear_logs, export_logs, get_log_file_path, get_logs},
     platform::get_platform_info,
-    printer::{PrinterState, get_printers, print_calibration, print_qsl},
-    printer_v2::{
-        PrinterStateV2, generate_tspl_v2, load_template_v2, preview_qsl_v2, print_qsl_v2,
-        save_template_v2,
-    },
+    printer::{PrinterState, generate_tspl, load_template, preview_qsl, print_qsl, save_template},
     profile::{
         ProfileState, create_profile, delete_profile, export_profile, get_default_profile_id,
         get_profile, get_profiles, import_profile, set_default_profile, update_profile,
     },
 };
 use config::ProfileManager;
-use printer::PrinterManager;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
@@ -50,24 +45,16 @@ fn main() {
             let profile_manager = ProfileManager::new(config_dir)
                 .map_err(|e| format!("无法初始化配置管理器: {}", e))?;
 
-            // 初始化 PrinterManager
-            let printer_manager =
-                PrinterManager::new().map_err(|e| format!("无法初始化打印管理器: {}", e))?;
-
-            // 初始化 PrinterStateV2
-            let printer_state_v2 =
-                PrinterStateV2::new().map_err(|e| format!("无法初始化打印管理器v2: {}", e))?;
+            // 初始化 PrinterState
+            let printer_state =
+                PrinterState::new().map_err(|e| format!("无法初始化打印管理器: {}", e))?;
 
             // 管理应用状态
             app.manage(ProfileState {
                 manager: Arc::new(Mutex::new(profile_manager)),
             });
 
-            app.manage(PrinterState {
-                manager: Arc::new(Mutex::new(printer_manager)),
-            });
-
-            app.manage(printer_state_v2);
+            app.manage(printer_state);
 
             println!("✅ QSL-CardHub 初始化完成");
 
@@ -86,16 +73,12 @@ fn main() {
             get_default_profile_id,
             export_profile,
             import_profile,
-            // 打印机管理 (v1)
-            get_printers,
+            // 打印机管理
+            preview_qsl,
             print_qsl,
-            print_calibration,
-            // 打印机管理 (v2)
-            preview_qsl_v2,
-            print_qsl_v2,
-            generate_tspl_v2,
-            load_template_v2,
-            save_template_v2,
+            generate_tspl,
+            load_template,
+            save_template,
             // 日志管理
             get_logs,
             clear_logs,

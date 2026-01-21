@@ -5,5 +5,4 @@
 pub mod logger;
 pub mod platform;
 pub mod printer;
-pub mod printer_v2;
 pub mod profile;

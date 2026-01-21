@@ -2,7 +2,7 @@
 //
 // 测试从配置文件到布局结果的完整流程
 
-use QSL_CardHub::config::template_v2::TemplateV2Config;
+use QSL_CardHub::config::template::TemplateConfig;
 use QSL_CardHub::printer::layout_engine::LayoutEngine;
 use QSL_CardHub::printer::template_engine::TemplateEngine;
 use std::collections::HashMap;
@@ -14,7 +14,7 @@ fn test_complete_template_to_layout_flow() {
 
     // 1. 加载v2配置文件
     let config_path = Path::new("config/templates/qsl-card-v2.toml");
-    let config = TemplateV2Config::load_from_file(config_path).expect("加载配置文件失败");
+    let config = TemplateConfig::load_from_file(config_path).expect("加载配置文件失败");
 
     println!("✓ 加载配置: {}", config.metadata.name);
 
@@ -135,7 +135,7 @@ fn test_overflow_protection() {
     println!("\n========== 溢出保护测试 ==========");
 
     // 创建一个会溢出的配置
-    let mut config = TemplateV2Config::default_qsl_card_v2();
+    let mut config = TemplateConfig::default_qsl_card();
 
     // 增大所有元素的max_height，使其更容易溢出
     for element in &mut config.elements {
@@ -185,7 +185,7 @@ fn test_overflow_protection() {
 fn test_element_spacing() {
     println!("\n========== 元素间距测试 ==========");
 
-    let config = TemplateV2Config::default_qsl_card_v2();
+    let config = TemplateConfig::default_qsl_card();
     let mut data = HashMap::new();
     data.insert("task_name".to_string(), "测试".to_string());
     data.insert("callsign".to_string(), "BG7XXX".to_string());

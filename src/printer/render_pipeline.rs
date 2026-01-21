@@ -3,7 +3,7 @@
 // 协调文本渲染、条形码渲染和后端输出
 // 支持两种渲染模式: 文本位图+原生条码 / 全位图
 
-use crate::config::template_v2::OutputConfig;
+use crate::config::template::OutputConfig;
 use crate::printer::barcode_renderer::BarcodeRenderer;
 use crate::printer::layout_engine::{BorderConfig, ElementType, LayoutResult, LayoutedElement};
 use crate::printer::text_renderer::TextRenderer;
@@ -367,7 +367,7 @@ impl Default for RenderPipeline {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::template_v2::{OutputConfig, TemplateV2Config};
+    use crate::config::template::{OutputConfig, TemplateConfig};
     use crate::printer::layout_engine::LayoutEngine;
     use crate::printer::template_engine::TemplateEngine;
     use std::collections::HashMap;
@@ -441,7 +441,7 @@ mod tests {
 
     #[test]
     fn test_render_mixed_mode() {
-        let config = TemplateV2Config::default_qsl_card_v2();
+        let config = TemplateConfig::default_qsl_card();
         let mut data = HashMap::new();
         data.insert("task_name".to_string(), "测试".to_string());
         data.insert("callsign".to_string(), "BG7XXX".to_string());
@@ -484,7 +484,7 @@ mod tests {
 
     #[test]
     fn test_render_full_bitmap_mode() {
-        let config = TemplateV2Config::default_qsl_card_v2();
+        let config = TemplateConfig::default_qsl_card();
         let mut data = HashMap::new();
         data.insert("task_name".to_string(), "测试".to_string());
         data.insert("callsign".to_string(), "BG7XXX".to_string());

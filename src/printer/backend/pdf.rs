@@ -1,54 +1,42 @@
-// PDF 打印后端
+// PDF 后端
 //
-// 将 TSPL 指令忠实渲染为 PDF 文件，作为真实打印的预览
-// 不做动态布局调整，完全按照 TSPL 坐标渲染
+// 接收 RenderResult 并生成 PNG/PDF 文件
 
-use crate::printer::backend::PrinterBackend;
 use crate::printer::barcode_renderer::BarcodeRenderer;
-use crate::printer::font_loader::FontLoader;
-use crate::printer::text_renderer::TextRenderer;
+use crate::printer::render_pipeline::{BarcodeElement, RenderResult};
 use anyhow::{Context, Result};
-use image::{ImageBuffer, Rgb, RgbImage};
-use imageproc::drawing::{draw_filled_rect_mut, draw_hollow_rect_mut};
-use imageproc::rect::Rect;
+use image::{GrayImage, ImageBuffer, Luma, Rgb, RgbImage};
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Mutex;
 
-/// PDF 打印后端
+/// PDF 后端
 ///
-/// 特点：
-/// - 忠实渲染 TSPL 指令，作为真实打印的预览
-/// - 保存为 PNG 和 PDF 两种格式
-/// - 分辨率：203 DPI
-/// - 支持真实的文本和中文渲染（通过 TSPL TEXT 命令）
-/// - 支持 Code128 条形码渲染（通过 TSPL BARCODE 命令）
-/// - 支持元数据注释（TITLE, SUBTITLE）
+/// 功能：
+/// - 接收 RenderResult 并渲染为图像
+/// - 支持两种渲染模式（混合/全位图）
+/// - 保存为 PNG 格式
 pub struct PdfBackend {
-    /// PDF 输出目录（默认为 Downloads）
+    /// 输出目录
     output_dir: PathBuf,
-    /// 字体加载器（使用 Mutex 实现线程安全的内部可变性）
-    font_loader: Mutex<FontLoader>,
+    /// 条形码渲染器
+    barcode_renderer: BarcodeRenderer,
 }
 
 impl PdfBackend {
     /// 创建新的 PDF 后端
-    ///
-    /// # 参数
-    /// - `output_dir`: PDF 文件输出目录
     pub fn new(output_dir: PathBuf) -> Result<Self> {
         // 确保输出目录存在
         if !output_dir.exists() {
-            fs::create_dir_all(&output_dir).context("创建 PDF 输出目录失败")?;
+            fs::create_dir_all(&output_dir).context("创建输出目录失败")?;
         }
 
         Ok(Self {
             output_dir,
-            font_loader: Mutex::new(FontLoader::new()),
+            barcode_renderer: BarcodeRenderer::new(),
         })
     }
 
-    /// 从系统获取 Downloads 目录
+    /// 使用 Downloads 目录创建后端
     pub fn with_downloads_dir() -> Result<Self> {
         let downloads_dir = dirs::download_dir()
             .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")));
@@ -56,388 +44,246 @@ impl PdfBackend {
         Self::new(downloads_dir)
     }
 
-    /// 解析 TSPL 指令并生成 PNG（和 PDF，如果可能）
-    fn render_tspl(&self, tspl: &str) -> Result<(PathBuf, Option<PathBuf>)> {
-        // 解析 TSPL 指令
-        let commands = self.parse_tspl(tspl);
-
-        // 提取纸张尺寸
-        let (width, height) = self.extract_size(&commands);
-
-        // 创建画布（白色背景）
-        let mut img: RgbImage = ImageBuffer::from_pixel(width, height, Rgb([255u8, 255u8, 255u8]));
-
-        // 忠实渲染 TSPL 命令
-        self.render_commands(&mut img, &commands)?;
-
-        // 生成文件名（带时间戳）
-        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
-        let filename_base = format!("qsl_{}", timestamp);
-        let png_path = self.output_dir.join(format!("{}.png", filename_base));
-
-        // 保存为 PNG
-        img.save(&png_path).context("保存 PNG 失败")?;
-
-        // 尝试转换为 PDF（如果失败也不影响PNG输出）
-        let pdf_path = self.output_dir.join(format!("{}.pdf", filename_base));
-        let pdf_result = self.image_to_pdf(&img, width, height, &pdf_path);
-
-        match pdf_result {
-            Ok(_) => Ok((png_path, Some(pdf_path))),
-            Err(e) => {
-                println!("⚠️  PDF 生成失败: {}，已保存 PNG", e);
-                Ok((png_path, None))
-            }
-        }
-    }
-
-    /// 将图像转换为 PDF
+    /// 渲染 RenderResult 并保存为文件
     ///
-    /// 注意：由于依赖版本冲突，PDF 生成功能暂时禁用
-    /// 目前只生成 PNG 文件
-    fn image_to_pdf(
-        &self,
-        _img: &RgbImage,
-        _width: u32,
-        _height: u32,
-        _pdf_path: &PathBuf,
-    ) -> Result<()> {
-        // TODO: 修复 image/imageproc/printpdf 版本冲突后重新启用
-        // 目前暂时返回错误，不影响 PNG 生成
-        Err(anyhow::anyhow!("PDF 生成功能暂时禁用（依赖版本冲突）"))
-    }
+    /// # 参数
+    /// - `result`: 渲染结果
+    ///
+    /// # 返回
+    /// PNG 文件路径
+    pub fn render(&mut self, result: RenderResult) -> Result<PathBuf> {
+        log::info!("PDF后端开始渲染");
 
-    /// 解析 TSPL 指令
-    fn parse_tspl(&self, tspl: &str) -> Vec<(String, Vec<String>)> {
-        let mut commands = Vec::new();
-
-        for line in tspl.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
+        // 根据渲染模式生成画布
+        let canvas = match result {
+            RenderResult::MixedMode {
+                bitmaps,
+                native_barcodes,
+                canvas_size,
+                border,
+            } => {
+                log::info!("处理混合模式结果");
+                self.render_mixed_mode(bitmaps, native_barcodes, canvas_size, border)?
             }
-
-            // 处理注释行（元数据）
-            if line.starts_with(';') {
-                // 解析元数据注释，格式：; KEY: VALUE
-                if let Some(colon_pos) = line.find(':') {
-                    let key = line[1..colon_pos].trim().to_uppercase();
-                    let value = line[colon_pos + 1..].trim().to_string();
-                    // 将注释作为特殊命令存储
-                    commands.push((format!("_META_{}", key), vec![value]));
-                }
-                continue;
-            }
-
-            let (cmd, params) = self.parse_tspl_line(line);
-            commands.push((cmd, params));
-        }
-
-        commands
-    }
-
-    /// 解析单行 TSPL 命令
-    fn parse_tspl_line(&self, line: &str) -> (String, Vec<String>) {
-        let parts: Vec<&str> = line.splitn(2, ' ').collect();
-        if parts.is_empty() {
-            return (String::new(), Vec::new());
-        }
-
-        let cmd = parts[0].to_uppercase();
-        if parts.len() < 2 {
-            return (cmd, Vec::new());
-        }
-
-        // 解析参数（处理逗号和引号）
-        let params_str = parts[1];
-        let mut params = Vec::new();
-        let mut current = String::new();
-        let mut in_quote = false;
-
-        for ch in params_str.chars() {
-            if ch == '"' {
-                in_quote = !in_quote;
-            } else if ch == ',' && !in_quote {
-                if !current.is_empty() {
-                    params.push(current.trim().to_string());
-                    current.clear();
-                }
-            } else {
-                current.push(ch);
-            }
-        }
-
-        if !current.is_empty() {
-            params.push(current.trim().to_string());
-        }
-
-        (cmd, params)
-    }
-
-    /// 从命令列表中提取纸张尺寸
-    fn extract_size(&self, commands: &[(String, Vec<String>)]) -> (u32, u32) {
-        for (cmd, params) in commands {
-            if cmd == "SIZE" && params.len() >= 2 {
-                // SIZE 76 mm, 130 mm
-                let width_mm: f32 = params[0].replace("mm", "").trim().parse().unwrap_or(76.0);
-                let height_mm: f32 = params[1].replace("mm", "").trim().parse().unwrap_or(130.0);
-                // 1mm ≈ 8 dots @ 203 DPI
-                return ((width_mm * 8.0) as u32, (height_mm * 8.0) as u32);
-            }
-        }
-        // 默认尺寸 76mm x 130mm
-        (608, 1040)
-    }
-
-    /// 渲染所有 TSPL 命令
-    fn render_commands(
-        &self,
-        img: &mut RgbImage,
-        commands: &[(String, Vec<String>)],
-    ) -> Result<()> {
-        log::info!("开始渲染 TSPL 命令，共 {} 条", commands.len());
-
-        for (cmd, params) in commands {
-            // 跳过元数据命令（已经被解析，不需要渲染）
-            if cmd.starts_with("_META_") {
-                log::debug!("跳过元数据: {} = {:?}", cmd, params);
-                continue;
-            }
-
-            match cmd.as_str() {
-                "TEXT" => self.render_text(img, params),
-                "BARCODE" => self.render_barcode(img, params),
-                "BAR" => self.render_bar(img, params),
-                "BOX" => self.render_box(img, params),
-                "SIZE" | "GAP" | "DIRECTION" | "CLS" | "PRINT" => {
-                    // 这些命令不需要渲染
-                    log::debug!("忽略控制命令: {}", cmd);
-                }
-                _ => {
-                    log::warn!("未知的 TSPL 命令: {}", cmd);
-                }
-            }
-        }
-
-        log::info!("TSPL 命令渲染完成");
-        Ok(())
-    }
-
-    /// 渲染 TEXT 命令（支持居中对齐）
-    fn render_text(&self, img: &mut RgbImage, params: &[String]) {
-        if params.len() < 7 {
-            log::warn!("TEXT 命令参数不足: {:?}", params);
-            return;
-        }
-
-        let x: i32 = params[0].parse().unwrap_or(0);
-        let y: i32 = params[1].parse().unwrap_or(0);
-        // let font_num = &params[2]; // TSPL 字体号（PDF 后端不使用）
-        // let rotation = &params[3]; // 旋转（暂不支持）
-        let x_scale: i32 = params[4].parse().unwrap_or(1);
-        let y_scale: i32 = params[5].parse().unwrap_or(1);
-        let text = params[6].trim_matches('"');
-
-        // 计算字体大小（基于缩放系数）
-        let font_size = 16.0 * x_scale.max(y_scale) as f32;
-
-        // 使用 TextRenderer 渲染文本
-        let mut text_renderer = match TextRenderer::new() {
-            Ok(renderer) => renderer,
-            Err(e) => {
-                log::error!("创建TextRenderer失败: {}", e);
-                return;
+            RenderResult::FullBitmap { canvas, .. } => {
+                log::info!("处理全位图模式结果");
+                canvas
             }
         };
 
-        // 检测是否为中文（用于选择字体）
-        let is_chinese = text
-            .chars()
-            .any(|c| c as u32 > 0x4E00 && (c as u32) < 0x9FA5);
+        // 转换为RGB图像
+        let rgb_canvas = self.gray_to_rgb(&canvas);
 
-        // 检测是否需要居中（x 坐标接近画布中心 304，范围 280-330）
-        let should_center = x >= 280 && x <= 330;
+        // 生成文件名
+        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+        let filename = format!("qsl_{}.png", timestamp);
+        let png_path = self.output_dir.join(&filename);
 
-        if should_center {
-            // 居中渲染
-            if let Err(e) = text_renderer.draw_centered_text(
-                img, text, y, font_size, 608, // 画布宽度
-                is_chinese,
-            ) {
-                log::warn!("渲染居中文本失败: {}, 使用占位符", e);
-                let text_width = text.len() as i32 * (font_size as i32 / 2);
-                let text_height = font_size as i32;
-                let rect =
-                    Rect::at(x - text_width / 2, y).of_size(text_width as u32, text_height as u32);
-                draw_hollow_rect_mut(img, rect, Rgb([0u8, 0u8, 0u8]));
-            }
-            log::debug!(
-                "📝 TEXT (居中) at Y={}: \"{}\" (size: {})",
-                y,
-                text,
-                font_size
-            );
-        } else {
-            // 左对齐渲染
-            if let Err(e) = text_renderer.draw_text(img, text, x, y, font_size, is_chinese) {
-                log::warn!("渲染文本失败: {}, 使用占位符", e);
-                let text_width = text.len() as i32 * (font_size as i32 / 2);
-                let text_height = font_size as i32;
-                let rect = Rect::at(x, y).of_size(text_width as u32, text_height as u32);
-                draw_hollow_rect_mut(img, rect, Rgb([0u8, 0u8, 0u8]));
-            }
-            log::debug!(
-                "📝 TEXT at ({}, {}): \"{}\" (size: {})",
-                x,
-                y,
-                text,
-                font_size
-            );
-        }
+        // 保存PNG
+        rgb_canvas
+            .save(&png_path)
+            .with_context(|| format!("保存PNG到 {} 失败", png_path.display()))?;
+
+        log::info!("✅ 保存PNG: {}", png_path.display());
+
+        Ok(png_path)
     }
 
-    /// 渲染 BARCODE 命令（支持居中对齐）
-    fn render_barcode(&self, img: &mut RgbImage, params: &[String]) {
-        if params.len() < 9 {
-            log::warn!("BARCODE 命令参数不足: {:?}", params);
-            return;
+    /// 渲染混合模式结果
+    fn render_mixed_mode(
+        &mut self,
+        bitmaps: Vec<(u32, u32, GrayImage)>,
+        native_barcodes: Vec<BarcodeElement>,
+        canvas_size: (u32, u32),
+        border: Option<crate::printer::layout_engine::BorderConfig>,
+    ) -> Result<GrayImage> {
+        log::debug!(
+            "混合模式: {} 个位图, {} 个条码",
+            bitmaps.len(),
+            native_barcodes.len()
+        );
+
+        // 创建白色背景画布
+        let mut canvas = ImageBuffer::from_pixel(canvas_size.0, canvas_size.1, Luma([255u8]));
+
+        // 叠加文本位图
+        for (i, (x, y, bitmap)) in bitmaps.iter().enumerate() {
+            log::debug!("叠加位图[{}]: {}x{} at ({}, {})", i, bitmap.width(), bitmap.height(), x, y);
+            self.overlay(&mut canvas, bitmap, *x, *y);
         }
 
-        let x: i32 = params[0].parse().unwrap_or(0);
-        let y: i32 = params[1].parse().unwrap_or(0);
-        let barcode_type = params[2].trim_matches('"');
-        let height: u32 = params[3].parse().unwrap_or(80);
-        let _human_readable: i32 = params[4].parse().unwrap_or(1);
-        let data = params[8].trim_matches('"');
-
-        // 只支持 Code128
-        if barcode_type != "128" {
-            log::warn!("不支持的条形码类型: {}", barcode_type);
-            return;
-        }
-
-        let barcode_renderer = BarcodeRenderer::new();
-
-        // 检测是否需要居中（x 坐标接近画布中心 304，范围 280-330）
-        let should_center = x >= 280 && x <= 330;
-
-        if should_center {
-            // 居中渲染（使用标准宽度计算）
-            let barcode_width = ((11 * (data.len() + 3) + 35) * 2) as u32;
-            let quiet_zone = 20u32;
-
-            if let Err(e) = barcode_renderer.render_centered_barcode(
-                img,
-                data,
-                y,
-                barcode_width,
-                height,
-                608, // 画布宽度
-                quiet_zone,
-            ) {
-                log::warn!("条形码居中渲染失败: {}", e);
-            }
+        // 渲染条形码（PDF中也渲染为位图）
+        for (i, barcode) in native_barcodes.iter().enumerate() {
             log::debug!(
-                "📊 BARCODE (居中) at Y={}: \"{}\" (height={})",
-                y,
-                data,
-                height
+                "渲染条码[{}]: \"{}\" ({}) at ({}, {})",
+                i,
+                barcode.content,
+                barcode.barcode_type,
+                barcode.x,
+                barcode.y
             );
-        } else {
-            // 左对齐渲染
-            if let Err(e) = barcode_renderer.render_tspl_barcode(img, x, y, height, data) {
-                log::warn!("条形码渲染失败，使用占位符: {}", e);
 
-                // 失败时使用占位符（条纹矩形）
-                let width = data.len() as i32 * 15;
-                let rect = Rect::at(x, y).of_size(width as u32, height);
-                draw_hollow_rect_mut(img, rect, Rgb([0u8, 0u8, 0u8]));
+            let barcode_bitmap = self
+                .barcode_renderer
+                .render_barcode(&barcode.content, &barcode.barcode_type, barcode.height)
+                .with_context(|| format!("渲染条码 {} 失败", barcode.content))?;
 
-                for i in (0..width).step_by(6) {
-                    let bar_rect = Rect::at(x + i, y).of_size(3, height);
-                    draw_filled_rect_mut(img, bar_rect, Rgb([0u8, 0u8, 0u8]));
+            self.overlay(&mut canvas, &barcode_bitmap, barcode.x, barcode.y);
+        }
+
+        // 绘制边框
+        if let Some(border_config) = border {
+            self.draw_border(&mut canvas, &border_config);
+        }
+
+        Ok(canvas)
+    }
+
+    /// 叠加位图到画布
+    fn overlay(&self, canvas: &mut GrayImage, bitmap: &GrayImage, x: u32, y: u32) {
+        for (bx, by, pixel) in bitmap.enumerate_pixels() {
+            let cx = x + bx;
+            let cy = y + by;
+
+            if cx < canvas.width() && cy < canvas.height() {
+                // 只叠加黑色像素
+                if pixel.0[0] == 0 {
+                    canvas.put_pixel(cx, cy, *pixel);
                 }
             }
-            log::debug!(
-                "📊 BARCODE at ({}, {}): \"{}\" (height={})",
-                x,
-                y,
-                data,
-                height
-            );
         }
     }
 
-    /// 渲染 BAR 命令（填充矩形）
-    fn render_bar(&self, img: &mut RgbImage, params: &[String]) {
-        if params.len() < 4 {
-            return;
+    /// 绘制边框
+    fn draw_border(
+        &self,
+        canvas: &mut GrayImage,
+        border: &crate::printer::layout_engine::BorderConfig,
+    ) {
+        let x = border.x;
+        let y = border.y;
+        let width = border.width;
+        let height = border.height;
+        let thickness = border.thickness;
+
+        // 绘制四条边
+        for ty in 0..thickness {
+            // 上边
+            for tx in 0..width {
+                let px = x + tx;
+                let py = y + ty;
+                if px < canvas.width() && py < canvas.height() {
+                    canvas.put_pixel(px, py, Luma([0u8]));
+                }
+            }
+
+            // 下边
+            for tx in 0..width {
+                let px = x + tx;
+                let py = y + height - thickness + ty;
+                if px < canvas.width() && py < canvas.height() {
+                    canvas.put_pixel(px, py, Luma([0u8]));
+                }
+            }
         }
 
-        let x: i32 = params[0].parse().unwrap_or(0);
-        let y: i32 = params[1].parse().unwrap_or(0);
-        let width: u32 = params[2].parse().unwrap_or(0);
-        let height: u32 = params[3].parse().unwrap_or(0);
+        for ty in 0..height {
+            // 左边
+            for tx in 0..thickness {
+                let px = x + tx;
+                let py = y + ty;
+                if px < canvas.width() && py < canvas.height() {
+                    canvas.put_pixel(px, py, Luma([0u8]));
+                }
+            }
 
-        let rect = Rect::at(x, y).of_size(width, height);
-        draw_filled_rect_mut(img, rect, Rgb([0u8, 0u8, 0u8]));
-
-        println!("▬ BAR at ({}, {}): {}x{}", x, y, width, height);
+            // 右边
+            for tx in 0..thickness {
+                let px = x + width - thickness + tx;
+                let py = y + ty;
+                if px < canvas.width() && py < canvas.height() {
+                    canvas.put_pixel(px, py, Luma([0u8]));
+                }
+            }
+        }
     }
 
-    /// 渲染 BOX 命令（空心矩形）
-    fn render_box(&self, img: &mut RgbImage, params: &[String]) {
-        if params.len() < 5 {
-            return;
-        }
-
-        let x1: i32 = params[0].parse().unwrap_or(0);
-        let y1: i32 = params[1].parse().unwrap_or(0);
-        let x2: i32 = params[2].parse().unwrap_or(0);
-        let y2: i32 = params[3].parse().unwrap_or(0);
-        let line_width: i32 = params[4].parse().unwrap_or(1);
-
-        let width = (x2 - x1).abs() as u32;
-        let height = (y2 - y1).abs() as u32;
-
-        // 绘制外框
-        for i in 0..line_width {
-            let rect = Rect::at(x1 + i, y1 + i).of_size(
-                width.saturating_sub(2 * i as u32),
-                height.saturating_sub(2 * i as u32),
-            );
-            draw_hollow_rect_mut(img, rect, Rgb([0u8, 0u8, 0u8]));
-        }
-
-        println!(
-            "▭ BOX at ({}, {}) to ({}, {}): width {}",
-            x1, y1, x2, y2, line_width
-        );
+    /// 灰度图转RGB图
+    fn gray_to_rgb(&self, gray: &GrayImage) -> RgbImage {
+        ImageBuffer::from_fn(gray.width(), gray.height(), |x, y| {
+            let gray_value = gray.get_pixel(x, y).0[0];
+            Rgb([gray_value, gray_value, gray_value])
+        })
     }
 }
 
-impl PrinterBackend for PdfBackend {
-    fn name(&self) -> &str {
-        "PDF"
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::template::TemplateConfig;
+    use crate::printer::layout_engine::LayoutEngine;
+    use crate::printer::render_pipeline::RenderPipeline;
+    use crate::printer::template_engine::TemplateEngine;
+    use std::collections::HashMap;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_render_mixed_mode() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut backend = PdfBackend::new(temp_dir.path().to_path_buf()).unwrap();
+
+        // 准备测试数据
+        let config = TemplateConfig::default_qsl_card();
+        let mut data = HashMap::new();
+        data.insert("task_name".to_string(), "测试".to_string());
+        data.insert("callsign".to_string(), "BG7XXX".to_string());
+        data.insert("sn".to_string(), "001".to_string());
+        data.insert("qty".to_string(), "100".to_string());
+
+        let resolved = TemplateEngine::resolve(&config, &data).unwrap();
+        let mut layout_engine = LayoutEngine::new().unwrap();
+        let layout_result = layout_engine.layout(&config, resolved).unwrap();
+
+        let mut pipeline = RenderPipeline::new().unwrap();
+        let output_config = crate::config::template::OutputConfig {
+            mode: "text_bitmap_plus_native_barcode".to_string(),
+            threshold: 160,
+        };
+        let render_result = pipeline.render(layout_result, &output_config).unwrap();
+
+        // 渲染并保存
+        let png_path = backend.render(render_result).unwrap();
+
+        assert!(png_path.exists());
+        println!("保存到: {}", png_path.display());
     }
 
-    fn list_printers(&self) -> Result<Vec<String>> {
-        // PDF 后端提供一个虚拟打印机
-        Ok(vec!["PDF 测试打印机".to_string()])
-    }
+    #[test]
+    fn test_render_full_bitmap() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut backend = PdfBackend::new(temp_dir.path().to_path_buf()).unwrap();
 
-    fn send_raw(&self, _printer_name: &str, data: &[u8]) -> Result<()> {
-        // 将 TSPL 数据解析并生成 PNG/PDF
-        let tspl = String::from_utf8_lossy(data);
+        let config = TemplateConfig::default_qsl_card();
+        let mut data = HashMap::new();
+        data.insert("task_name".to_string(), "测试".to_string());
+        data.insert("callsign".to_string(), "BG7XXX".to_string());
+        data.insert("sn".to_string(), "001".to_string());
+        data.insert("qty".to_string(), "100".to_string());
 
-        let (png_path, pdf_path_opt) = self.render_tspl(&tspl).context("渲染失败")?;
+        let resolved = TemplateEngine::resolve(&config, &data).unwrap();
+        let mut layout_engine = LayoutEngine::new().unwrap();
+        let layout_result = layout_engine.layout(&config, resolved).unwrap();
 
-        println!("\n✅ 文件已生成:");
-        println!("  PNG: {}", png_path.display());
-        if let Some(pdf_path) = pdf_path_opt {
-            println!("  PDF: {}", pdf_path.display());
-        }
+        let mut pipeline = RenderPipeline::new().unwrap();
+        let output_config = crate::config::template::OutputConfig {
+            mode: "full_bitmap".to_string(),
+            threshold: 160,
+        };
+        let render_result = pipeline.render(layout_result, &output_config).unwrap();
 
-        Ok(())
+        let png_path = backend.render(render_result).unwrap();
+
+        assert!(png_path.exists());
+        println!("保存到: {}", png_path.display());
     }
 }

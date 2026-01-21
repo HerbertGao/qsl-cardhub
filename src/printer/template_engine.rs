@@ -2,7 +2,7 @@
 //
 // 负责解析v2模板配置，填充运行时数据，生成已解析的元素列表
 
-use crate::config::template_v2::{ElementConfig, TemplateV2Config};
+use crate::config::template::{ElementConfig, TemplateConfig};
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 
@@ -52,7 +52,7 @@ impl TemplateEngine {
     /// - 如果input元素的key在data中不存在
     /// - 如果computed元素的format中的占位符在data中不存在
     pub fn resolve(
-        config: &TemplateV2Config,
+        config: &TemplateConfig,
         data: &HashMap<String, String>,
     ) -> Result<Vec<ResolvedElement>> {
         log::info!(
@@ -211,11 +211,11 @@ impl TemplateEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::template_v2::TemplateV2Config;
+    use crate::config::template::TemplateConfig;
 
     #[test]
     fn test_resolve_fixed_element() {
-        let config = TemplateV2Config::default_qsl_card_v2();
+        let config = TemplateConfig::default_qsl_card();
 
         // 需要提供所有input和computed元素所需的数据
         let mut data = HashMap::new();
@@ -235,7 +235,7 @@ mod tests {
 
     #[test]
     fn test_resolve_input_element() {
-        let config = TemplateV2Config::default_qsl_card_v2();
+        let config = TemplateConfig::default_qsl_card();
         let mut data = HashMap::new();
         data.insert("task_name".to_string(), "测试任务".to_string());
         data.insert("callsign".to_string(), "BG7XXX".to_string());
@@ -257,7 +257,7 @@ mod tests {
 
     #[test]
     fn test_resolve_computed_element() {
-        let config = TemplateV2Config::default_qsl_card_v2();
+        let config = TemplateConfig::default_qsl_card();
         let mut data = HashMap::new();
         data.insert("task_name".to_string(), "测试".to_string());
         data.insert("callsign".to_string(), "BG7XXX".to_string());
@@ -287,7 +287,7 @@ mod tests {
 
     #[test]
     fn test_resolve_input_element_missing_key() {
-        let config = TemplateV2Config::default_qsl_card_v2();
+        let config = TemplateConfig::default_qsl_card();
         let data = HashMap::new(); // 空数据
 
         let result = TemplateEngine::resolve(&config, &data);
@@ -344,7 +344,7 @@ mod tests {
             .filter_level(log::LevelFilter::Debug)
             .try_init();
 
-        let config = TemplateV2Config::default_qsl_card_v2();
+        let config = TemplateConfig::default_qsl_card();
         let mut data = HashMap::new();
         data.insert("task_name".to_string(), "测试任务".to_string());
         data.insert("callsign".to_string(), "BG7XXX".to_string());

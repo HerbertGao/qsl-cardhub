@@ -2,7 +2,7 @@
 //
 // 测试完整流程: 配置 → 模板解析 → 布局计算 → 渲染输出
 
-use QSL_CardHub::config::template_v2::{OutputConfig, TemplateV2Config};
+use QSL_CardHub::config::template::{OutputConfig, TemplateConfig};
 use QSL_CardHub::printer::layout_engine::LayoutEngine;
 use QSL_CardHub::printer::render_pipeline::{RenderPipeline, RenderResult};
 use QSL_CardHub::printer::template_engine::TemplateEngine;
@@ -15,7 +15,7 @@ fn test_end_to_end_mixed_mode() {
 
     // 1. 加载配置
     let config_path = Path::new("config/templates/qsl-card-v2.toml");
-    let config = TemplateV2Config::load_from_file(config_path).expect("加载配置失败");
+    let config = TemplateConfig::load_from_file(config_path).expect("加载配置失败");
 
     println!("✓ 加载配置: {}", config.metadata.name);
 
@@ -114,7 +114,7 @@ fn test_end_to_end_full_bitmap() {
 
     // 1. 加载配置并修改为全位图模式
     let config_path = Path::new("config/templates/qsl-card-v2.toml");
-    let mut config = TemplateV2Config::load_from_file(config_path).expect("加载配置失败");
+    let mut config = TemplateConfig::load_from_file(config_path).expect("加载配置失败");
 
     println!("✓ 加载配置: {}", config.metadata.name);
 
@@ -200,7 +200,7 @@ fn test_end_to_end_full_bitmap() {
 fn test_different_content_variations() {
     println!("\n========== 不同内容变化测试 ==========");
 
-    let config = TemplateV2Config::default_qsl_card_v2();
+    let config = TemplateConfig::default_qsl_card();
 
     let test_cases = vec![
         ("短呼号", "BH1AA", "001", "50"),

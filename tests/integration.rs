@@ -2,12 +2,6 @@
 //
 // 运行命令: cargo test --test integration
 
-#[path = "integration/pdf_rendering.rs"]
-mod pdf_rendering;
-
-#[path = "integration/template_config.rs"]
-mod template_config;
-
 #[path = "integration/template_layout.rs"]
 mod template_layout;
 

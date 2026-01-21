@@ -9,12 +9,9 @@ pub mod backend;
 pub mod barcode_renderer;
 pub mod font_loader;
 pub mod layout_engine;
-pub mod manager;
 pub mod render_pipeline;
 pub mod template_engine;
 pub mod text_renderer;
 pub mod tspl;
-pub mod tspl_v2;
 
 pub use backend::PdfBackend;
-pub use manager::PrinterManager;

@@ -2,8 +2,8 @@
 //
 // 测试从配置加载到 PNG/TSPL 生成的完整流程
 
-use QSL_CardHub::api_v2::{QslCardGenerator, quick_generate_png, quick_generate_tspl};
-use QSL_CardHub::config::template_v2::{OutputConfig, TemplateV2Config};
+use QSL_CardHub::api::{QslCardGenerator, quick_generate_png, quick_generate_tspl};
+use QSL_CardHub::config::template::{OutputConfig, TemplateConfig};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -22,7 +22,7 @@ fn test_comprehensive_qsl_card_generation() {
         config_path.display()
     );
 
-    let config = TemplateV2Config::load_from_file(config_path).expect("加载配置文件失败");
+    let config = TemplateConfig::load_from_file(config_path).expect("加载配置文件失败");
 
     println!("  ✓ 模板名称: {}", config.metadata.name);
     println!("  ✓ 模板版本: {}", config.metadata.version);
@@ -275,7 +275,7 @@ fn test_performance_batch_generation() {
     let output_dir = PathBuf::from("test_output/performance");
     std::fs::create_dir_all(&output_dir).ok();
 
-    let config = TemplateV2Config::default_qsl_card_v2();
+    let config = TemplateConfig::default_qsl_card();
     let output_config = OutputConfig {
         mode: "full_bitmap".to_string(),
         threshold: 160,

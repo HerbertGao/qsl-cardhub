@@ -1,18 +1,18 @@
-// 高级 API v2
+// 高级 API
 //
 // 提供简洁的公共接口供外部调用
 
-use crate::config::template_v2::{OutputConfig, TemplateV2Config};
-use crate::printer::backend::PdfBackendV2;
+use crate::config::template::{OutputConfig, TemplateConfig};
+use crate::printer::backend::PdfBackend;
 use crate::printer::layout_engine::LayoutEngine;
 use crate::printer::render_pipeline::{RenderPipeline, RenderResult};
 use crate::printer::template_engine::TemplateEngine;
-use crate::printer::tspl_v2::TSPLGeneratorV2;
+use crate::printer::tspl::TSPLGenerator;
 use anyhow::Result;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-/// QSL 卡片生成器 v2
+/// QSL 卡片生成器
 ///
 /// 提供完整的 QSL 卡片生成流程
 pub struct QslCardGenerator {
@@ -41,7 +41,7 @@ impl QslCardGenerator {
     /// PNG 文件路径
     pub fn generate_png(
         &mut self,
-        config: &TemplateV2Config,
+        config: &TemplateConfig,
         data: &HashMap<String, String>,
         output_dir: PathBuf,
         output_config: &OutputConfig,
@@ -56,7 +56,7 @@ impl QslCardGenerator {
         let render_result = self.render_pipeline.render(layout_result, output_config)?;
 
         // 4. 保存为 PNG
-        let mut pdf_backend = PdfBackendV2::new(output_dir)?;
+        let mut pdf_backend = PdfBackend::new(output_dir)?;
         let png_path = pdf_backend.render(render_result)?;
 
         Ok(png_path)
@@ -73,7 +73,7 @@ impl QslCardGenerator {
     /// TSPL 指令字符串
     pub fn generate_tspl(
         &mut self,
-        config: &TemplateV2Config,
+        config: &TemplateConfig,
         data: &HashMap<String, String>,
         output_config: &OutputConfig,
     ) -> Result<String> {
@@ -87,7 +87,7 @@ impl QslCardGenerator {
         let render_result = self.render_pipeline.render(layout_result, output_config)?;
 
         // 4. 生成 TSPL
-        let tspl_generator = TSPLGeneratorV2::new();
+        let tspl_generator = TSPLGenerator::new();
         let tspl =
             tspl_generator.generate(render_result, config.page.width_mm, config.page.height_mm)?;
 
@@ -105,7 +105,7 @@ impl QslCardGenerator {
     /// 渲染结果（可用于自定义后端）
     pub fn render(
         &mut self,
-        config: &TemplateV2Config,
+        config: &TemplateConfig,
         data: &HashMap<String, String>,
         output_config: &OutputConfig,
     ) -> Result<RenderResult> {
@@ -135,7 +135,7 @@ impl Default for QslCardGenerator {
 ///
 /// # 示例
 /// ```no_run
-/// use QSL_CardHub::api_v2::quick_generate_png;
+/// use QSL_CardHub::api::quick_generate_png;
 /// use std::collections::HashMap;
 /// use std::path::PathBuf;
 ///
@@ -161,9 +161,9 @@ pub fn quick_generate_png(
     mode: &str,
 ) -> Result<PathBuf> {
     let config = if let Some(path) = template_path {
-        TemplateV2Config::load_from_file(path)?
+        TemplateConfig::load_from_file(path)?
     } else {
-        TemplateV2Config::default_qsl_card_v2()
+        TemplateConfig::default_qsl_card()
     };
 
     let output_config = OutputConfig {
@@ -187,7 +187,7 @@ pub fn quick_generate_png(
 ///
 /// # 示例
 /// ```no_run
-/// use QSL_CardHub::api_v2::quick_generate_tspl;
+/// use QSL_CardHub::api::quick_generate_tspl;
 /// use std::collections::HashMap;
 ///
 /// let mut data = HashMap::new();
@@ -205,9 +205,9 @@ pub fn quick_generate_tspl(
     mode: &str,
 ) -> Result<String> {
     let config = if let Some(path) = template_path {
-        TemplateV2Config::load_from_file(path)?
+        TemplateConfig::load_from_file(path)?
     } else {
-        TemplateV2Config::default_qsl_card_v2()
+        TemplateConfig::default_qsl_card()
     };
 
     let output_config = OutputConfig {
@@ -270,7 +270,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let mut generator = QslCardGenerator::new().unwrap();
 
-        let config = TemplateV2Config::default_qsl_card_v2();
+        let config = TemplateConfig::default_qsl_card();
         let mut data = HashMap::new();
         data.insert("task_name".to_string(), "测试".to_string());
         data.insert("callsign".to_string(), "BD7AA".to_string());
@@ -297,7 +297,7 @@ mod tests {
     fn test_generator_generate_tspl() {
         let mut generator = QslCardGenerator::new().unwrap();
 
-        let config = TemplateV2Config::default_qsl_card_v2();
+        let config = TemplateConfig::default_qsl_card();
         let mut data = HashMap::new();
         data.insert("task_name".to_string(), "IARU HF".to_string());
         data.insert("callsign".to_string(), "BH1ABC".to_string());

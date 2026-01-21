@@ -2,7 +2,7 @@
 //
 // 负责计算每个元素的精确位置、字号和整体居中布局
 
-use crate::config::template_v2::{LayoutConfig, PageConfig, TemplateV2Config};
+use crate::config::template::{LayoutConfig, PageConfig, TemplateConfig};
 use crate::printer::template_engine::ResolvedElement;
 use crate::printer::text_renderer::TextRenderer;
 use anyhow::{Context, Result};
@@ -94,7 +94,7 @@ impl LayoutEngine {
     /// 完整的布局结果
     pub fn layout(
         &mut self,
-        config: &TemplateV2Config,
+        config: &TemplateConfig,
         resolved_elements: Vec<ResolvedElement>,
     ) -> Result<LayoutResult> {
         log::info!("开始布局计算: {}", config.metadata.name);
@@ -209,7 +209,7 @@ impl LayoutEngine {
     fn layout_element(
         &mut self,
         element: &ResolvedElement,
-        config: &TemplateV2Config,
+        config: &TemplateConfig,
         available_width: u32,
     ) -> Result<LayoutedElement> {
         match element.element_type.as_str() {
@@ -223,7 +223,7 @@ impl LayoutEngine {
     fn layout_text_element(
         &mut self,
         element: &ResolvedElement,
-        config: &TemplateV2Config,
+        config: &TemplateConfig,
         available_width: u32,
     ) -> Result<LayoutedElement> {
         let max_height_mm = element
@@ -267,7 +267,7 @@ impl LayoutEngine {
     fn layout_barcode_element(
         &mut self,
         element: &ResolvedElement,
-        config: &TemplateV2Config,
+        config: &TemplateConfig,
         available_width: u32,
     ) -> Result<LayoutedElement> {
         let barcode_type = element

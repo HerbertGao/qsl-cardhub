@@ -1,6 +1,6 @@
 // 测试标题修复
 
-use QSL_CardHub::api_v2::quick_generate_png;
+use QSL_CardHub::api::quick_generate_png;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 

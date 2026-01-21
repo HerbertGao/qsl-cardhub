@@ -11,7 +11,6 @@ pub mod windows;
 pub mod cups;
 
 pub mod pdf;
-pub mod pdf_v2;
 
 #[cfg(target_os = "windows")]
 pub use windows::WindowsBackend;
@@ -20,7 +19,6 @@ pub use windows::WindowsBackend;
 pub use cups::CupsBackend;
 
 pub use pdf::PdfBackend;
-pub use pdf_v2::PdfBackendV2;
 
 // 重新导出 trait（用于测试）
 pub use self::PrinterBackend as PrinterBackendTrait;
