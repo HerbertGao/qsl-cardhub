@@ -326,10 +326,11 @@ impl Card {
             source_records.sort_by(|(_, a), (_, b)| b.cached_at.cmp(&a.cached_at));
 
             // 标记要删除的索引（保留前2条）
-            let to_remove: Vec<_> = source_records.iter().skip(2).map(|(i, _)| *i).collect();
+            let mut to_remove: Vec<_> = source_records.iter().skip(2).map(|(i, _)| *i).collect();
 
-            // 从后向前删除（避免索引变化）
-            for i in to_remove.into_iter().rev() {
+            // 按索引值降序排序，然后从大到小删除（避免索引偏移）
+            to_remove.sort_unstable_by(|a, b| b.cmp(a));
+            for i in to_remove {
                 history.remove(i);
             }
         }

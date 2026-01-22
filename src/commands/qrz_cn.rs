@@ -46,11 +46,19 @@ pub async fn qrz_save_and_login(username: String, password: String) -> Result<St
     Ok("登录成功".to_string())
 }
 
-/// 加载 QRZ.cn 凭据（仅返回用户名，密码从加密存储读取）
+/// 加载 QRZ.cn 凭据
 #[tauri::command]
-pub fn qrz_load_credentials() -> Result<Option<String>, String> {
-    let key = "qsl-cardhub:qrz:password";
-    get_credential(key).map_err(|e| format!("加载凭据失败: {}", e))
+pub fn qrz_load_credentials() -> Result<serde_json::Value, String> {
+    let username = get_credential("qsl-cardhub:qrz:username")
+        .map_err(|e| format!("加载用户名失败: {}", e))?;
+
+    let password = get_credential("qsl-cardhub:qrz:password")
+        .map_err(|e| format!("加载密码失败: {}", e))?;
+
+    Ok(serde_json::json!({
+        "username": username,
+        "password": password
+    }))
 }
 
 /// 清除 QRZ.cn 凭据
