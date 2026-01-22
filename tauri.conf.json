@@ -10,7 +10,7 @@
       "cwd": "web/"
     },
     "beforeBuildCommand": {
-      "script": "npm run build",
+      "script": "npm run sync-version && npm run build",
       "cwd": "web/"
     }
   },
