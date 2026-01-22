@@ -155,14 +155,14 @@
           </el-button>
         </div>
 
-        <!-- 地址历史列表 -->
+        <!-- 地址缓存列表 -->
         <div
-          v-if="addressHistory.length > 0"
+          v-if="addressCache.length > 0"
           class="address-content"
         >
           <div class="address-list">
             <div
-              v-for="(addr, index) in addressHistory"
+              v-for="(addr, index) in addressCache"
               :key="index"
               class="address-item"
             >
@@ -288,7 +288,7 @@
           class="address-content"
         >
           <el-empty
-            description="暂无地址历史"
+            description="暂无地址缓存"
             :image-size="60"
           >
             <el-button
@@ -324,7 +324,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import type { CardWithProject, CardStatus, AddressHistory } from '@/types/models'
+import type { CardWithProject, CardStatus, AddressEntry } from '@/types/models'
 
 interface Props {
   visible: boolean
@@ -371,12 +371,12 @@ const submitting = ref<boolean>(false)
 // 地址查询状态
 const querying = ref<boolean>(false)
 
-// 地址历史列表
-const addressHistory = ref<AddressHistory[]>([])
+// 地址缓存列表
+const addressCache = ref<AddressEntry[]>([])
 
 // 收件地址（用于提交）- 使用最新的地址
 const recipientAddress = computed<string>(() => {
-  return addressHistory.value.length > 0 ? (addressHistory.value[0].chinese_address || '') : ''
+  return addressCache.value.length > 0 ? (addressCache.value[0].chinese_address || '') : ''
 })
 
 // 表单验证规则
@@ -431,12 +431,12 @@ const formatDate = (datetime: string | null | undefined): string => {
   })
 }
 
-// 加载地址历史
-const loadAddressHistory = (): void => {
-  addressHistory.value = []
+// 加载地址缓存
+const loadAddressCache = (): void => {
+  addressCache.value = []
 
-  if (props.card && props.card.metadata && props.card.metadata.address_history) {
-    addressHistory.value = props.card.metadata.address_history
+  if (props.card && props.card.metadata && props.card.metadata.address_cache) {
+    addressCache.value = props.card.metadata.address_cache
   }
 }
 
@@ -593,7 +593,7 @@ const handleQueryAddress = async (isAutoQuery: boolean = false): Promise<void> =
       }
     }
 
-    // 重新加载卡片以获取最新的地址历史
+    // 重新加载卡片以获取最新的地址缓存
     const updatedCard = await invoke<CardWithProject>('get_card_cmd', {
       id: props.card.id
     })
@@ -601,8 +601,8 @@ const handleQueryAddress = async (isAutoQuery: boolean = false): Promise<void> =
     // 更新本地状态
     props.card.metadata = updatedCard.metadata
 
-    // 重新加载地址历史
-    loadAddressHistory()
+    // 重新加载地址缓存
+    loadAddressCache()
 
     // 仅手动查询时显示成功提示
     if (!isAutoQuery) {
@@ -650,8 +650,8 @@ watch(() => props.visible, (newVal: boolean): void => {
       remarks: ''
     }
 
-    // 加载地址历史（优先展示缓存）
-    loadAddressHistory()
+    // 加载地址缓存（优先展示缓存）
+    loadAddressCache()
 
     // 清除验证状态
     nextTick(() => {

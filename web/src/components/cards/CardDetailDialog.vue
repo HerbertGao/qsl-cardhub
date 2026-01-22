@@ -42,7 +42,7 @@
         </el-descriptions>
       </div>
 
-      <!-- 分发历史 -->
+      <!-- 分发记录 -->
       <div
         v-if="card.metadata?.distribution"
         class="detail-section"
@@ -76,7 +76,7 @@
         </el-descriptions>
       </div>
 
-      <!-- 退回历史 -->
+      <!-- 退回记录 -->
       <div
         v-if="card.metadata?.return"
         class="detail-section"

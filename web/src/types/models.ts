@@ -16,8 +16,8 @@ export interface ReturnInfo {
   returned_at: string
 }
 
-// 地址历史记录
-export interface AddressHistory {
+// 地址缓存记录
+export interface AddressEntry {
   source: string
   chinese_address?: string | null
   english_address?: string | null
@@ -31,7 +31,7 @@ export interface AddressHistory {
 export interface CardMetadata {
   distribution?: DistributionInfo | null
   return?: ReturnInfo | null
-  address_history?: AddressHistory[]
+  address_cache?: AddressEntry[]
 }
 
 // 卡片数据模型

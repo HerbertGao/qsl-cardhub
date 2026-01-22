@@ -152,9 +152,9 @@ pub struct ReturnInfo {
     pub returned_at: String,
 }
 
-/// 地址历史记录
+/// 地址缓存记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AddressHistory {
+pub struct AddressEntry {
     /// 数据来源（如 "qrz.cn", "qrz.com", "QRZ卡片查询"）
     pub source: String,
     /// 中文地址（QRZ.cn 使用）
@@ -186,9 +186,10 @@ pub struct CardMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "return")]
     pub return_info: Option<ReturnInfo>,
-    /// 地址历史记录（最多2条每个来源）
+    /// 地址缓存（每个来源只保留1条最新记录）
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub address_history: Option<Vec<AddressHistory>>,
+    #[serde(alias = "address_history")]
+    pub address_cache: Option<Vec<AddressEntry>>,
 }
 
 /// 卡片
@@ -233,11 +234,11 @@ impl Card {
         }
     }
 
-    /// 添加或更新地址历史记录（智能去重）
+    /// 添加或更新地址缓存（智能去重，单版本）
     ///
     /// 规则：
-    /// - 如果数据与最新记录完全一致，只更新时间戳
-    /// - 否则添加新记录，同一来源最多保留2条
+    /// - 如果数据与现有记录完全一致，只更新时间戳
+    /// - 否则直接覆盖原有记录（每个来源只保留1条）
     /// - 缓存有效期365天
     pub fn add_or_update_address(
         &mut self,
@@ -257,51 +258,50 @@ impl Card {
 
         let metadata = self.metadata.as_mut().unwrap();
 
-        // 确保 address_history 存在
-        if metadata.address_history.is_none() {
-            metadata.address_history = Some(Vec::new());
+        // 确保 address_cache 存在
+        if metadata.address_cache.is_none() {
+            metadata.address_cache = Some(Vec::new());
         }
 
-        let history = metadata.address_history.as_mut().unwrap();
+        let cache = metadata.address_cache.as_mut().unwrap();
 
-        // 查找同一来源的最新记录
-        let latest_from_source = history
+        // 查找同一来源的现有记录
+        let existing = cache
             .iter_mut()
-            .filter(|h| h.source == source)
-            .max_by(|a, b| a.cached_at.cmp(&b.cached_at));
+            .find(|h| h.source == source);
 
-        if let Some(latest) = latest_from_source {
+        if let Some(entry) = existing {
             // 根据数据源比较不同字段
             let is_same = match source.as_str() {
                 "qrz.cn" => {
-                    latest.chinese_address == chinese_address
-                        && latest.english_address == english_address
+                    entry.chinese_address == chinese_address
+                        && entry.english_address == english_address
                 }
-                "qrz.com" => latest.english_address == english_address,
+                "qrz.com" => entry.english_address == english_address,
                 "QRZ卡片查询" => {
-                    latest.english_address == english_address
-                        && latest.name == name
-                        && latest.mail_method == mail_method
+                    entry.english_address == english_address
+                        && entry.name == name
+                        && entry.mail_method == mail_method
                 }
                 _ => {
                     // 未知数据源，比较所有字段
-                    latest.chinese_address == chinese_address
-                        && latest.english_address == english_address
-                        && latest.name == name
-                        && latest.mail_method == mail_method
+                    entry.chinese_address == chinese_address
+                        && entry.english_address == english_address
+                        && entry.name == name
+                        && entry.mail_method == mail_method
                 }
             };
 
             if is_same {
                 // 数据完全一致，只更新时间戳
-                latest.updated_at = updated_at.clone();
-                latest.cached_at = now;
+                entry.updated_at = updated_at.clone();
+                entry.cached_at = now;
                 return;
             }
         }
 
         // 创建新记录
-        let new_record = AddressHistory {
+        let new_record = AddressEntry {
             source: source.clone(),
             chinese_address,
             english_address,
@@ -311,37 +311,17 @@ impl Card {
             cached_at: now,
         };
 
-        // 添加新记录
-        history.push(new_record);
-
-        // 清理同一来源的旧记录（保留最新2条）
-        let mut source_records: Vec<_> = history
-            .iter()
-            .enumerate()
-            .filter(|(_, h)| h.source == source)
-            .collect();
-
-        if source_records.len() > 2 {
-            // 按缓存时间降序排序
-            source_records.sort_by(|(_, a), (_, b)| b.cached_at.cmp(&a.cached_at));
-
-            // 标记要删除的索引（保留前2条）
-            let mut to_remove: Vec<_> = source_records.iter().skip(2).map(|(i, _)| *i).collect();
-
-            // 按索引值降序排序，然后从大到小删除（避免索引偏移）
-            to_remove.sort_unstable_by(|a, b| b.cmp(a));
-            for i in to_remove {
-                history.remove(i);
-            }
-        }
+        // 单版本：删除同一来源的所有旧记录，然后添加新记录
+        cache.retain(|h| h.source != source);
+        cache.push(new_record);
     }
 
-    /// 获取有效的地址历史记录（365天内）
-    pub fn get_valid_addresses(&self) -> Vec<AddressHistory> {
+    /// 获取有效的地址缓存（365天内）
+    pub fn get_valid_addresses(&self) -> Vec<AddressEntry> {
         if let Some(metadata) = &self.metadata {
-            if let Some(history) = &metadata.address_history {
+            if let Some(cache) = &metadata.address_cache {
                 let now = now_china();
-                return history
+                return cache
                     .iter()
                     .filter(|h| {
                         // 检查缓存是否在365天内

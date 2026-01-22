@@ -8,7 +8,7 @@ import type {
   Profile,
   TemplateConfig,
   LogEntry,
-  AddressHistory
+  AddressEntry
 } from './models'
 
 // ========== 项目管理命令 ==========
@@ -172,7 +172,7 @@ export interface TauriCommands {
   qrz_check_login_status: () => Promise<boolean>
   qrz_test_connection: () => Promise<string>
   qrz_query_callsign: (params: QRZQueryCallsignParams) => Promise<AddressInfo | null>
-  qrz_get_address_history: (params: { card_id: string }) => Promise<AddressHistory[]>
+  qrz_get_address_cache: (params: { card_id: string }) => Promise<AddressEntry[]>
 
   // 安全/凭据
   check_keyring_available: () => Promise<boolean>
