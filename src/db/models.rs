@@ -62,7 +62,13 @@ pub struct ProjectWithStats {
     /// 更新时间
     pub updated_at: String,
     /// 卡片总数
-    pub card_count: i64,
+    pub total_cards: i64,
+    /// 待分发卡片数
+    pub pending_cards: i64,
+    /// 已分发卡片数
+    pub distributed_cards: i64,
+    /// 已退卡卡片数
+    pub returned_cards: i64,
 }
 
 impl From<Project> for ProjectWithStats {
@@ -72,7 +78,10 @@ impl From<Project> for ProjectWithStats {
             name: project.name,
             created_at: project.created_at,
             updated_at: project.updated_at,
-            card_count: 0,
+            total_cards: 0,
+            pending_cards: 0,
+            distributed_cards: 0,
+            returned_cards: 0,
         }
     }
 }
@@ -143,6 +152,30 @@ pub struct ReturnInfo {
     pub returned_at: String,
 }
 
+/// 地址缓存记录
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddressEntry {
+    /// 数据来源（如 "qrz.cn", "qrz.com", "QRZ卡片查询"）
+    pub source: String,
+    /// 中文地址（QRZ.cn 使用）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chinese_address: Option<String>,
+    /// 英文地址（QRZ.cn 和 QRZ.com 使用）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub english_address: Option<String>,
+    /// 姓名（QRZ.herbertgao.me 使用）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// 邮寄方式（QRZ.herbertgao.me 使用）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mail_method: Option<String>,
+    /// 更新时间（数据最后更新时间）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+    /// 缓存时间（数据获取时间）
+    pub cached_at: String,
+}
+
 /// 卡片元数据
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CardMetadata {
@@ -153,6 +186,10 @@ pub struct CardMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "return")]
     pub return_info: Option<ReturnInfo>,
+    /// 地址缓存（每个来源只保留1条最新记录）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(alias = "address_history")]
+    pub address_cache: Option<Vec<AddressEntry>>,
 }
 
 /// 卡片
@@ -195,6 +232,111 @@ impl Card {
             created_at: now.clone(),
             updated_at: now,
         }
+    }
+
+    /// 添加或更新地址缓存（智能去重，单版本）
+    ///
+    /// 规则：
+    /// - 如果数据与现有记录完全一致，只更新时间戳
+    /// - 否则直接覆盖原有记录（每个来源只保留1条）
+    /// - 缓存有效期365天
+    pub fn add_or_update_address(
+        &mut self,
+        source: String,
+        chinese_address: Option<String>,
+        english_address: Option<String>,
+        name: Option<String>,
+        mail_method: Option<String>,
+        updated_at: Option<String>,
+    ) {
+        let now = format_datetime(&now_china());
+
+        // 确保 metadata 存在
+        if self.metadata.is_none() {
+            self.metadata = Some(CardMetadata::default());
+        }
+
+        let metadata = self.metadata.as_mut().unwrap();
+
+        // 确保 address_cache 存在
+        if metadata.address_cache.is_none() {
+            metadata.address_cache = Some(Vec::new());
+        }
+
+        let cache = metadata.address_cache.as_mut().unwrap();
+
+        // 查找同一来源的现有记录
+        let existing = cache
+            .iter_mut()
+            .find(|h| h.source == source);
+
+        if let Some(entry) = existing {
+            // 根据数据源比较不同字段
+            let is_same = match source.as_str() {
+                "qrz.cn" => {
+                    entry.chinese_address == chinese_address
+                        && entry.english_address == english_address
+                }
+                "qrz.com" => entry.english_address == english_address,
+                "QRZ卡片查询" => {
+                    entry.english_address == english_address
+                        && entry.name == name
+                        && entry.mail_method == mail_method
+                }
+                _ => {
+                    // 未知数据源，比较所有字段
+                    entry.chinese_address == chinese_address
+                        && entry.english_address == english_address
+                        && entry.name == name
+                        && entry.mail_method == mail_method
+                }
+            };
+
+            if is_same {
+                // 数据完全一致，只更新时间戳
+                entry.updated_at = updated_at.clone();
+                entry.cached_at = now;
+                return;
+            }
+        }
+
+        // 创建新记录
+        let new_record = AddressEntry {
+            source: source.clone(),
+            chinese_address,
+            english_address,
+            name,
+            mail_method,
+            updated_at,
+            cached_at: now,
+        };
+
+        // 单版本：删除同一来源的所有旧记录，然后添加新记录
+        cache.retain(|h| h.source != source);
+        cache.push(new_record);
+    }
+
+    /// 获取有效的地址缓存（365天内）
+    pub fn get_valid_addresses(&self) -> Vec<AddressEntry> {
+        if let Some(metadata) = &self.metadata {
+            if let Some(cache) = &metadata.address_cache {
+                let now = now_china();
+                return cache
+                    .iter()
+                    .filter(|h| {
+                        // 检查缓存是否在365天内
+                        if let Ok(cached_time) = parse_datetime(&h.cached_at) {
+                            let duration = now.signed_duration_since(cached_time);
+                            duration.num_days() <= 365
+                        } else {
+                            false
+                        }
+                    })
+                    .cloned()
+                    .collect();
+            }
+        }
+        Vec::new()
     }
 }
 

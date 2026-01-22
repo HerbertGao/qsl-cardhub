@@ -338,3 +338,52 @@ pub fn delete_card(id: &str) -> Result<(), AppError> {
     log::info!("✅ 删除卡片成功: {}", id);
     Ok(())
 }
+
+/// 保存地址到卡片
+pub fn save_card_address(
+    card_id: &str,
+    source: String,
+    chinese_address: Option<String>,
+    english_address: Option<String>,
+    name: Option<String>,
+    mail_method: Option<String>,
+    updated_at: Option<String>,
+) -> Result<Card, AppError> {
+    let conn = get_connection()?;
+
+    // 获取卡片
+    let mut card = get_card(card_id)?
+        .ok_or_else(|| AppError::ProfileNotFound(format!("卡片不存在: {}", card_id)))?;
+
+    // 使用 Card 的方法添加或更新地址
+    card.add_or_update_address(
+        source,
+        chinese_address,
+        english_address,
+        name,
+        mail_method,
+        updated_at,
+    );
+
+    // 序列化 metadata
+    let metadata_json = if let Some(ref metadata) = card.metadata {
+        Some(serde_json::to_string(metadata)
+            .map_err(|e| AppError::Other(format!("序列化元数据失败: {}", e)))?)
+    } else {
+        None
+    };
+
+    let card_updated_at = format_datetime(&now_china());
+
+    // 更新数据库
+    conn.execute(
+        "UPDATE cards SET metadata = ?1, updated_at = ?2 WHERE id = ?3",
+        rusqlite::params![metadata_json, card_updated_at, card_id],
+    )
+    .map_err(|e| AppError::Other(format!("更新卡片失败: {}", e)))?;
+
+    log::info!("✅ 保存地址到卡片成功: {}", card_id);
+
+    // 返回更新后的卡片
+    get_card(card_id)?.ok_or_else(|| AppError::Other("更新后无法获取卡片".to_string()))
+}

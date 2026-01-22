@@ -2,103 +2,107 @@
   <div class="card-management-view">
     <el-container>
       <!-- 左侧项目列表面板 -->
-      <el-aside :width="sidebarCollapsed ? '0px' : '240px'" class="project-panel"
-                :class="{ collapsed: sidebarCollapsed }">
+      <el-aside
+        :width="sidebarCollapsed ? '0px' : '240px'"
+        class="project-panel"
+        :class="{ collapsed: sidebarCollapsed }"
+      >
         <ProjectList
-            v-show="!sidebarCollapsed"
-            :projects="projects"
-            :selectedProjectId="selectedProjectId"
-            :loading="projectLoading"
-            @select="handleSelectProject"
-            @create="handleCreateProject"
-            @rename="handleRenameProject"
-            @delete="handleDeleteProject"
+          v-show="!sidebarCollapsed"
+          :projects="projects"
+          :selected-project-id="selectedProjectId"
+          :loading="projectLoading"
+          @select="handleSelectProject"
+          @create="handleCreateProject"
+          @rename="handleRenameProject"
+          @delete="handleDeleteProject"
         />
       </el-aside>
 
       <!-- 折叠/展开按钮 -->
       <div
-          class="collapse-btn"
-          :style="{ left: sidebarCollapsed ? '0px' : '240px' }"
-          @click="toggleSidebar"
-          :title="sidebarCollapsed ? '展开项目列表' : '折叠项目列表'"
+        class="collapse-btn"
+        :style="{ left: sidebarCollapsed ? '0px' : '240px' }"
+        :title="sidebarCollapsed ? '展开项目列表' : '折叠项目列表'"
+        @click="toggleSidebar"
       >
         <el-icon>
-          <DArrowLeft v-if="!sidebarCollapsed"/>
-          <DArrowRight v-else/>
+          <DArrowLeft v-if="!sidebarCollapsed" />
+          <DArrowRight v-else />
         </el-icon>
       </div>
 
       <!-- 右侧卡片列表面板 -->
       <el-main class="card-panel">
         <CardListPlaceholder
-            v-if="!selectedProjectId"
-            message="请在左侧选择一个转卡"
+          v-if="!selectedProjectId"
+          message="请在左侧选择一个转卡"
         />
         <CardList
-            v-else
-            :cards="cards"
-            :total="cardTotal"
-            :page="cardPage"
-            :pageSize="cardPageSize"
-            :loading="cardLoading"
-            @add="handleAddCard"
-            @view="handleViewCard"
-            @distribute="handleDistributeCard"
-            @return="handleReturnCard"
-            @delete="handleDeleteCard"
-            @search="handleSearchCard"
-            @filter="handleFilterCard"
-            @page-change="handlePageChange"
+          v-else
+          :cards="cards"
+          :total="cardTotal"
+          :page="cardPage"
+          :page-size="cardPageSize"
+          :loading="cardLoading"
+          @add="handleAddCard"
+          @view="handleViewCard"
+          @distribute="handleDistributeCard"
+          @return="handleReturnCard"
+          @delete="handleDeleteCard"
+          @search="handleSearchCard"
+          @filter="handleFilterCard"
+          @page-change="handlePageChange"
         />
       </el-main>
     </el-container>
 
     <!-- 项目弹窗 -->
     <ProjectDialog
-        v-model:visible="projectDialogVisible"
-        :mode="projectDialogMode"
-        :project="editingProject"
-        @confirm="handleProjectDialogConfirm"
+      v-model:visible="projectDialogVisible"
+      :mode="projectDialogMode"
+      :project="editingProject"
+      @confirm="handleProjectDialogConfirm"
     />
 
     <!-- 卡片录入弹窗 -->
     <CardInputDialog
-        ref="cardInputDialogRef"
-        v-model:visible="cardInputDialogVisible"
-        :projects="projects"
-        :preselectedProjectId="selectedProjectId"
-        @confirm="handleCardInputConfirm"
+      ref="cardInputDialogRef"
+      v-model:visible="cardInputDialogVisible"
+      :projects="projects"
+      :preselected-project-id="selectedProjectId"
+      @confirm="handleCardInputConfirm"
     />
 
     <!-- 分发弹窗 -->
     <DistributeDialog
-        v-model:visible="distributeDialogVisible"
-        :card="operatingCard"
-        @confirm="handleDistributeConfirm"
+      v-model:visible="distributeDialogVisible"
+      :card="operatingCard"
+      @confirm="handleDistributeConfirm"
     />
 
     <!-- 退卡弹窗 -->
     <ReturnDialog
-        v-model:visible="returnDialogVisible"
-        :card="operatingCard"
-        @confirm="handleReturnConfirm"
+      v-model:visible="returnDialogVisible"
+      :card="operatingCard"
+      @confirm="handleReturnConfirm"
     />
 
     <!-- 卡片详情弹窗 -->
     <CardDetailDialog
-        v-model:visible="cardDetailDialogVisible"
-        :card="operatingCard"
-        @distribute="handleDistributeCard"
-        @return="handleReturnCard"
+      v-model:visible="cardDetailDialogVisible"
+      :card="operatingCard"
+      @distribute="handleDistributeCard"
+      @return="handleReturnCard"
     />
   </div>
 </template>
 
-<script setup>
-import {computed, onMounted, ref, watch} from 'vue'
-import {invoke} from '@tauri-apps/api/core'
-import {ElMessage, ElMessageBox} from 'element-plus'
+<script setup lang="ts">
+import { onMounted, ref, watch } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import type { ProjectWithStats, CardWithProject, PagedCards } from '@/types/models'
 import ProjectList from '@/components/projects/ProjectList.vue'
 import ProjectDialog from '@/components/projects/ProjectDialog.vue'
 import CardListPlaceholder from '@/components/cards/CardListPlaceholder.vue'
@@ -109,49 +113,44 @@ import ReturnDialog from '@/components/cards/ReturnDialog.vue'
 import CardDetailDialog from '@/components/cards/CardDetailDialog.vue'
 
 // ==================== 侧边栏状态 ====================
-const sidebarCollapsed = ref(false)
+const sidebarCollapsed = ref<boolean>(false)
 
-const toggleSidebar = () => {
+const toggleSidebar = (): void => {
   sidebarCollapsed.value = !sidebarCollapsed.value
 }
 
 // ==================== 项目相关状态 ====================
-const projects = ref([])
-const selectedProjectId = ref(null)
-const projectLoading = ref(false)
+const projects = ref<ProjectWithStats[]>([])
+const selectedProjectId = ref<string | null>(null)
+const projectLoading = ref<boolean>(false)
 
 // 项目弹窗状态
-const projectDialogVisible = ref(false)
-const projectDialogMode = ref('create')
-const editingProject = ref(null)
-
-// 选中的项目
-const selectedProject = computed(() => {
-  return projects.value.find(p => p.id === selectedProjectId.value)
-})
+const projectDialogVisible = ref<boolean>(false)
+const projectDialogMode = ref<'create' | 'edit'>('create')
+const editingProject = ref<ProjectWithStats | null>(null)
 
 // ==================== 卡片相关状态 ====================
-const cards = ref([])
-const cardTotal = ref(0)
-const cardPage = ref(1)
-const cardPageSize = ref(20)
-const cardLoading = ref(false)
-const cardSearchKeyword = ref('')
-const cardStatusFilter = ref('')
+const cards = ref<CardWithProject[]>([])
+const cardTotal = ref<number>(0)
+const cardPage = ref<number>(1)
+const cardPageSize = ref<number>(20)
+const cardLoading = ref<boolean>(false)
+const cardSearchKeyword = ref<string>('')
+const cardStatusFilter = ref<string>('')
 
 // 卡片弹窗状态
-const cardInputDialogRef = ref(null)
-const cardInputDialogVisible = ref(false)
-const distributeDialogVisible = ref(false)
-const returnDialogVisible = ref(false)
-const cardDetailDialogVisible = ref(false)
-const operatingCard = ref(null)
+const cardInputDialogRef = ref<any>(null)
+const cardInputDialogVisible = ref<boolean>(false)
+const distributeDialogVisible = ref<boolean>(false)
+const returnDialogVisible = ref<boolean>(false)
+const cardDetailDialogVisible = ref<boolean>(false)
+const operatingCard = ref<CardWithProject | null>(null)
 
 // ==================== 项目相关方法 ====================
-const loadProjects = async () => {
+const loadProjects = async (): Promise<void> => {
   projectLoading.value = true
   try {
-    const result = await invoke('list_projects_cmd')
+    const result = await invoke<ProjectWithStats[]>('list_projects_cmd')
     projects.value = result
   } catch (error) {
     ElMessage.error('加载项目列表失败: ' + error)
@@ -160,23 +159,23 @@ const loadProjects = async () => {
   }
 }
 
-const handleSelectProject = (projectId) => {
+const handleSelectProject = (projectId: string): void => {
   selectedProjectId.value = projectId
 }
 
-const handleCreateProject = () => {
+const handleCreateProject = (): void => {
   projectDialogMode.value = 'create'
   editingProject.value = null
   projectDialogVisible.value = true
 }
 
-const handleRenameProject = (project) => {
+const handleRenameProject = (project: ProjectWithStats): void => {
   projectDialogMode.value = 'edit'
   editingProject.value = project
   projectDialogVisible.value = true
 }
 
-const handleDeleteProject = async (project) => {
+const handleDeleteProject = async (project: ProjectWithStats): Promise<void> => {
   try {
     await ElMessageBox.confirm(
         `删除转卡将同时删除所有关联卡片，是否继续？`,
@@ -203,30 +202,30 @@ const handleDeleteProject = async (project) => {
   }
 }
 
-const handleProjectDialogConfirm = async (data) => {
+const handleProjectDialogConfirm = async (data: { name: string }): Promise<void> => {
   try {
     if (projectDialogMode.value === 'create') {
-      await invoke('create_project_cmd', {name: data.name})
+      await invoke('create_project_cmd', { name: data.name })
       ElMessage.success('创建成功')
     } else {
-      await invoke('update_project_cmd', {id: editingProject.value.id, name: data.name})
+      await invoke('update_project_cmd', { id: editingProject.value!.id, name: data.name })
       ElMessage.success('更新成功')
     }
 
     projectDialogVisible.value = false
     await loadProjects()
   } catch (error) {
-    ElMessage.error(error)
+    ElMessage.error(String(error))
   }
 }
 
 // ==================== 卡片相关方法 ====================
-const loadCards = async () => {
+const loadCards = async (): Promise<void> => {
   if (!selectedProjectId.value) return
 
   cardLoading.value = true
   try {
-    const result = await invoke('list_cards_cmd', {
+    const result = await invoke<PagedCards>('list_cards_cmd', {
       projectId: selectedProjectId.value,
       callsign: cardSearchKeyword.value || null,
       status: cardStatusFilter.value || null,
@@ -242,26 +241,26 @@ const loadCards = async () => {
   }
 }
 
-const handleAddCard = () => {
+const handleAddCard = (): void => {
   cardInputDialogVisible.value = true
 }
 
-const handleViewCard = (card) => {
+const handleViewCard = (card: CardWithProject): void => {
   operatingCard.value = card
   cardDetailDialogVisible.value = true
 }
 
-const handleDistributeCard = (card) => {
+const handleDistributeCard = (card: CardWithProject): void => {
   operatingCard.value = card
   distributeDialogVisible.value = true
 }
 
-const handleReturnCard = (card) => {
+const handleReturnCard = (card: CardWithProject): void => {
   operatingCard.value = card
   returnDialogVisible.value = true
 }
 
-const handleDeleteCard = async (card) => {
+const handleDeleteCard = async (card: CardWithProject): Promise<void> => {
   try {
     await ElMessageBox.confirm(
         `确定要删除此卡片吗？`,
@@ -285,25 +284,25 @@ const handleDeleteCard = async (card) => {
   }
 }
 
-const handleSearchCard = (keyword) => {
+const handleSearchCard = (keyword: string): void => {
   cardSearchKeyword.value = keyword
   cardPage.value = 1
   loadCards()
 }
 
-const handleFilterCard = (status) => {
+const handleFilterCard = (status: string): void => {
   cardStatusFilter.value = status
   cardPage.value = 1
   loadCards()
 }
 
-const handlePageChange = ({page, pageSize}) => {
+const handlePageChange = ({ page, pageSize }: { page: number; pageSize: number }): void => {
   cardPage.value = page
   cardPageSize.value = pageSize
   loadCards()
 }
 
-const handleCardInputConfirm = async (data) => {
+const handleCardInputConfirm = async (data: any): Promise<void> => {
   try {
     await invoke('create_card_cmd', {
       projectId: data.projectId,
@@ -326,7 +325,7 @@ const handleCardInputConfirm = async (data) => {
   }
 }
 
-const handleDistributeConfirm = async (data) => {
+const handleDistributeConfirm = async (data: any): Promise<void> => {
   try {
     await invoke('distribute_card_cmd', {
       id: data.id,
@@ -343,7 +342,7 @@ const handleDistributeConfirm = async (data) => {
   }
 }
 
-const handleReturnConfirm = async (data) => {
+const handleReturnConfirm = async (data: any): Promise<void> => {
   try {
     await invoke('return_card_cmd', {
       id: data.id,
@@ -360,7 +359,7 @@ const handleReturnConfirm = async (data) => {
 }
 
 // 监听项目选择变化，加载卡片
-watch(selectedProjectId, (newId) => {
+watch(selectedProjectId, (newId: string | null): void => {
   if (newId) {
     cardPage.value = 1
     cardSearchKeyword.value = ''

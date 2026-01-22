@@ -70,10 +70,10 @@
 #### 场景：密码加密存储
 
 - **当** 用户勾选"记住密码"并保存配置
-- **那么** 系统必须使用 `keyring` crate 存储密码
-- **并且** 密码存储键为：`qsl-cardhub:database:password`
-- **并且** 读取密码时，从 keyring 获取并解密
-- **并且** 如果 keyring 不可用（Linux 某些环境），使用本地加密文件存储
+- **那么** 系统必须使用凭据加密存储系统保存密码
+- **并且** 存储键为：`qsl-cardhub:database:password`
+- **并且** 密码不得明文存储（详见 **local-credential-storage** 规范）
+- **并且** 读取密码时，从凭据存储系统获取并解密
 
 #### 场景：配置文件格式
 
@@ -117,7 +117,9 @@
 - **那么** 系统必须向云端发送登录请求
 - **并且** 请求格式为 `POST /auth/login`，body 为 `{ "username": "...", "password": "..." }`
 - **并且** 如果登录成功，云端返回 JWT Token
-- **并且** 系统必须存储 Token（内存 + 可选持久化）
+- **并且** 系统必须将 Token 存储到内存中
+- **并且** 如果用户勾选"保持登录"，可选择持久化存储
+- **并且** 持久化时使用凭据加密存储系统，存储键为 `qsl-cardhub:auth:jwt_token`
 - **并且** 后续所有 API 请求必须在 Header 中携带 `Authorization: Bearer {token}`
 
 #### 场景：Token 自动刷新
@@ -296,15 +298,17 @@
 
 - **card-management-core**（Phase 1）：卡片管理基础（依赖）
 - **card-entry-and-management**（Phase 2）：卡片录入和管理（依赖）
+- **local-credential-storage**（Phase 2）：本地凭据加密存储（用于安全存储数据库密码和 JWT Token）
 
 ## 技术约束
 
 - **云数据库**：仅支持 PostgreSQL（MySQL 可后续添加）
 - **认证协议**：JWT Token
-- **密码加密**：bcrypt
-- **密码存储**：keyring（系统钥匙串）或加密文件
+- **服务端密码加密**：bcrypt
+- **客户端密码存储**：使用凭据加密存储系统（详见 **local-credential-storage** 规范）
 - **数据隔离**：基于 user_id 的行级隔离
 - **迁移策略**：全量迁移，不支持增量同步
+- **配置文件**：`config/database.toml`（不包含密码）
 
 ## 向后兼容性
 

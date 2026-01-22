@@ -8,3 +8,7 @@ pub mod platform;
 pub mod printer;
 pub mod profile;
 pub mod projects;
+pub mod qrz_cn;
+pub mod qrz_com;
+pub mod qrz_herbertgao;
+pub mod security;

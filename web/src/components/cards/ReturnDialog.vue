@@ -1,19 +1,37 @@
 <template>
   <el-dialog
-      v-model="dialogVisible"
-      title="退回卡片"
-      width="500px"
-      :close-on-click-modal="false"
-      @close="handleClose"
+    v-model="dialogVisible"
+    title="退回卡片"
+    width="500px"
+    :close-on-click-modal="false"
+    @close="handleClose"
   >
-    <div class="detail-section" v-if="card">
-      <div class="section-title">基本信息</div>
-      <el-descriptions :column="1" size="small" border>
-        <el-descriptions-item label="转卡项目">{{ card.project_name }}</el-descriptions-item>
-        <el-descriptions-item label="呼号">{{ card.callsign }}</el-descriptions-item>
-        <el-descriptions-item label="数量">{{ card.qty }}</el-descriptions-item>
+    <div
+      v-if="card"
+      class="detail-section"
+    >
+      <div class="section-title">
+        基本信息
+      </div>
+      <el-descriptions
+        :column="1"
+        size="small"
+        border
+      >
+        <el-descriptions-item label="转卡项目">
+          {{ card.project_name }}
+        </el-descriptions-item>
+        <el-descriptions-item label="呼号">
+          {{ card.callsign }}
+        </el-descriptions-item>
+        <el-descriptions-item label="数量">
+          {{ card.qty }}
+        </el-descriptions-item>
         <el-descriptions-item label="状态">
-          <el-tag :type="getStatusType(card.status)" size="small">
+          <el-tag
+            :type="getStatusType(card.status)"
+            size="small"
+          >
             {{ getStatusLabel(card.status) }}
           </el-tag>
         </el-descriptions-item>
@@ -24,44 +42,75 @@
     </div>
 
     <div class="detail-section">
-      <div class="section-title">退回信息</div>
+      <div class="section-title">
+        退回信息
+      </div>
       <el-form
-          ref="formRef"
-          :model="form"
-          :rules="rules"
-          label-width="80px"
+        ref="formRef"
+        :model="form"
+        :rules="rules"
+        label-width="80px"
       >
-        <el-form-item label="处理方式" prop="method">
-          <el-radio-group v-model="form.method" class="radio-group-vertical">
-            <el-radio value="NOT FOUND" border>NOT FOUND</el-radio>
-            <el-radio value="CALLSIGN INVALID" border>CALLSIGN INVALID</el-radio>
-            <el-radio value="REFUSED" border>REFUSED</el-radio>
-            <el-radio value="OTHER" border>OTHER</el-radio>
+        <el-form-item
+          label="处理方式"
+          prop="method"
+        >
+          <el-radio-group
+            v-model="form.method"
+            class="radio-group-vertical"
+          >
+            <el-radio
+              value="NOT FOUND"
+              border
+            >
+              NOT FOUND
+            </el-radio>
+            <el-radio
+              value="CALLSIGN INVALID"
+              border
+            >
+              CALLSIGN INVALID
+            </el-radio>
+            <el-radio
+              value="REFUSED"
+              border
+            >
+              REFUSED
+            </el-radio>
+            <el-radio
+              value="OTHER"
+              border
+            >
+              OTHER
+            </el-radio>
           </el-radio-group>
         </el-form-item>
 
-        <el-form-item label="备注" prop="remarks">
+        <el-form-item
+          label="备注"
+          prop="remarks"
+        >
           <el-input
-              v-model="form.remarks"
-              type="textarea"
-              :rows="2"
-              placeholder="可选，填写退回备注"
+            v-model="form.remarks"
+            type="textarea"
+            :rows="2"
+            placeholder="可选，填写退回备注"
           />
           <div style="margin-top: 4px">
             <el-button
-                type="primary"
-                link
-                size="small"
-                @click="handleCopy"
+              type="primary"
+              link
+              size="small"
+              @click="handleCopy"
             >
               <el-icon><CopyDocument /></el-icon>
               复制
             </el-button>
             <el-button
-                type="primary"
-                link
-                size="small"
-                @click="handlePaste"
+              type="primary"
+              link
+              size="small"
+              @click="handlePaste"
             >
               <el-icon><DocumentCopy /></el-icon>
               粘贴
@@ -72,57 +121,80 @@
     </div>
 
     <template #footer>
-      <el-button @click="dialogVisible = false">取消</el-button>
-      <el-button type="warning" @click="handleSubmit" :loading="submitting">
+      <el-button @click="dialogVisible = false">
+        取消
+      </el-button>
+      <el-button
+        type="warning"
+        :loading="submitting"
+        @click="handleSubmit"
+      >
         确认退回
       </el-button>
     </template>
   </el-dialog>
 </template>
 
-<script setup>
-import {computed, nextTick, ref, watch} from 'vue'
+<script setup lang="ts">
+import { computed, nextTick, ref, watch } from 'vue'
+import type { FormInstance, FormRules } from 'element-plus'
+import type { CardWithProject, CardStatus } from '@/types/models'
 
-const props = defineProps({
-  visible: {
-    type: Boolean,
-    default: false
-  },
-  card: {
-    type: Object,
-    default: null
-  }
+interface Props {
+  visible: boolean
+  card: CardWithProject | null
+}
+
+interface ReturnFormData {
+  method: string
+  remarks: string
+}
+
+interface ConfirmData {
+  id: string
+  method: string
+  remarks: string | null
+}
+
+interface Emits {
+  (e: 'update:visible', value: boolean): void
+  (e: 'confirm', data: ConfirmData): void
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  visible: false,
+  card: null
 })
 
-const emit = defineEmits(['update:visible', 'confirm'])
+const emit = defineEmits<Emits>()
 
 // 表单引用
-const formRef = ref(null)
+const formRef = ref<FormInstance | null>(null)
 
 // 表单数据
-const form = ref({
+const form = ref<ReturnFormData>({
   method: 'NOT FOUND',
   remarks: ''
 })
 
 // 提交状态
-const submitting = ref(false)
+const submitting = ref<boolean>(false)
 
 // 表单验证规则
-const rules = {
+const rules: FormRules<ReturnFormData> = {
   method: [
-    {required: true, message: '请选择处理方式', trigger: 'change'}
+    { required: true, message: '请选择处理方式', trigger: 'change' }
   ]
 }
 
 // 双向绑定 visible
-const dialogVisible = computed({
-  get: () => props.visible,
-  set: (val) => emit('update:visible', val)
+const dialogVisible = computed<boolean>({
+  get: (): boolean => props.visible,
+  set: (val: boolean): void => emit('update:visible', val)
 })
 
 // 监听弹窗打开
-watch(() => props.visible, (newVal) => {
+watch(() => props.visible, (newVal: boolean): void => {
   if (newVal) {
     // 重置表单
     form.value = {
@@ -138,13 +210,13 @@ watch(() => props.visible, (newVal) => {
 })
 
 // 关闭弹窗
-const handleClose = () => {
+const handleClose = (): void => {
   submitting.value = false
 }
 
 // 获取状态标签类型
-const getStatusType = (status) => {
-  const types = {
+const getStatusType = (status: CardStatus): 'info' | 'success' | 'warning' => {
+  const types: Record<CardStatus, 'info' | 'success' | 'warning'> = {
     pending: 'info',
     distributed: 'success',
     returned: 'warning'
@@ -153,8 +225,8 @@ const getStatusType = (status) => {
 }
 
 // 获取状态标签文本
-const getStatusLabel = (status) => {
-  const labels = {
+const getStatusLabel = (status: CardStatus): string => {
+  const labels: Record<CardStatus, string> = {
     pending: '待分发',
     distributed: '已分发',
     returned: '已退回'
@@ -163,7 +235,7 @@ const getStatusLabel = (status) => {
 }
 
 // 格式化时间
-const formatDateTime = (datetime) => {
+const formatDateTime = (datetime: string | null | undefined): string => {
   if (!datetime) return '-'
   const date = new Date(datetime)
   return date.toLocaleString('zh-CN', {
@@ -177,7 +249,7 @@ const formatDateTime = (datetime) => {
 }
 
 // 复制备注内容到剪贴板
-const handleCopy = async () => {
+const handleCopy = async (): Promise<void> => {
   try {
     if (form.value.remarks) {
       await navigator.clipboard.writeText(form.value.remarks)
@@ -188,7 +260,7 @@ const handleCopy = async () => {
 }
 
 // 粘贴剪贴板内容
-const handlePaste = async () => {
+const handlePaste = async (): Promise<void> => {
   try {
     const text = await navigator.clipboard.readText()
     if (text) {
@@ -200,15 +272,15 @@ const handlePaste = async () => {
 }
 
 // 提交表单
-const handleSubmit = async () => {
+const handleSubmit = async (): Promise<void> => {
   if (submitting.value) return
 
   try {
-    await formRef.value.validate()
+    await formRef.value!.validate()
     submitting.value = true
 
     emit('confirm', {
-      id: props.card.id,
+      id: props.card!.id,
       method: form.value.method,
       remarks: form.value.remarks.trim() || null
     })

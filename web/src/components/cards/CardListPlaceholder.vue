@@ -1,20 +1,33 @@
 <template>
   <div class="card-list-placeholder">
-    <el-empty :description="displayMessage" :image-size="120">
+    <el-empty
+      :description="displayMessage"
+      :image-size="120"
+    >
       <template #image>
-        <el-icon :size="80" color="#c0c4cc">
-          <Box/>
+        <el-icon
+          :size="80"
+          color="#c0c4cc"
+        >
+          <Box />
         </el-icon>
       </template>
-      <template v-if="projectName" #description>
-        <p class="placeholder-project">项目：{{ projectName }}</p>
-        <p class="placeholder-message">{{ message }}</p>
+      <template
+        v-if="projectName"
+        #description
+      >
+        <p class="placeholder-project">
+          项目：{{ projectName }}
+        </p>
+        <p class="placeholder-message">
+          {{ message }}
+        </p>
       </template>
     </el-empty>
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import {computed} from 'vue'
 
 const props = defineProps({

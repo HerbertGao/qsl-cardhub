@@ -61,7 +61,10 @@ pub fn list_projects() -> Result<Vec<ProjectWithStats>, AppError> {
                 p.name,
                 p.created_at,
                 p.updated_at,
-                COALESCE(COUNT(c.id), 0) as card_count
+                COALESCE(COUNT(c.id), 0) as total_cards,
+                COALESCE(SUM(CASE WHEN c.status = 'pending' THEN 1 ELSE 0 END), 0) as pending_cards,
+                COALESCE(SUM(CASE WHEN c.status = 'distributed' THEN 1 ELSE 0 END), 0) as distributed_cards,
+                COALESCE(SUM(CASE WHEN c.status = 'returned' THEN 1 ELSE 0 END), 0) as returned_cards
             FROM projects p
             LEFT JOIN cards c ON p.id = c.project_id
             GROUP BY p.id
@@ -77,7 +80,10 @@ pub fn list_projects() -> Result<Vec<ProjectWithStats>, AppError> {
                 name: row.get(1)?,
                 created_at: row.get(2)?,
                 updated_at: row.get(3)?,
-                card_count: row.get(4)?,
+                total_cards: row.get(4)?,
+                pending_cards: row.get(5)?,
+                distributed_cards: row.get(6)?,
+                returned_cards: row.get(7)?,
             })
         })
         .map_err(|e| AppError::Other(format!("查询项目列表失败: {}", e)))?
