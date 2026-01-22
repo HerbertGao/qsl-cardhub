@@ -309,6 +309,14 @@
         取消
       </el-button>
       <el-button
+        type="success"
+        :disabled="!form.remarks"
+        @click="handlePrintWaybill"
+      >
+        <el-icon><Printer /></el-icon>
+        打印面单
+      </el-button>
+      <el-button
         type="primary"
         :loading="submitting"
         @click="handleSubmit"
@@ -316,6 +324,12 @@
         确认分发
       </el-button>
     </template>
+
+    <!-- 运单打印弹窗 -->
+    <WaybillPrintDialog
+      v-model:visible="waybillPrintDialogVisible"
+      :default-waybill-no="form.remarks"
+    />
   </el-dialog>
 </template>
 
@@ -325,6 +339,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import type { CardWithProject, CardStatus, AddressEntry } from '@/types/models'
+import WaybillPrintDialog from '@/components/cards/WaybillPrintDialog.vue'
 
 interface Props {
   visible: boolean
@@ -367,6 +382,9 @@ const form = ref<DistributeFormData>({
 
 // 提交状态
 const submitting = ref<boolean>(false)
+
+// 运单打印弹窗
+const waybillPrintDialogVisible = ref<boolean>(false)
 
 // 地址查询状态
 const querying = ref<boolean>(false)
@@ -691,6 +709,11 @@ const handlePaste = async (): Promise<void> => {
   } catch (error) {
     console.error('读取剪贴板失败:', error)
   }
+}
+
+// 打印面单
+const handlePrintWaybill = (): void => {
+  waybillPrintDialogVisible.value = true
 }
 
 // 提交表单

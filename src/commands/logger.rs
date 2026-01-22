@@ -80,3 +80,19 @@ pub fn get_log_file_path() -> Result<Option<String>, String> {
 
     Ok(path)
 }
+
+/// 前端日志记录
+///
+/// # 参数
+/// - `level`: 日志级别 (debug/info/warning/error)
+/// - `message`: 日志消息
+#[tauri::command]
+pub fn log_from_frontend(level: String, message: String) {
+    match level.to_lowercase().as_str() {
+        "debug" => log::debug!("[前端] {}", message),
+        "info" => log::info!("[前端] {}", message),
+        "warning" | "warn" => log::warn!("[前端] {}", message),
+        "error" => log::error!("[前端] {}", message),
+        _ => log::info!("[前端] {}", message),
+    }
+}

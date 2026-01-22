@@ -1,6 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "qsl-cardhub",
+  "version": "0.3.0",
   "identifier": "com.herbertgao.qsl-cardhub",
   "build": {
     "devUrl": "http://localhost:5173",
@@ -31,7 +32,8 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["dmg", "msi"],
+    "targets": ["dmg", "nsis", "msi"],
+    "createUpdaterArtifacts": true,
     "icon": [
       "assets/icons/32x32.png",
       "assets/icons/128x128.png",
@@ -45,7 +47,29 @@
     "shortDescription": "QSL 卡片打印工具",
     "longDescription": "QSL CardHub 是一个专业的 QSL 卡片设计和打印工具，支持自定义模板、批量打印和多种导出格式。",
     "resources": [
-      "config/templates/*"
-    ]
+      "config/templates/*",
+      "resources/pdfium/**/*"
+    ],
+    "windows": {
+      "nsis": {
+        "installerIcon": "assets/icons/icon.ico",
+        "headerImage": null,
+        "sidebarImage": null,
+        "installMode": "currentUser",
+        "languages": ["SimpChinese", "English"],
+        "displayLanguageSelector": false
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJDMkY3MjI1QzM5MEY2RDEKUldUUjlwRERKWEl2dk80R0FmeU1uR3dQd2V1cDJNNUFKSUVUbXhYMHB2REtSWVRGK0QxanFTR3cK",
+      "endpoints": [
+        "https://github.com/HerbertGao/QSL-CardHub/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }
