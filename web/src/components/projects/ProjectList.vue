@@ -2,54 +2,82 @@
   <div class="project-list">
     <!-- 顶部新建按钮 -->
     <div class="project-list-header">
-      <el-button type="primary" @click="$emit('create')" style="width: 100%">
+      <el-button
+        type="primary"
+        style="width: 100%"
+        @click="$emit('create')"
+      >
         <el-icon>
-          <Plus/>
+          <Plus />
         </el-icon>
         <span>新建转卡</span>
       </el-button>
     </div>
 
     <!-- 转卡列表 -->
-    <div class="project-list-content" v-loading="loading">
-      <div v-if="projects.length === 0 && !loading" class="empty-tip">
-        <el-empty description="暂无转卡，请点击新建转卡" :image-size="80"/>
+    <div
+      v-loading="loading"
+      class="project-list-content"
+    >
+      <div
+        v-if="projects.length === 0 && !loading"
+        class="empty-tip"
+      >
+        <el-empty
+          description="暂无转卡，请点击新建转卡"
+          :image-size="80"
+        />
       </div>
 
       <div
-          v-for="project in projects"
-          :key="project.id"
-          class="project-item"
-          :class="{ 'is-selected': project.id === selectedProjectId }"
-          @click="$emit('select', project.id)"
-          @contextmenu.prevent="showContextMenu($event, project)"
+        v-for="project in projects"
+        :key="project.id"
+        class="project-item"
+        :class="{ 'is-selected': project.id === selectedProjectId }"
+        @click="$emit('select', project.id)"
+        @contextmenu.prevent="showContextMenu($event, project)"
       >
         <div class="project-item-icon">
           <el-icon>
-            <Box/>
+            <Box />
           </el-icon>
         </div>
         <div class="project-item-info">
-          <div class="project-item-name">{{ project.name }}</div>
-          <div class="project-item-count">{{ project.card_count }} 张卡片</div>
+          <div class="project-item-name">
+            {{ project.name }}
+          </div>
+          <div class="project-item-count">
+            {{ project.total_cards || 0 }} 张卡片
+          </div>
         </div>
-        <el-dropdown trigger="click" @command="handleCommand($event, project)">
-          <el-button type="" link class="project-item-more" @click.stop>
+        <el-dropdown
+          trigger="click"
+          @command="handleCommand($event, project)"
+        >
+          <el-button
+            type=""
+            link
+            class="project-item-more"
+            @click.stop
+          >
             <el-icon>
-              <MoreFilled/>
+              <MoreFilled />
             </el-icon>
           </el-button>
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item command="rename">
                 <el-icon>
-                  <Edit/>
+                  <Edit />
                 </el-icon>
                 重命名
               </el-dropdown-item>
-              <el-dropdown-item command="delete" divided>
+              <el-dropdown-item
+                command="delete"
+                divided
+              >
                 <el-icon>
-                  <Delete/>
+                  <Delete />
                 </el-icon>
                 删除
               </el-dropdown-item>
@@ -66,25 +94,31 @@
   </div>
 </template>
 
-<script setup>
-const props = defineProps({
-  projects: {
-    type: Array,
-    default: () => []
-  },
-  selectedProjectId: {
-    type: String,
-    default: null
-  },
-  loading: {
-    type: Boolean,
-    default: false
-  }
+<script setup lang="ts">
+import type { ProjectWithStats } from '@/types/models'
+
+interface Props {
+  projects: ProjectWithStats[]
+  selectedProjectId: string | null
+  loading: boolean
+}
+
+interface Emits {
+  (e: 'select', projectId: string): void
+  (e: 'create'): void
+  (e: 'rename', project: ProjectWithStats): void
+  (e: 'delete', project: ProjectWithStats): void
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  projects: () => [],
+  selectedProjectId: null,
+  loading: false
 })
 
-const emit = defineEmits(['select', 'create', 'rename', 'delete'])
+const emit = defineEmits<Emits>()
 
-const handleCommand = (command, project) => {
+const handleCommand = (command: string, project: ProjectWithStats): void => {
   if (command === 'rename') {
     emit('rename', project)
   } else if (command === 'delete') {
@@ -92,7 +126,7 @@ const handleCommand = (command, project) => {
   }
 }
 
-const showContextMenu = (event, project) => {
+const showContextMenu = (_event: MouseEvent, _project: ProjectWithStats): void => {
   // 右键菜单可以后续扩展
 }
 </script>

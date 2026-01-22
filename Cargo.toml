@@ -23,6 +23,8 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 toml = "0.9"
 base64 = "0.22"
+urlencoding = "2.1"
+percent-encoding = "2.3"
 
 # 异步运行时
 tokio = { version = "1.0", features = ["full"] }
@@ -49,7 +51,7 @@ dirs = "6.0"
 
 # 图像处理（PNG 生成）
 image = "0.25"
-imageproc = "0.25"
+imageproc = "0.26"
 # PDF 生成（暂时禁用，等待版本兼容性问题解决）
 # printpdf = { version = "0.7", features = ["embedded_images"] }
 
@@ -65,6 +67,19 @@ regex = "1.0"
 
 # SQLite 数据库
 rusqlite = { version = "0.32", features = ["bundled"] }
+
+# 凭据加密存储
+keyring = "3.0"
+aes-gcm = "0.10"
+pbkdf2 = "0.12"
+rand = "0.8"
+sha2 = "0.10"
+hostname = "0.4"
+
+# HTTP 客户端
+reqwest = { version = "0.12", features = ["blocking", "cookies", "json"] }
+scraper = "0.22"
+encoding_rs = "0.8"
 
 # Windows 平台依赖
 [target.'cfg(windows)'.dependencies]

@@ -10,12 +10,14 @@ mod db;
 mod error;
 mod logger;
 mod printer;
+mod qrz;
+mod security;
 mod utils;
 
 use commands::{
     cards::{
         create_card_cmd, delete_card_cmd, distribute_card_cmd, get_card_cmd, list_cards_cmd,
-        return_card_cmd,
+        return_card_cmd, save_card_address_cmd,
     },
     logger::{clear_logs, export_logs, get_log_file_path, get_logs},
     platform::get_platform_info,
@@ -28,6 +30,18 @@ use commands::{
     projects::{
         create_project_cmd, delete_project_cmd, get_project_cmd, list_projects_cmd,
         update_project_cmd,
+    },
+    qrz_cn::{
+        qrz_check_login_status, qrz_clear_credentials, qrz_load_credentials, qrz_query_callsign,
+        qrz_save_and_login, qrz_test_connection,
+    },
+    qrz_com::{
+        qrz_com_check_login_status, qrz_com_clear_credentials, qrz_com_load_credentials,
+        qrz_com_query_callsign, qrz_com_save_and_login, qrz_com_test_connection,
+    },
+    qrz_herbertgao::qrz_herbertgao_query_callsign,
+    security::{
+        check_keyring_available, clear_credentials, load_credentials, save_credentials,
     },
 };
 use config::ProfileManager;
@@ -121,6 +135,28 @@ fn main() {
             distribute_card_cmd,
             return_card_cmd,
             delete_card_cmd,
+            save_card_address_cmd,
+            // 安全凭据管理
+            save_credentials,
+            load_credentials,
+            clear_credentials,
+            check_keyring_available,
+            // QRZ.cn 集成
+            qrz_save_and_login,
+            qrz_load_credentials,
+            qrz_clear_credentials,
+            qrz_query_callsign,
+            qrz_check_login_status,
+            qrz_test_connection,
+            // QRZ.com 集成
+            qrz_com_save_and_login,
+            qrz_com_load_credentials,
+            qrz_com_clear_credentials,
+            qrz_com_query_callsign,
+            qrz_com_check_login_status,
+            qrz_com_test_connection,
+            // QRZ.herbertgao.me 集成
+            qrz_herbertgao_query_callsign,
         ])
         .run(tauri::generate_context!())
         .expect("运行 Tauri 应用时出错");

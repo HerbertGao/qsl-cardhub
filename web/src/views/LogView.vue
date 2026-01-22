@@ -3,21 +3,30 @@
     <div class="header-section">
       <h1>日志查看</h1>
       <div class="header-actions">
-        <el-button @click="refreshLogs" :loading="loading">
+        <el-button
+          :loading="loading"
+          @click="refreshLogs"
+        >
           <el-icon>
-            <Refresh/>
+            <Refresh />
           </el-icon>
           刷新
         </el-button>
-        <el-button @click="clearLogs" type="warning">
+        <el-button
+          type="warning"
+          @click="clearLogs"
+        >
           <el-icon>
-            <Delete/>
+            <Delete />
           </el-icon>
           清空
         </el-button>
-        <el-button @click="exportLogs" type="primary">
+        <el-button
+          type="primary"
+          @click="exportLogs"
+        >
           <el-icon>
-            <Download/>
+            <Download />
           </el-icon>
           导出
         </el-button>
@@ -29,39 +38,77 @@
       <div class="filter-row">
         <div class="filter-item">
           <label>日志级别：</label>
-          <el-radio-group v-model="selectedLevel" @change="refreshLogs">
-            <el-radio-button label="">全部</el-radio-button>
-            <el-radio-button label="debug">DEBUG</el-radio-button>
-            <el-radio-button label="info">INFO</el-radio-button>
-            <el-radio-button label="warning">WARNING</el-radio-button>
-            <el-radio-button label="error">ERROR</el-radio-button>
+          <el-radio-group
+            v-model="selectedLevel"
+            @change="refreshLogs"
+          >
+            <el-radio-button label="">
+              全部
+            </el-radio-button>
+            <el-radio-button label="debug">
+              DEBUG
+            </el-radio-button>
+            <el-radio-button label="info">
+              INFO
+            </el-radio-button>
+            <el-radio-button label="warning">
+              WARNING
+            </el-radio-button>
+            <el-radio-button label="error">
+              ERROR
+            </el-radio-button>
           </el-radio-group>
         </div>
 
         <div class="filter-item">
           <label>显示数量：</label>
-          <el-select v-model="logLimit" @change="refreshLogs" style="width: 120px">
-            <el-option label="50 条" :value="50"/>
-            <el-option label="100 条" :value="100"/>
-            <el-option label="200 条" :value="200"/>
-            <el-option label="500 条" :value="500"/>
-            <el-option label="全部" :value="null"/>
+          <el-select
+            v-model="logLimit"
+            style="width: 120px"
+            @change="refreshLogs"
+          >
+            <el-option
+              label="50 条"
+              :value="50"
+            />
+            <el-option
+              label="100 条"
+              :value="100"
+            />
+            <el-option
+              label="200 条"
+              :value="200"
+            />
+            <el-option
+              label="500 条"
+              :value="500"
+            />
+            <el-option
+              label="全部"
+              :value="null"
+            />
           </el-select>
         </div>
 
         <div class="filter-item">
           <el-switch
-              v-model="autoRefresh"
-              active-text="自动刷新"
-              @change="toggleAutoRefresh"
+            v-model="autoRefresh"
+            active-text="自动刷新"
+            @change="toggleAutoRefresh"
           />
         </div>
       </div>
 
-      <div class="log-file-info" v-if="logFilePath">
-        <el-text size="small" type="info">
+      <div
+        v-if="logFilePath"
+        class="log-file-info"
+      >
+        <el-text
+          size="small"
+          type="info"
+        >
           <el-icon>
-            <Document/>
+            <Document />
           </el-icon>
           日志文件：{{ logFilePath }}
         </el-text>
@@ -71,39 +118,64 @@
     <!-- 日志表格 -->
     <el-card style="margin-top: 20px">
       <el-table
-          :data="logs"
-          stripe
-          style="width: 100%"
-          :max-height="600"
-          v-loading="loading"
+        v-loading="loading"
+        :data="logs"
+        stripe
+        style="width: 100%"
+        :max-height="600"
       >
-        <el-table-column prop="timestamp" label="时间" width="180">
+        <el-table-column
+          prop="timestamp"
+          label="时间"
+          width="180"
+        >
           <template #default="{ row }">
             {{ formatTimestamp(row.timestamp) }}
           </template>
         </el-table-column>
 
-        <el-table-column prop="level" label="级别" width="100">
+        <el-table-column
+          prop="level"
+          label="级别"
+          width="100"
+        >
           <template #default="{ row }">
-            <el-tag :type="getLevelTagType(row.level)" size="small">
+            <el-tag
+              :type="getLevelTagType(row.level)"
+              size="small"
+            >
               {{ row.level.toUpperCase() }}
             </el-tag>
           </template>
         </el-table-column>
 
-        <el-table-column prop="source" label="来源" width="150"/>
+        <el-table-column
+          prop="source"
+          label="来源"
+          width="150"
+        />
 
-        <el-table-column prop="message" label="消息" show-overflow-tooltip/>
+        <el-table-column
+          prop="message"
+          label="消息"
+          show-overflow-tooltip
+        />
       </el-table>
 
       <el-empty
-          v-if="!loading && logs.length === 0"
-          description="暂无日志"
-          :image-size="100"
+        v-if="!loading && logs.length === 0"
+        description="暂无日志"
+        :image-size="100"
       />
 
-      <div class="log-stats" v-if="logs.length > 0">
-        <el-text size="small" type="info">
+      <div
+        v-if="logs.length > 0"
+        class="log-stats"
+      >
+        <el-text
+          size="small"
+          type="info"
+        >
           共 {{ logs.length }} 条日志
         </el-text>
       </div>
@@ -111,30 +183,31 @@
   </div>
 </template>
 
-<script setup>
-import {onMounted, onUnmounted, ref} from 'vue'
-import {ElMessage, ElMessageBox} from 'element-plus'
-import {Delete, Document, Download, Refresh} from '@element-plus/icons-vue'
-import {invoke} from '@tauri-apps/api/core'
-import {save} from '@tauri-apps/plugin-dialog'
+<script setup lang="ts">
+import { onMounted, onUnmounted, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Delete, Document, Download, Refresh } from '@element-plus/icons-vue'
+import { invoke } from '@tauri-apps/api/core'
+import { save } from '@tauri-apps/plugin-dialog'
+import type { LogEntry } from '@/types/models'
 
 // 响应式状态
-const logs = ref([])
-const loading = ref(false)
-const selectedLevel = ref('')
-const logLimit = ref(100)
-const autoRefresh = ref(false)
-const logFilePath = ref('')
-let refreshTimer = null
+const logs = ref<LogEntry[]>([])
+const loading = ref<boolean>(false)
+const selectedLevel = ref<string>('')
+const logLimit = ref<number>(100)
+const autoRefresh = ref<boolean>(false)
+const logFilePath = ref<string>('')
+let refreshTimer: ReturnType<typeof setInterval> | null = null
 
 // 获取日志
-const refreshLogs = async () => {
+const refreshLogs = async (): Promise<void> => {
   loading.value = true
   try {
     const level = selectedLevel.value || null
     const limit = logLimit.value
 
-    logs.value = await invoke('get_logs', {level, limit})
+    logs.value = await invoke<LogEntry[]>('get_logs', { level, limit })
   } catch (error) {
     ElMessage.error(`获取日志失败: ${error}`)
   } finally {
@@ -143,16 +216,16 @@ const refreshLogs = async () => {
 }
 
 // 清空日志
-const clearLogs = async () => {
+const clearLogs = async (): Promise<void> => {
   try {
     await ElMessageBox.confirm(
-        '确定要清空内存日志吗？日志文件不会被删除。',
-        '确认清空',
-        {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          type: 'warning'
-        }
+      '确定要清空内存日志吗？日志文件不会被删除。',
+      '确认清空',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
     )
 
     loading.value = true
@@ -172,7 +245,7 @@ const clearLogs = async () => {
 }
 
 // 导出日志
-const exportLogs = async () => {
+const exportLogs = async (): Promise<void> => {
   try {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
     const defaultFilename = `qsl-logs-${timestamp}.txt`
@@ -191,7 +264,7 @@ const exportLogs = async () => {
       return // 用户取消
     }
 
-    await invoke('export_logs', {exportPath})
+    await invoke('export_logs', { exportPath })
     ElMessage.success(`日志已导出到: ${exportPath}`)
   } catch (error) {
     ElMessage.error(`导出日志失败: ${error}`)
@@ -199,9 +272,9 @@ const exportLogs = async () => {
 }
 
 // 获取日志文件路径
-const fetchLogFilePath = async () => {
+const fetchLogFilePath = async (): Promise<void> => {
   try {
-    const path = await invoke('get_log_file_path')
+    const path = await invoke<string>('get_log_file_path')
     logFilePath.value = path || ''
   } catch (error) {
     console.error('获取日志文件路径失败:', error)
@@ -209,7 +282,7 @@ const fetchLogFilePath = async () => {
 }
 
 // 切换自动刷新
-const toggleAutoRefresh = () => {
+const toggleAutoRefresh = (): void => {
   if (autoRefresh.value) {
     // 启动自动刷新（每 5 秒）
     refreshTimer = setInterval(refreshLogs, 5000)
@@ -225,7 +298,7 @@ const toggleAutoRefresh = () => {
 }
 
 // 格式化时间戳
-const formatTimestamp = (timestamp) => {
+const formatTimestamp = (timestamp: string): string => {
   // timestamp 格式: "2024-01-20T10:30:45.123+08:00"
   const date = new Date(timestamp)
   return date.toLocaleString('zh-CN', {
@@ -239,8 +312,8 @@ const formatTimestamp = (timestamp) => {
 }
 
 // 获取日志级别标签类型
-const getLevelTagType = (level) => {
-  const levelMap = {
+const getLevelTagType = (level: string): string => {
+  const levelMap: Record<string, string> = {
     debug: 'info',
     info: 'success',
     warning: 'warning',
@@ -250,12 +323,12 @@ const getLevelTagType = (level) => {
 }
 
 // 生命周期
-onMounted(async () => {
+onMounted(async (): Promise<void> => {
   await refreshLogs()
   await fetchLogFilePath()
 })
 
-onUnmounted(() => {
+onUnmounted((): void => {
   if (refreshTimer) {
     clearInterval(refreshTimer)
   }

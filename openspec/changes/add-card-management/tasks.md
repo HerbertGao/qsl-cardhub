@@ -163,6 +163,259 @@
 
 ---
 
+## Phase 2.5：凭据加密存储、数据配置页面和 QRZ.cn 集成
+
+### 2.5.1 本地凭据加密存储
+
+- [ ] 添加加密存储依赖到 Cargo.toml
+  - [ ] `keyring` (系统钥匙串)
+  - [ ] `aes-gcm` (AES-256-GCM 加密)
+  - [ ] `pbkdf2` (密钥派生)
+  - [ ] `rand` (随机数生成)
+- [ ] 创建 `src/security/mod.rs` - 安全模块入口
+- [ ] 创建 `src/security/credentials.rs` - 凭据存储抽象层
+  - [ ] `CredentialStorage` trait 定义
+  - [ ] 检测钥匙串可用性
+  - [ ] 自动选择存储方式（钥匙串/本地加密文件）
+  - [ ] 统一的存储/读取/删除接口
+- [ ] 创建 `src/security/keyring.rs` - 系统钥匙串实现
+  - [ ] `KeyringStorage` 实现 `CredentialStorage`
+  - [ ] 跨平台钥匙串访问（macOS/Windows/Linux）
+  - [ ] 错误处理和降级检测
+- [ ] 创建 `src/security/encryption.rs` - 本地加密文件实现
+  - [ ] `EncryptedFileStorage` 实现 `CredentialStorage`
+  - [ ] 主密钥生成（PBKDF2）
+  - [ ] AES-256-GCM 加密/解密
+  - [ ] 加密文件读写（原子操作）
+  - [ ] 文件权限设置（Unix 0600）
+- [ ] 创建 `src/commands/security.rs` - 凭据管理 Tauri 命令
+  - [ ] `save_credential(key, value)` 命令
+  - [ ] `get_credential(key)` 命令
+  - [ ] `delete_credential(key)` 命令
+  - [ ] `check_keyring_available()` 命令
+- [ ] 更新 `src/main.rs` - 注册安全命令
+
+### 2.5.2 数据配置页面
+
+- [ ] 更新 `web/src/App.vue` - 添加数据配置子菜单
+  - [ ] 在"卡片管理"下方添加"数据配置"子菜单
+  - [ ] 使用 Connection 图标
+  - [ ] 添加子菜单项："QRZ.cn" 和 "云数据库"（待开发）
+  - [ ] 添加路由到 QRZConfigView 和 CloudDatabaseConfigView
+- [ ] 创建 `web/src/views/QRZConfigView.vue` - QRZ.cn 配置页面
+  - [ ] 标准页面布局（page-content）
+  - [ ] 页面标题
+  - [ ] 卡片容器布局（el-card）
+  - [ ] 用户名输入框
+  - [ ] 密码输入框（遮罩）
+  - [ ] "保存并登录"按钮
+  - [ ] "清除凭据"按钮（带确认对话框）
+  - [ ] "测试连接"按钮
+  - [ ] 登录状态显示（已登录/未登录）
+  - [ ] 已保存凭据提示
+  - [ ] 存储方式提示（系统钥匙串/本地加密文件）
+  - [ ] 自动加载已保存的用户名和密码
+- [ ] 创建 `web/src/views/CloudDatabaseConfigView.vue` - 云数据库配置页面（占位符）
+  - [ ] 标准页面布局（page-content）
+  - [ ] 页面标题
+  - [ ] 空状态占位符（el-empty）
+
+### 2.5.2 QRZ.cn 和 QRZ.com 登录功能（集成凭据存储）
+
+- [ ] 添加 HTTP 客户端和 HTML 解析依赖到 Cargo.toml
+  - [ ] `reqwest`（HTTP 客户端）
+  - [ ] `scraper`（HTML 解析）
+  - [ ] `encoding_rs`（GBK 编码转换，仅 QRZ.cn 需要）
+- [ ] 创建 `src/qrz/mod.rs` - QRZ 模块入口（支持多站点）
+- [ ] 创建 `config/qrz.toml` 配置文件模板（支持 qrz.cn 和 qrz.com）
+- [ ] 创建 `src/qrz/client.rs` - HTTP 客户端（统一接口）
+  - [ ] `login_qrz_cn(username, password) -> Result<QrzCnSession>`
+    - [ ] Cookie 内存管理（CFID、CFTOKEN）
+    - [ ] 会话过期检测（推测 30 天）
+  - [ ] `login_qrz_com(username, password) -> Result<QrzComSession>`
+    - [ ] Cookie 内存管理（xf_session）
+    - [ ] 会话过期检测（约 30 天）
+  - [ ] `query_callsign_cn(session, callsign) -> Result<CallsignInfo>`
+    - [ ] GBK 到 UTF-8 转换
+  - [ ] `query_callsign_com(session, callsign) -> Result<CallsignInfo>`
+- [ ] 创建 `src/qrz/parser.rs` - HTML 解析器（支持多站点）
+  - [ ] `parse_qrz_cn_callsign(html) -> Result<CallsignInfo>`
+    - [ ] 提取呼号
+    - [ ] 提取查询次数
+    - [ ] 提取更新日期
+    - [ ] 提取中文地址
+    - [ ] 提取英文地址
+  - [ ] `parse_qrz_com_callsign(html) -> Result<CallsignInfo>`
+    - [ ] 提取呼号（从 `<span class="csignm hamcall">` 标签）
+    - [ ] 提取姓名和地址（从 `<p class="m0">` 标签）
+    - [ ] 提取更新时间（从 Detail 标签页）
+- [ ] 创建 `src/commands/qrz.rs` - QRZ Tauri 命令
+  - [ ] `qrz_cn_save_and_login` 命令（保存凭据并登录 QRZ.cn）
+  - [ ] `qrz_cn_load_credentials` 命令（自动加载 QRZ.cn 凭据）
+  - [ ] `qrz_cn_clear_credentials` 命令（清除 QRZ.cn 凭据和 Cookie）
+  - [ ] `qrz_cn_query_callsign` 命令
+  - [ ] `qrz_com_save_and_login` 命令（保存凭据并登录 QRZ.com）
+  - [ ] `qrz_com_load_credentials` 命令（自动加载 QRZ.com 凭据）
+  - [ ] `qrz_com_clear_credentials` 命令（清除 QRZ.com 凭据和 Cookie）
+  - [ ] `qrz_com_query_callsign` 命令
+- [ ] 更新 `src/main.rs` - 注册 QRZ 命令
+
+### 2.5.3 地址缓存功能（智能去重，支持多数据源）
+
+- [ ] 更新 `src/db/models.rs` - 扩展 Card metadata
+  - [ ] 添加 `AddressHistoryEntry` 结构体（单条地址记录）
+    - [ ] `source: String` - 数据源标识（"qrz.cn" 或 "qrz.com"）
+    - [ ] `callsign: String` - 呼号
+    - [ ] `name: Option<String>` - 姓名（可选，QRZ.com 使用）
+    - [ ] `chinese_address: Option<String>` - 中文地址（可选，QRZ.cn 使用）
+    - [ ] `english_address: Option<String>` - 英文地址（可选，QRZ.cn 使用）
+    - [ ] `address: Option<String>` - 地址（QRZ.com 使用）
+    - [ ] `query_count: Option<u32>` - 查询次数（可选，QRZ.cn 使用）
+    - [ ] `data_updated_at: String` - 数据更新日期
+    - [ ] `cached_at: String` - 本地查询时间戳
+  - [ ] 实现 `AddressHistoryEntry` 数据内容比较方法（按 source 区分比较字段）
+  - [ ] 添加 `AddressHistory` 结构体（地址历史数组）
+  - [ ] 序列化/反序列化支持
+- [ ] 更新 `src/db/cards.rs` - 添加地址历史管理函数
+  - [ ] `upsert_address_history(card_id, entry) -> Result<()>` - 智能插入/更新
+    - [ ] 检查最新记录数据是否一致（按 source 区分）
+    - [ ] 一致时仅更新 cached_at
+    - [ ] 不一致时追加新记录
+  - [ ] `get_latest_address(card_id, source: &str) -> Result<Option<AddressHistoryEntry>>` - 获取指定数据源的最新版本
+  - [ ] `prune_source_history(card_id, source: &str, max_count: usize) -> Result<()>` - 清理同源旧记录（保留最新 2 条）
+- [ ] 创建 `src/commands/cards.rs` 中的缓存命令
+  - [ ] `upsert_card_address` 命令
+  - [ ] `get_card_latest_address` 命令（支持指定 source）
+
+### 2.5.4 分发弹框中的地址查询（支持多数据源）
+
+- [ ] 创建 `web/src/components/qrz/QrzAddressDisplay.vue` - 地址展示组件
+  - [ ] 支持多数据源显示（qrz.cn 和 qrz.com）
+  - [ ] QRZ.cn 格式:
+    - [ ] 呼号: [呼号] (qrz.cn)
+    - [ ] 中文地址: [中文地址]
+    - [ ] 英文地址: [英文地址]
+    - [ ] 更新时间: YYYY-MM-DD
+    - [ ] 缓存时间: YYYY-MM-DD HH:mm
+  - [ ] QRZ.com 格式:
+    - [ ] 呼号: [呼号] (qrz.com)
+    - [ ] 姓名: [姓名]
+    - [ ] 地址: [地址（多行）]
+    - [ ] 更新时间: YYYY-MM-DD
+    - [ ] 缓存时间: YYYY-MM-DD HH:mm
+  - [ ] 缓存有效性标识（365天内/已过期）
+  - [ ] 复制地址按钮（根据数据源动态调整）
+  - [ ] 刷新按钮
+- [ ] 更新 `web/src/components/cards/DistributeDialog.vue`
+  - [ ] 在收件地址区域上方显示地址查询区域
+  - [ ] 添加数据源选择器（QRZ.cn / QRZ.com）
+  - [ ] 弹框打开时自动加载最新缓存地址（如果有，优先显示 QRZ.cn）
+  - [ ] 未登录时禁用对应数据源的查询并提示
+  - [ ] 集成 QrzAddressDisplay 组件
+  - [ ] 实现刷新查询逻辑（支持切换数据源）
+  - [ ] 显示查询加载状态
+  - [ ] 查询成功后自动保存到地址历史
+  - [ ] 地址信息只读展示，不自动填充
+
+### 2.5.5 QRZ.herbertgao.me 集成（公开 API，无需登录）
+
+- [ ] 添加 JSON 序列化依赖到 Cargo.toml（如果尚未添加）
+  - [ ] `serde_json`（JSON 解析）
+- [ ] 创建 `src/qrz/qrz_herbertgao_client.rs` - QRZ.herbertgao.me JSON API 客户端
+  - [ ] `query_callsign(callsign) -> Result<Option<HerbertgaoAddressInfo>>`
+    - [ ] 无需 Cookie 或 Token
+    - [ ] 筛选 `isShow: true` 的记录
+    - [ ] 提取第一条有效记录的字段
+  - [ ] `HerbertgaoAddressInfo` 结构体
+    - [ ] `call_sign: String`（呼号）
+    - [ ] `name: String`（姓名）
+    - [ ] `mail_address: String`（邮寄地址）
+    - [ ] `mail_method: String`（邮寄方式）
+    - [ ] `create_time: String`（创建时间）
+- [ ] 创建 `src/commands/qrz_herbertgao.rs` - QRZ.herbertgao.me Tauri 命令
+  - [ ] `qrz_herbertgao_query_callsign` 命令
+  - [ ] 静默错误处理（查询失败不显示用户提示）
+  - [ ] 仅记录错误到控制台日志
+- [ ] 更新 `src/qrz/mod.rs` - 导出 QRZ.herbertgao.me 模块
+- [ ] 更新 `src/commands/mod.rs` - 导出 qrz_herbertgao 命令模块
+- [ ] 更新 `src/main.rs` - 注册 QRZ.herbertgao.me 命令
+
+### 2.5.6 更新地址缓存支持 QRZ.herbertgao.me
+
+- [ ] 更新 `src/db/models.rs` - 扩展 `AddressHistoryEntry`
+  - [ ] 添加 `mail_method: Option<String>` 字段（邮寄方式，QRZ.herbertgao.me 使用）
+  - [ ] 更新数据比较方法，支持 `source: "qrz.herbertgao.me"` 的字段比较
+- [ ] 更新 `web/src/types/models.ts` - TypeScript 类型定义
+  - [ ] 添加 `mail_method?: string` 到 AddressHistory 接口
+
+### 2.5.7 更新分发弹框支持三数据源并行查询
+
+- [ ] 更新 `web/src/components/cards/DistributeDialog.vue`
+  - [ ] 在现有 QRZ.cn 和 QRZ.com 并行查询基础上增加 QRZ.herbertgao.me
+  - [ ] QRZ.herbertgao.me 始终自动查询（无需登录检查）
+  - [ ] 三个数据源并行查询，互不影响
+  - [ ] QRZ.herbertgao.me 查询失败静默处理（仅控制台日志）
+  - [ ] 显示 QRZ.herbertgao.me 查询结果：
+    - [ ] 呼号: [呼号] (qrz.herbertgao.me)
+    - [ ] 姓名: [姓名]
+    - [ ] 邮寄方式: [邮寄方式]
+    - [ ] 地址: [地址]
+    - [ ] 更新时间: YYYY-MM-DD
+    - [ ] 缓存时间: YYYY-MM-DD HH:mm
+  - [ ] 提供"复制地址"按钮（单个按钮）
+  - [ ] 自动保存到 address_history（智能去重）
+
+### 2.5.8 Phase 2.5 验收测试
+
+- [ ] 可以访问"数据配置"菜单
+- [ ] 数据配置页面显示左侧锚点导航
+- [ ] 锚点导航包含"QRZ.cn 登录配置"和"QRZ.com 登录配置"项
+- [ ] 点击锚点自动滚动到对应配置区域
+- [ ] 滚动时锚点自动高亮当前区域
+- [ ] 可以在数据配置页面配置 QRZ.cn 登录凭据
+- [ ] 可以在数据配置页面配置 QRZ.com 登录凭据
+- [ ] 系统钥匙串可用时显示提示
+- [ ] 钥匙串不可用时显示降级警告
+- [ ] 凭据默认记住,加密存储到钥匙串或本地加密文件
+- [ ] 密码不出现在配置文件中
+- [ ] 打开配置页面时自动加载已保存的用户名和密码
+- [ ] 已保存凭据时显示"已保存凭据"提示
+- [ ] 点击"保存并登录"自动执行登录
+- [ ] 登录成功后显示"登录成功,凭据已保存"
+- [ ] 显示 Cookie 有效期提示
+- [ ] Cookie 仅内存存储，应用关闭后丢弃
+- [ ] 点击"清除凭据"按钮显示确认对话框
+- [ ] 确认清除后正确删除凭据、配置和 Cookie
+- [ ] 清除后清空表单输入框
+- [ ] 打开分发弹框时自动显示缓存地址（如果有）
+- [ ] 地址按标准格式显示（呼号 (qrz.cn)、中文地址、更新时间、缓存时间）
+- [ ] 缓存距今 365 天内数据有效
+- [ ] 缓存距今超过 365 天显示"数据已过期，建议刷新"提示
+- [ ] 可以点击"刷新"按钮手动查询最新地址
+- [ ] 未登录时禁用刷新并提示
+- [ ] 刷新期间显示加载状态
+- [ ] 可以切换查询数据源（QRZ.cn / QRZ.com）
+- [ ] 查询结果正确显示数据来源（qrz.cn / qrz.com）
+- [ ] QRZ.cn 结果正确显示呼号、中英文地址
+- [ ] QRZ.com 结果正确显示呼号、姓名、地址
+- [ ] 地址保留换行和格式
+- [ ] 可以复制地址（根据数据源显示对应按钮）
+- [ ] 查询结果智能保存到 metadata.address_history（按 source 区分）
+- [ ] 数据完全一致时仅更新 cached_at，不创建新记录
+- [ ] 数据有差异时追加新记录
+- [ ] 同一 source 超过 2 条时自动删除最旧记录
+- [ ] 地址信息为只读展示，不自动填充到收件地址
+- [ ] QRZ.cn Cookie 过期时提示重新登录
+- [ ] QRZ.com Cookie 过期时提示重新登录
+- [ ] 呼号不存在时显示友好提示（区分数据源）
+- [ ] QRZ.herbertgao.me 自动查询（无需登录配置）
+- [ ] QRZ.herbertgao.me 查询失败不显示错误提示（静默处理）
+- [ ] QRZ.herbertgao.me 结果正确显示呼号、姓名、邮寄方式、地址
+- [ ] 三个数据源（QRZ.cn、QRZ.com、QRZ.herbertgao.me）并行查询
+- [ ] 各数据源查询互不影响（一个失败不影响其他）
+
+---
+
 ## Phase 3：云数据库支持（可选）
 
 > Phase 3 为可选功能，在 Phase 1 + Phase 2 完成后实施。
@@ -261,6 +514,23 @@
 - `web/src/components/cards/ReturnDialog.vue`
 - `web/src/components/cards/CardDetailDialog.vue`
 
+### Phase 2.5
+
+**Rust 后端**：
+- `src/security/mod.rs`
+- `src/security/credentials.rs`
+- `src/security/keyring.rs`
+- `src/security/encryption.rs`
+- `src/commands/security.rs`
+- `src/qrz/mod.rs`
+- `src/qrz/client.rs`
+- `src/qrz/parser.rs`
+- `src/commands/qrz.rs`
+
+**前端**：
+- `web/src/views/QRZConfigView.vue`
+- `web/src/views/CloudDatabaseConfigView.vue`
+
 ### Phase 3
 
 **Rust 后端**：
@@ -301,6 +571,17 @@
 - `src/commands/mod.rs` - 导出 cards 模块
 - `src/main.rs` - 注册卡片命令
 - `web/src/views/CardManagementView.vue` - 集成 CardList 组件
+
+### Phase 2.5
+
+- `Cargo.toml` - 添加依赖（reqwest、scraper、encoding_rs、keyring、aes-gcm、pbkdf2、rand）
+- `src/main.rs` - 注册安全命令和 QRZ.cn 命令
+- `src/lib.rs` - 导出 security 和 qrz 模块
+- `config/qrz.toml` - QRZ 配置文件（不含密码，支持 qrz.cn 和 qrz.com）
+- `src/db/models.rs` - 扩展 Card metadata 支持地址历史（多数据源）
+- `src/db/cards.rs` - 添加地址历史管理函数（支持多数据源）
+- `web/src/App.vue` - 添加"数据配置"菜单项和路由
+- `web/src/components/cards/DistributeDialog.vue` - 集成地址查询功能（支持 QRZ.cn 和 QRZ.com，缓存+刷新）
 
 ### Phase 3
 

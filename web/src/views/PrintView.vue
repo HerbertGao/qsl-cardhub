@@ -1,79 +1,111 @@
 <template>
   <div class="page-content">
     <div class="page-header">
-      <h1 style="margin: 0">QSL 卡片打印</h1>
+      <h1 style="margin: 0">
+        QSL 卡片打印
+      </h1>
       <div style="display: flex; gap: 10px; align-items: center">
         <el-select
-            v-model="currentProfile"
-            placeholder="选择配置"
-            size="default"
-            style="width: 200px"
+          v-model="currentProfile"
+          placeholder="选择配置"
+          size="default"
+          style="width: 200px"
         >
           <template #prefix>
             <span style="color: #999; font-size: 12px">配置:</span>
           </template>
           <el-option
-              v-for="profile in profiles"
-              :key="profile.id"
-              :label="profile.name"
-              :value="profile.id"
+            v-for="profile in profiles"
+            :key="profile.id"
+            :label="profile.name"
+            :value="profile.id"
           />
         </el-select>
         <el-button
-            size="default"
-            :loading="loadingProfiles"
-            :icon="Refresh"
-            @click="handleRefreshProfiles"
-            title="刷新配置列表"
+          size="default"
+          :loading="loadingProfiles"
+          :icon="Refresh"
+          title="刷新配置列表"
+          @click="handleRefreshProfiles"
         />
       </div>
     </div>
 
     <!-- 任务名称显示 -->
-    <div v-if="currentProfileInfo" style="margin-top: 15px; padding-left: 0">
-      <el-text type="info" size="small">任务名称：</el-text>
-      <el-text size="default">{{ currentProfileInfo.task_name || '未设置' }}</el-text>
+    <div
+      v-if="currentProfileInfo"
+      style="margin-top: 15px; padding-left: 0"
+    >
+      <el-text
+        type="info"
+        size="small"
+      >
+        任务名称：
+      </el-text>
+      <el-text size="default">
+        {{ currentProfileInfo.task_name || '未设置' }}
+      </el-text>
     </div>
 
-    <el-card shadow="hover" style="margin-top: 30px">
+    <el-card
+      shadow="hover"
+      style="margin-top: 30px"
+    >
       <template #header>
         <div style="display: flex; align-items: center">
           <el-icon style="margin-right: 8px">
-            <Edit/>
+            <Edit />
           </el-icon>
           <span style="font-weight: bold">输入信息</span>
         </div>
       </template>
 
-      <el-form :model="printForm" label-width="160px" style="max-width: 600px">
-        <el-form-item label="呼号 / CALLSIGN" required>
+      <el-form
+        :model="printForm"
+        label-width="160px"
+        style="max-width: 600px"
+      >
+        <el-form-item
+          label="呼号 / CALLSIGN"
+          required
+        >
           <el-input
-              v-model="printForm.callsign"
-              placeholder="请输入呼号"
-              clearable
+            v-model="printForm.callsign"
+            placeholder="请输入呼号"
+            clearable
           />
         </el-form-item>
 
-        <el-form-item label="数量 / QTY" required>
+        <el-form-item
+          label="数量 / QTY"
+          required
+        >
           <el-input-number
-              v-model="printForm.qty"
-              :min="1"
-              :max="100"
-              style="width: 100%"
+            v-model="printForm.qty"
+            :min="1"
+            :max="100"
+            style="width: 100%"
           />
         </el-form-item>
 
         <el-form-item label="序列号 / SERIAL">
           <div style="display: flex; gap: 10px; align-items: center">
             <el-input-number
-                v-model="printForm.serial"
-                :min="1"
-                :max="999"
-                style="flex: 1"
-                @change="handleSerialChange"
+              v-model="printForm.serial"
+              :min="1"
+              :max="999"
+              style="flex: 1"
+              @change="handleSerialChange"
             />
-            <el-tag type="info" size="large">预览: {{ formattedSerial }}</el-tag>
-            <el-button @click="resetSerial">重置</el-button>
+            <el-tag
+              type="info"
+              size="large"
+            >
+              预览: {{ formattedSerial }}
+            </el-tag>
+            <el-button @click="resetSerial">
+              重置
+            </el-button>
           </div>
         </el-form-item>
 
@@ -82,11 +114,11 @@
             跳过包含数字 4 的序列号
           </el-checkbox>
           <el-tooltip
-              content="勾选后，序列号会自动跳过所有包含数字 4 的数字（如 4, 14, 40-49, 140-149 等）"
-              placement="right"
+            content="勾选后，序列号会自动跳过所有包含数字 4 的数字（如 4, 14, 40-49, 140-149 等）"
+            placement="right"
           >
             <el-icon style="margin-left: 5px; cursor: help">
-              <QuestionFilled/>
+              <QuestionFilled />
             </el-icon>
           </el-tooltip>
         </el-form-item>
@@ -94,26 +126,34 @@
         <el-form-item style="text-align: center">
           <el-button-group>
             <el-button
-                type="primary"
-                size="default"
-                :loading="printing"
-                @click="handlePrint"
-                style="width: 150px"
+              type="primary"
+              size="default"
+              :loading="printing"
+              style="width: 150px"
+              @click="handlePrint"
             >
               <el-icon style="margin-right: 8px">
-                <Printer/>
+                <Printer />
               </el-icon>
               {{ printing ? '打印中...' : '打印' }}
             </el-button>
-            <el-dropdown trigger="click" @command="handleDropdownCommand">
-              <el-button type="primary" size="default">
+            <el-dropdown
+              trigger="click"
+              @command="handleDropdownCommand"
+            >
+              <el-button
+                type="primary"
+                size="default"
+              >
                 <el-icon>
-                  <ArrowDown/>
+                  <ArrowDown />
                 </el-icon>
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="calibration">打印校准页</el-dropdown-item>
+                  <el-dropdown-item command="calibration">
+                    打印校准页
+                  </el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -124,36 +164,43 @@
 
     <!-- 打印机信息 -->
     <el-alert
-        v-if="currentProfileInfo"
-        :title="`打印机: ${currentProfileInfo.printer.name} | 模板: ${currentProfileInfo.template_display_name || currentProfileInfo.template.path}`"
-        type="info"
-        :closable="false"
-        style="margin-top: 20px"
+      v-if="currentProfileInfo"
+      :title="`打印机: ${currentProfileInfo.printer.name} | 模板: ${currentProfileInfo.template_display_name || currentProfileInfo.template.path}`"
+      type="info"
+      :closable="false"
+      style="margin-top: 20px"
     />
   </div>
 </template>
 
-<script setup>
-import {computed, onMounted, ref} from 'vue'
-import {ElMessage} from 'element-plus'
-import {QuestionFilled, Refresh} from '@element-plus/icons-vue'
-import {invoke} from '@tauri-apps/api/core'
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { QuestionFilled, Refresh } from '@element-plus/icons-vue'
+import { invoke } from '@tauri-apps/api/core'
+import type { Profile } from '@/types/models'
 
-const profiles = ref([])
-const currentProfile = ref('')
-const defaultProfileId = ref('')
-const printing = ref(false)
-const loadingProfiles = ref(false)
-const skip4Enabled = ref(true)  // 默认勾选
-const previousSerial = ref(1)
+interface PrintFormData {
+  callsign: string
+  serial: number
+  qty: number
+}
 
-const printForm = ref({
+const profiles = ref<Profile[]>([])
+const currentProfile = ref<string>('')
+const defaultProfileId = ref<string>('')
+const printing = ref<boolean>(false)
+const loadingProfiles = ref<boolean>(false)
+const skip4Enabled = ref<boolean>(true)  // 默认勾选
+const previousSerial = ref<number>(1)
+
+const printForm = ref<PrintFormData>({
   callsign: '',
   serial: 1,
   qty: 1
 })
 
-const currentProfileInfo = computed(() => {
+const currentProfileInfo = computed<Profile | null>(() => {
   if (!currentProfile.value || profiles.value.length === 0) {
     return null
   }
@@ -163,12 +210,12 @@ const currentProfileInfo = computed(() => {
   return profile
 })
 
-const formattedSerial = computed(() => {
+const formattedSerial = computed<string>(() => {
   return String(printForm.value.serial).padStart(3, '0')
 })
 
 // 跳过包含数字 4 的序列号（向上）
-const skip4 = (number) => {
+const skip4 = (number: number): number => {
   while (String(number).includes('4')) {
     number++
   }
@@ -176,22 +223,22 @@ const skip4 = (number) => {
 }
 
 // 跳过包含数字 4 的序列号（向下）
-const skip4Down = (number) => {
+const skip4Down = (number: number): number => {
   while (String(number).includes('4') && number > 1) {
     number--
   }
   return number
 }
 
-const loadProfiles = async () => {
+const loadProfiles = async (): Promise<void> => {
   loadingProfiles.value = true
   try {
     // 获取所有配置
-    const allProfiles = await invoke('get_profiles')
+    const allProfiles = await invoke<Profile[]>('get_profiles')
     profiles.value = allProfiles || []
 
     // 获取默认配置 ID
-    const defaultId = await invoke('get_default_profile_id')
+    const defaultId = await invoke<string>('get_default_profile_id')
     defaultProfileId.value = defaultId || ''
 
     if (defaultProfileId.value && !currentProfile.value) {
@@ -205,12 +252,12 @@ const loadProfiles = async () => {
   }
 }
 
-const handleRefreshProfiles = async () => {
+const handleRefreshProfiles = async (): Promise<void> => {
   await loadProfiles()
   ElMessage.success('配置列表已刷新')
 }
 
-const handlePrint = async () => {
+const handlePrint = async (): Promise<void> => {
   if (!printForm.value.callsign.trim()) {
     ElMessage.warning('请输入呼号')
     return
@@ -284,13 +331,13 @@ const handlePrint = async () => {
   }
 }
 
-const resetSerial = () => {
+const resetSerial = (): void => {
   printForm.value.serial = 1
   previousSerial.value = 1
   ElMessage.success('序列号已重置')
 }
 
-const handleSerialChange = (value) => {
+const handleSerialChange = (value: number | null): void => {
   // 如果勾选了"跳过4"，自动跳过包含4的数字
   if (skip4Enabled.value && value) {
     let skipped = value
@@ -310,13 +357,13 @@ const handleSerialChange = (value) => {
 
     // 更新上一个值
     previousSerial.value = printForm.value.serial
-  } else {
+  } else if (value) {
     // 未勾选跳过4时，也要更新上一个值
     previousSerial.value = value
   }
 }
 
-const handlePrintCalibration = async () => {
+const handlePrintCalibration = async (): Promise<void> => {
   if (!currentProfile.value) {
     ElMessage.warning('请选择配置')
     return
@@ -339,13 +386,13 @@ const handlePrintCalibration = async () => {
   }
 }
 
-const handleDropdownCommand = (command) => {
+const handleDropdownCommand = (command: string): void => {
   if (command === 'calibration') {
     handlePrintCalibration()
   }
 }
 
-onMounted(() => {
+onMounted((): void => {
   loadProfiles()
 })
 </script>

@@ -9,4 +9,6 @@ pub mod db;
 pub mod error;
 pub mod logger;
 pub mod printer;
+pub mod qrz;
+pub mod security;
 pub mod utils;

@@ -3,18 +3,23 @@
     <!-- 顶部标题栏 -->
     <el-header style="background: #409EFF; padding: 0">
       <div style="display: flex; align-items: center; height: 100%; padding: 0 30px">
-        <h2 style="margin: 0; flex: 1; color: white">qsl-cardhub</h2>
+        <h2 style="margin: 0; flex: 1; color: white">
+          qsl-cardhub
+        </h2>
         <span style="font-size: 14px; opacity: 0.9; color: white">业余无线电卡片打印系统</span>
       </div>
     </el-header>
 
     <el-container>
       <!-- 左侧导航 -->
-      <el-aside width="220px" style="background: #f5f5f5; border-right: 1px solid #e0e0e0">
+      <el-aside
+        width="220px"
+        style="background: #f5f5f5; border-right: 1px solid #e0e0e0"
+      >
         <el-menu
-            :default-active="activeMenu"
-            @select="handleMenuSelect"
-            style="border: none; background: #f5f5f5"
+          :default-active="activeMenu"
+          style="border: none; background: #f5f5f5"
+          @select="handleMenuSelect"
         >
           <div style="padding: 20px 15px 15px; font-weight: bold; color: #666; font-size: 13px">
             功能菜单
@@ -22,46 +27,77 @@
 
           <el-menu-item index="cards">
             <el-icon>
-              <Box/>
+              <Box />
             </el-icon>
             <span>卡片管理</span>
           </el-menu-item>
 
-          <el-divider style="margin: 20px 0"></el-divider>
+          <el-sub-menu index="data-config-menu">
+            <template #title>
+              <el-icon>
+                <Connection />
+              </el-icon>
+              <span>数据配置</span>
+            </template>
+
+            <el-menu-item index="data-config-qrz-cn">
+              <span>QRZ.cn</span>
+            </el-menu-item>
+
+            <el-menu-item index="data-config-qrz-com">
+              <span>QRZ.com</span>
+            </el-menu-item>
+
+            <el-menu-item
+              index="data-config-cloud"
+              disabled
+            >
+              <span>云数据库</span>
+              <el-tag
+                size="small"
+                type="info"
+                style="margin-left: 8px"
+              >
+                待开发
+              </el-tag>
+            </el-menu-item>
+          </el-sub-menu>
+
+          <el-divider style="margin: 20px 0" />
 
           <el-menu-item index="print">
             <el-icon>
-              <Printer/>
+              <Printer />
             </el-icon>
             <span>打印</span>
           </el-menu-item>
 
           <el-menu-item index="config">
             <el-icon>
-              <Setting/>
+              <Setting />
             </el-icon>
             <span>打印配置</span>
           </el-menu-item>
 
           <el-menu-item index="template">
             <el-icon>
-              <Edit/>
+              <Edit />
             </el-icon>
             <span>打印模板</span>
           </el-menu-item>
 
-          <el-divider style="margin: 20px 0"></el-divider>
+          <el-divider style="margin: 20px 0" />
 
           <el-menu-item index="logs">
             <el-icon>
-              <Document/>
+              <Document />
             </el-icon>
             <span>日志</span>
           </el-menu-item>
 
           <el-menu-item index="about">
             <el-icon>
-              <InfoFilled/>
+              <InfoFilled />
             </el-icon>
             <span>关于</span>
           </el-menu-item>
@@ -71,46 +107,62 @@
       <!-- 主内容区 -->
       <el-main style="background: #fff">
         <!-- 打印页面 -->
-        <PrintView v-if="activeMenu === 'print'"/>
+        <PrintView v-if="activeMenu === 'print'" />
 
         <!-- 配置管理页面 -->
-        <ConfigView v-if="activeMenu === 'config'" :autoOpenNewDialog="shouldAutoOpenNewConfig"/>
+        <ConfigView
+          v-if="activeMenu === 'config'"
+          :auto-open-new-dialog="shouldAutoOpenNewConfig"
+        />
 
         <!-- 模板设置页面 -->
-        <TemplateView v-if="activeMenu === 'template'"/>
+        <TemplateView v-if="activeMenu === 'template'" />
 
         <!-- 卡片管理页面 -->
-        <CardManagementView v-if="activeMenu === 'cards'"/>
+        <CardManagementView v-if="activeMenu === 'cards'" />
+
+        <!-- QRZ.cn 配置页面 -->
+        <QRZConfigView v-if="activeMenu === 'data-config-qrz-cn'" />
+
+        <!-- QRZ.com 配置页面 -->
+        <QRZComConfigView v-if="activeMenu === 'data-config-qrz-com'" />
+
+        <!-- 云数据库配置页面 -->
+        <CloudDatabaseConfigView v-if="activeMenu === 'data-config-cloud'" />
 
         <!-- 日志查看页面 -->
-        <LogView v-if="activeMenu === 'logs'"/>
+        <LogView v-if="activeMenu === 'logs'" />
 
         <!-- 关于页面 -->
-        <AboutView v-if="activeMenu === 'about'"/>
+        <AboutView v-if="activeMenu === 'about'" />
       </el-main>
     </el-container>
   </el-container>
 </template>
 
-<script setup>
-import {onMounted, ref, watch} from 'vue'
-import {invoke} from '@tauri-apps/api/core'
+<script setup lang="ts">
+import { onMounted, ref, watch } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
+import type { Profile } from '@/types/models'
 import PrintView from '@/views/PrintView.vue'
 import ConfigView from '@/views/ConfigView.vue'
 import TemplateView from '@/views/TemplateView.vue'
 import CardManagementView from '@/views/CardManagementView.vue'
+import QRZConfigView from '@/views/QRZConfigView.vue'
+import QRZComConfigView from '@/views/QRZComConfigView.vue'
+import CloudDatabaseConfigView from '@/views/CloudDatabaseConfigView.vue'
 import LogView from '@/views/LogView.vue'
 import AboutView from '@/views/AboutView.vue'
 
-const activeMenu = ref('cards')
-const shouldAutoOpenNewConfig = ref(false)
+const activeMenu = ref<string>('cards')
+const shouldAutoOpenNewConfig = ref<boolean>(false)
 
-const handleMenuSelect = (index) => {
+const handleMenuSelect = (index: string): void => {
   activeMenu.value = index
 }
 
 // 监听菜单切换，重置自动打开新建配置的标志
-watch(activeMenu, (newMenu, oldMenu) => {
+watch(activeMenu, (newMenu: string, oldMenu: string) => {
   // 当离开配置页面时，重置标志，避免下次进入时重复打开
   if (oldMenu === 'config' && newMenu !== 'config') {
     shouldAutoOpenNewConfig.value = false
@@ -121,7 +173,7 @@ watch(activeMenu, (newMenu, oldMenu) => {
 onMounted(async () => {
   try {
     // 调用后端 API 获取配置列表
-    const profiles = await invoke('get_profiles')
+    const profiles = await invoke<Profile[]>('get_profiles')
 
     // 如果没有任何配置，跳转到配置页面并自动打开新建弹框
     if (!profiles || profiles.length === 0) {

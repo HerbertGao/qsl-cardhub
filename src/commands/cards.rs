@@ -89,3 +89,30 @@ pub async fn delete_card_cmd(id: String) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?
 }
+
+/// 保存地址到卡片
+#[tauri::command]
+pub async fn save_card_address_cmd(
+    card_id: String,
+    source: String,
+    chinese_address: Option<String>,
+    english_address: Option<String>,
+    name: Option<String>,
+    mail_method: Option<String>,
+    updated_at: Option<String>,
+) -> Result<Card, String> {
+    tokio::task::spawn_blocking(move || {
+        db::save_card_address(
+            &card_id,
+            source,
+            chinese_address,
+            english_address,
+            name,
+            mail_method,
+            updated_at,
+        )
+        .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}

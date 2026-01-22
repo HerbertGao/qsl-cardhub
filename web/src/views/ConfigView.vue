@@ -4,27 +4,41 @@
 
     <div style="display: flex; gap: 20px; margin-top: 30px">
       <!-- 左侧列表 -->
-      <el-card style="width: 300px; flex-shrink: 0" shadow="hover">
+      <el-card
+        style="width: 300px; flex-shrink: 0"
+        shadow="hover"
+      >
         <template #header>
           <div style="display: flex; justify-content: space-between; align-items: center">
             <span style="font-weight: bold">配置列表</span>
-            <el-button type="primary" size="small" @click="handleNewConfig">
+            <el-button
+              type="primary"
+              size="small"
+              @click="handleNewConfig"
+            >
               <el-icon>
-                <Plus/>
+                <Plus />
               </el-icon>
               新建
             </el-button>
           </div>
         </template>
 
-        <el-menu :default-active="selectedConfigId" @select="handleConfigSelect">
-          <el-menu-item v-for="profile in profiles" :key="profile.id" :index="profile.id">
+        <el-menu
+          :default-active="selectedConfigId"
+          @select="handleConfigSelect"
+        >
+          <el-menu-item
+            v-for="profile in profiles"
+            :key="profile.id"
+            :index="profile.id"
+          >
             <span>{{ profile.name }}</span>
             <el-tag
-                v-if="profile.id === defaultProfileId"
-                size="small"
-                type="success"
-                style="margin-left: 10px"
+              v-if="profile.id === defaultProfileId"
+              size="small"
+              type="success"
+              style="margin-left: 10px"
             >
               默认
             </el-tag>
@@ -33,20 +47,20 @@
 
         <div style="margin-top: 15px; display: flex; gap: 10px">
           <el-button
-              size="small"
-              type="danger"
-              @click="handleDeleteConfig"
-              :disabled="!selectedConfigId"
-              style="flex: 1"
+            size="small"
+            type="danger"
+            :disabled="!selectedConfigId"
+            style="flex: 1"
+            @click="handleDeleteConfig"
           >
             删除
           </el-button>
           <el-button
-              size="small"
-              type="success"
-              @click="handleSetDefault"
-              :disabled="!selectedConfigId"
-              style="flex: 1"
+            size="small"
+            type="success"
+            :disabled="!selectedConfigId"
+            style="flex: 1"
+            @click="handleSetDefault"
           >
             设为默认
           </el-button>
@@ -54,65 +68,79 @@
       </el-card>
 
       <!-- 右侧详情 -->
-      <el-card style="flex: 1" shadow="hover">
+      <el-card
+        style="flex: 1"
+        shadow="hover"
+      >
         <template #header>
           <div style="display: flex; justify-content: space-between; align-items: center">
             <span style="font-weight: bold">配置详情</span>
             <div v-if="selectedConfig">
-              <el-button type="primary" size="small" @click="handleSaveConfig">保存修改</el-button>
+              <el-button
+                type="primary"
+                size="small"
+                @click="handleSaveConfig"
+              >
+                保存修改
+              </el-button>
             </div>
           </div>
         </template>
 
         <!-- 空状态提示 -->
         <el-empty
-            v-if="!selectedConfig"
-            description="请从左侧选择一个配置或新建配置"
-            :image-size="120"
+          v-if="!selectedConfig"
+          description="请从左侧选择一个配置或新建配置"
+          :image-size="120"
         />
 
         <!-- 配置表单 -->
-        <el-form v-else-if="selectedConfig" :model="selectedConfig" label-width="120px" style="max-width: 800px">
+        <el-form
+          v-else-if="selectedConfig"
+          :model="selectedConfig"
+          label-width="120px"
+          style="max-width: 800px"
+        >
           <el-form-item label="配置名称">
-            <el-input v-model="selectedConfig.name"/>
+            <el-input v-model="selectedConfig.name" />
           </el-form-item>
 
           <el-form-item label="任务名称">
             <el-input
-                v-model="selectedConfig.task_name"
-                placeholder="请输入任务名称（可选）"
-                maxlength="50"
-                show-word-limit
-                clearable
+              v-model="selectedConfig.task_name"
+              placeholder="请输入任务名称（可选）"
+              maxlength="50"
+              show-word-limit
+              clearable
             />
           </el-form-item>
 
           <el-form-item label="操作系统">
             <el-input
-                :value="`${selectedConfig.platform.os} (${selectedConfig.platform.arch})`"
-                disabled
+              :value="`${selectedConfig.platform.os} (${selectedConfig.platform.arch})`"
+              disabled
             />
           </el-form-item>
 
           <el-form-item label="打印机名称">
             <div style="display: flex; gap: 10px; width: 100%">
               <el-select
-                  v-model="selectedConfig.printer.name"
-                  placeholder="请选择打印机"
-                  style="flex: 1; min-width: 0"
-                  :fit-input-width="true"
-                  :popper-options="{ strategy: 'fixed' }"
+                v-model="selectedConfig.printer.name"
+                placeholder="请选择打印机"
+                style="flex: 1; min-width: 0"
+                :fit-input-width="true"
+                :popper-options="{ strategy: 'fixed' }"
               >
                 <el-option
-                    v-for="printer in availablePrinters"
-                    :key="printer"
-                    :label="printer"
-                    :value="printer"
+                  v-for="printer in availablePrinters"
+                  :key="printer"
+                  :label="printer"
+                  :value="printer"
                 />
               </el-select>
               <el-button @click="refreshPrinters">
                 <el-icon>
-                  <Refresh/>
+                  <Refresh />
                 </el-icon>
               </el-button>
             </div>
@@ -120,8 +148,8 @@
 
           <el-form-item label="打印模板">
             <el-input
-                :value="selectedConfig.template_display_name || selectedConfig.template.path"
-                disabled
+              :value="selectedConfig.template_display_name || selectedConfig.template.path"
+              disabled
             />
           </el-form-item>
         </el-form>
@@ -130,65 +158,105 @@
   </div>
 
   <!-- 新建配置对话框 -->
-  <el-dialog v-model="newConfigDialogVisible" title="新建配置文件" width="500px">
-    <el-form :model="newConfigForm" label-width="120px">
-      <el-form-item label="配置名称" required>
-        <el-input v-model="newConfigForm.name" placeholder="请输入配置名称"/>
+  <el-dialog
+    v-model="newConfigDialogVisible"
+    title="新建配置文件"
+    width="500px"
+  >
+    <el-form
+      :model="newConfigForm"
+      label-width="120px"
+    >
+      <el-form-item
+        label="配置名称"
+        required
+      >
+        <el-input
+          v-model="newConfigForm.name"
+          placeholder="请输入配置名称"
+        />
       </el-form-item>
 
       <el-form-item label="任务名称">
         <el-input
-            v-model="newConfigForm.taskName"
-            placeholder="请输入任务名称（可选）"
-            maxlength="50"
-            show-word-limit
-            clearable
+          v-model="newConfigForm.taskName"
+          placeholder="请输入任务名称（可选）"
+          maxlength="50"
+          show-word-limit
+          clearable
         />
       </el-form-item>
 
       <el-form-item label="操作系统">
-        <el-input :value="platformInfo" disabled/>
+        <el-input
+          :value="platformInfo"
+          disabled
+        />
       </el-form-item>
 
-      <el-form-item label="打印机名称" required>
-        <el-select v-model="newConfigForm.printerName" placeholder="请选择打印机" style="width: 100%">
+      <el-form-item
+        label="打印机名称"
+        required
+      >
+        <el-select
+          v-model="newConfigForm.printerName"
+          placeholder="请选择打印机"
+          style="width: 100%"
+        >
           <el-option
-              v-for="printer in availablePrinters"
-              :key="printer"
-              :label="printer"
-              :value="printer"
+            v-for="printer in availablePrinters"
+            :key="printer"
+            :label="printer"
+            :value="printer"
           />
         </el-select>
       </el-form-item>
 
       <el-form-item label="打印模板">
-        <el-input :value="defaultTemplateName" disabled/>
+        <el-input
+          :value="defaultTemplateName"
+          disabled
+        />
       </el-form-item>
     </el-form>
 
     <template #footer>
-      <el-button @click="newConfigDialogVisible = false">取消</el-button>
-      <el-button type="primary" @click="handleCreateConfig">创建</el-button>
+      <el-button @click="newConfigDialogVisible = false">
+        取消
+      </el-button>
+      <el-button
+        type="primary"
+        @click="handleCreateConfig"
+      >
+        创建
+      </el-button>
     </template>
   </el-dialog>
 </template>
 
-<script setup>
-import {nextTick, onMounted, ref} from 'vue'
-import {ElMessage, ElMessageBox} from 'element-plus'
-import {Plus, Refresh} from '@element-plus/icons-vue'
-import {invoke} from '@tauri-apps/api/core'
+<script setup lang="ts">
+import { nextTick, onMounted, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Refresh } from '@element-plus/icons-vue'
+import { invoke } from '@tauri-apps/api/core'
+import type { Profile, PlatformInfo } from '@/types/models'
 
-// Props
-const props = defineProps({
-  autoOpenNewDialog: {
-    type: Boolean,
-    default: false
-  }
+interface Props {
+  autoOpenNewDialog: boolean
+}
+
+interface NewConfigForm {
+  name: string
+  taskName: string
+  printerName: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  autoOpenNewDialog: false
 })
 
 // 生成默认配置名称（格式：配置YYYYMMDD）
-const getDefaultConfigName = () => {
+const getDefaultConfigName = (): string => {
   const now = new Date()
   const year = now.getFullYear()
   const month = String(now.getMonth() + 1).padStart(2, '0')
@@ -196,27 +264,27 @@ const getDefaultConfigName = () => {
   return `配置${year}${month}${day}`
 }
 
-const profiles = ref([])
-const selectedConfigId = ref('')
-const selectedConfig = ref(null)
-const availablePrinters = ref([])
-const defaultProfileId = ref('')
-const newConfigDialogVisible = ref(false)
-const platformInfo = ref('')
-const defaultTemplateName = ref('加载中...')
+const profiles = ref<Profile[]>([])
+const selectedConfigId = ref<string>('')
+const selectedConfig = ref<Profile | null>(null)
+const availablePrinters = ref<string[]>([])
+const defaultProfileId = ref<string>('')
+const newConfigDialogVisible = ref<boolean>(false)
+const platformInfo = ref<string>('')
+const defaultTemplateName = ref<string>('加载中...')
 
-const newConfigForm = ref({
+const newConfigForm = ref<NewConfigForm>({
   name: '',
   taskName: '',
   printerName: ''
 })
 
-const loadProfiles = async () => {
+const loadProfiles = async (): Promise<void> => {
   try {
-    const allProfiles = await invoke('get_profiles')
+    const allProfiles = await invoke<Profile[]>('get_profiles')
     profiles.value = allProfiles || []
 
-    const defaultId = await invoke('get_default_profile_id')
+    const defaultId = await invoke<string>('get_default_profile_id')
     defaultProfileId.value = defaultId || ''
 
     // 自动选中配置（优先选中默认配置，否则选中第一个）
@@ -230,39 +298,39 @@ const loadProfiles = async () => {
   }
 }
 
-const loadPlatformInfo = async () => {
+const loadPlatformInfo = async (): Promise<void> => {
   try {
-    const info = await invoke('get_platform_info')
+    const info = await invoke<PlatformInfo>('get_platform_info')
     platformInfo.value = `${info.os} (${info.arch})`
   } catch (error) {
     console.error('获取平台信息失败:', error)
   }
 }
 
-const loadPrinters = async () => {
+const loadPrinters = async (): Promise<void> => {
   try {
-    availablePrinters.value = await invoke('get_printers')
+    availablePrinters.value = await invoke<string[]>('get_printers')
   } catch (error) {
     console.error('获取打印机列表失败:', error)
     availablePrinters.value = []
   }
 }
 
-const loadDefaultTemplate = async () => {
+const loadDefaultTemplate = async (): Promise<void> => {
   try {
-    defaultTemplateName.value = await invoke('get_default_template_name')
+    defaultTemplateName.value = await invoke<string>('get_default_template_name')
   } catch (error) {
     console.error('获取默认模板失败:', error)
     defaultTemplateName.value = '默认模板'
   }
 }
 
-const refreshPrinters = async () => {
+const refreshPrinters = async (): Promise<void> => {
   await loadPrinters()
   ElMessage.success('打印机列表已刷新')
 }
 
-const handleConfigSelect = (configId) => {
+const handleConfigSelect = (configId: string): void => {
   selectedConfigId.value = configId
   const config = profiles.value.find(p => p.id === configId)
   if (config) {
@@ -270,15 +338,15 @@ const handleConfigSelect = (configId) => {
     selectedConfig.value = {
       ...config,
       task_name: config.task_name || '',
-      printer: {...config.printer},
-      platform: {...config.platform},
-      template: {...config.template},
+      printer: { ...config.printer },
+      platform: { ...config.platform },
+      template: { ...config.template },
       template_display_name: config.template_display_name
     }
   }
 }
 
-const handleNewConfig = () => {
+const handleNewConfig = (): void => {
   newConfigForm.value = {
     name: getDefaultConfigName(),
     taskName: '',
@@ -287,7 +355,7 @@ const handleNewConfig = () => {
   newConfigDialogVisible.value = true
 }
 
-const handleCreateConfig = async () => {
+const handleCreateConfig = async (): Promise<void> => {
   if (!newConfigForm.value.name.trim()) {
     ElMessage.warning('请输入配置名称')
     return
@@ -303,7 +371,7 @@ const handleCreateConfig = async () => {
 
   try {
     // 获取平台信息
-    const platform = await invoke('get_platform_info')
+    const platform = await invoke<PlatformInfo>('get_platform_info')
 
     // 创建配置
     await invoke('create_profile', {
@@ -322,7 +390,7 @@ const handleCreateConfig = async () => {
   }
 }
 
-const handleSaveConfig = async () => {
+const handleSaveConfig = async (): Promise<void> => {
   if (!selectedConfig.value) return
 
   // 验证任务名称长度
@@ -345,7 +413,7 @@ const handleSaveConfig = async () => {
   }
 }
 
-const handleDeleteConfig = async () => {
+const handleDeleteConfig = async (): Promise<void> => {
   if (!selectedConfigId.value) return
 
   try {
@@ -371,7 +439,7 @@ const handleDeleteConfig = async () => {
   }
 }
 
-const handleSetDefault = async () => {
+const handleSetDefault = async (): Promise<void> => {
   if (!selectedConfigId.value) return
 
   try {
@@ -387,56 +455,7 @@ const handleSetDefault = async () => {
   }
 }
 
-const handleExportConfig = async () => {
-  if (!selectedConfig.value) return
-
-  try {
-    const jsonData = await invoke('export_profile', {
-      id: selectedConfigId.value
-    })
-
-    const blob = new Blob([jsonData], {type: 'application/json'})
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${selectedConfig.value.name}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-
-    ElMessage.success('配置已导出')
-  } catch (error) {
-    console.error('导出配置失败:', error)
-    ElMessage.error('导出失败: ' + error)
-  }
-}
-
-const handleImportConfig = () => {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = '.json'
-
-  input.onchange = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-
-    try {
-      const text = await file.text()
-      await invoke('import_profile', {
-        json: text
-      })
-
-      ElMessage.success('配置已导入')
-      await loadProfiles()
-    } catch (error) {
-      console.error('导入配置失败:', error)
-      ElMessage.error('导入失败: ' + error)
-    }
-  }
-
-  input.click()
-}
-
-onMounted(async () => {
+onMounted(async (): Promise<void> => {
   await loadProfiles()
   await loadPlatformInfo()
   await loadPrinters()

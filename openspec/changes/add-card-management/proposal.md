@@ -95,6 +95,63 @@
    - 分发历史（如果有）
    - 退卡历史（如果有）
 
+7. **本地凭据加密存储**
+   - 优先使用系统钥匙串（Keychain/Credential Manager/Secret Service）
+   - 降级使用本地加密文件（AES-256-GCM）
+   - 统一凭据存储接口
+   - 支持密码、Cookie、Token 加密存储
+   - 配置文件不包含敏感信息
+
+8. **数据配置页面**
+   - 新增"数据配置"菜单（卡片管理下方）
+   - 左侧锚点导航
+   - 右侧配置内容区域
+   - 锚点自动滚动和高亮
+
+9. **QRZ.cn 集成**
+   - 数据配置页面中的登录配置区域
+   - 用户名密码默认记住并加密存储
+   - 自动加载已保存凭据
+   - "保存并登录"一键保存并登录
+   - "清除凭据"按钮（带确认）
+   - 获取并保存 Cookie（CFID、CFTOKEN，仅内存）
+   - 分发弹框中的地址查询
+   - 优先显示缓存地址（1年有效期）
+   - 支持手动刷新查询
+   - HTML 解析提取中英文地址
+   - 标准格式展示（呼号 (qrz.cn)、中文地址、更新时间、缓存时间）
+   - 智能缓存去重（数据一致时仅更新时间）
+   - 多版本地址历史（同一来源最多2条）
+   - 地址复制功能
+
+10. **QRZ.com 集成**
+   - 数据配置页面中的登录配置区域
+   - 用户名密码默认记住并加密存储
+   - 自动加载已保存凭据
+   - "保存并登录"一键保存并登录
+   - "清除凭据"按钮（带确认）
+   - 获取并保存 Cookie（xf_session，仅内存）
+   - 分发弹框中的地址查询
+   - 优先显示缓存地址（1年有效期）
+   - 支持手动刷新查询
+   - HTML 解析提取呼号和地址信息
+   - 标准格式展示（呼号 (qrz.com)、姓名、地址、更新时间、缓存时间）
+   - 智能缓存去重（数据一致时仅更新时间）
+   - 多版本地址历史（同一来源最多2条）
+   - 地址复制功能
+
+11. **QRZ.herbertgao.me 集成**
+   - 无需登录配置，公开 API
+   - 分发弹框中自动查询地址
+   - 与 QRZ.cn、QRZ.com 并行查询
+   - JSON API 查询（仅取 isShow: true 的记录）
+   - 提取呼号、姓名、邮寄方式、地址、创建时间
+   - 标准格式展示（呼号 (qrz.herbertgao.me)、姓名、邮寄方式、地址、更新时间、缓存时间）
+   - 智能缓存去重（数据一致时仅更新时间）
+   - 多版本地址历史（同一来源最多2条）
+   - 地址复制功能
+   - 查询失败静默处理
+
 ### Phase 3：云数据库支持（可选）
 
 **目标**：支持多用户协作和多设备同步
@@ -142,12 +199,19 @@
 - ✅ 菜单导航优化
 - ✅ 页面框架搭建
 
-**Phase 2（20-26 小时）：**
+**Phase 2（24-31 小时）：**
 - ✅ 卡片 CRUD 操作
 - ✅ 卡片录入（单条/连续）
 - ✅ 卡片列表（查询/筛选/分页）
 - ✅ 分发和退卡功能
 - ✅ 卡片详情查看
+- ✅ 本地凭据加密存储（系统钥匙串+本地加密）
+- ✅ 数据配置页面（锚点导航）
+- ✅ QRZ.cn 登录配置
+- ✅ QRZ.com 登录配置
+- ✅ QRZ.herbertgao.me 公开 API 集成
+- ✅ 分发弹框中的地址查询（支持 QRZ.cn、QRZ.com、QRZ.herbertgao.me，缓存+手动刷新）
+- ✅ 地址历史多版本管理（支持多数据源）
 
 **Phase 3（16-20 小时，可选）：**
 - ✅ 数据库配置界面
@@ -165,6 +229,10 @@
 ❌ **离线同步**：后续版本
 ❌ **权限管理**：后续版本（角色、协作者）
 ❌ **第三方登录**：后续版本（OAuth）
+❌ **其他呼号查询网站**：仅支持 QRZ.cn、QRZ.com、QRZ.herbertgao.me（其他网站可后续添加）
+❌ **自动地址填充**：查询结果仅展示，不自动填入分发地址
+❌ **批量查询**：不支持批量查询多个卡片地址
+❌ **定时刷新**：QRZ.herbertgao.me 在弹框打开时自动查询，但不定时检测缓存过期
 
 ## 影响
 
@@ -184,8 +252,20 @@
 - `web/src/components/cards/CardListPlaceholder.vue` - 占位符（Phase 2 替换）
 
 **Phase 2（Rust 后端）：**
-- `src/db/cards.rs` - 卡片 CRUD 操作
+- `src/db/cards.rs` - 卡片 CRUD 操作和地址历史管理
 - `src/commands/cards.rs` - 卡片管理 Tauri 命令
+- `src/security/credentials.rs` - 凭据加密存储（系统钥匙串+本地加密）
+- `src/security/keyring.rs` - 系统钥匙串集成
+- `src/security/encryption.rs` - AES-256-GCM 加密实现
+- `src/qrz/mod.rs` - QRZ 集成模块（支持 qrz.cn、qrz.com、qrz.herbertgao.me）
+- `src/qrz/qrz_cn_client.rs` - QRZ.cn HTTP 客户端
+- `src/qrz/qrz_cn_parser.rs` - QRZ.cn HTML 解析器
+- `src/qrz/qrz_com_client.rs` - QRZ.com HTTP 客户端
+- `src/qrz/qrz_com_parser.rs` - QRZ.com HTML 解析器
+- `src/qrz/qrz_herbertgao_client.rs` - QRZ.herbertgao.me JSON API 客户端
+- `src/commands/qrz_cn.rs` - QRZ.cn 相关 Tauri 命令
+- `src/commands/qrz_com.rs` - QRZ.com 相关 Tauri 命令
+- `src/commands/qrz_herbertgao.rs` - QRZ.herbertgao.me 相关 Tauri 命令
 - `migrations/002_add_cards.sql` - cards 表创建脚本
 
 **Phase 2（前端）：**
@@ -194,6 +274,8 @@
 - `web/src/components/cards/DistributeDialog.vue` - 分发弹窗
 - `web/src/components/cards/ReturnDialog.vue` - 退卡弹窗
 - `web/src/components/cards/CardDetailDialog.vue` - 详情弹窗
+- `web/src/views/QRZConfigView.vue` - QRZ 配置页面（支持 QRZ.cn 和 QRZ.com）
+- `web/src/views/CloudDatabaseConfigView.vue` - 云数据库配置页面（占位符）
 
 **Phase 3（Rust 后端）：**
 - `src/db/repository.rs` - Repository trait 定义
@@ -215,9 +297,13 @@
 - `src/main.rs` - 注册项目管理命令
 
 **Phase 2：**
+- `web/src/App.vue` - 添加"数据配置"菜单项和路由
 - `web/src/views/CardManagementView.vue` - 替换占位符为CardList
-- `src/main.rs` - 注册卡片管理命令
-- `src/db/models.rs` - 添加 Card 数据模型
+- `web/src/components/cards/DistributeDialog.vue` - 集成地址查询功能（支持 QRZ.cn 和 QRZ.com，缓存+刷新）
+- `src/main.rs` - 注册卡片管理命令和 QRZ 命令
+- `src/db/models.rs` - 添加 Card 数据模型和地址历史结构体
+- `Cargo.toml` - 添加依赖（HTTP 客户端、HTML 解析、加密库、keyring）
+- `config/qrz.toml` - QRZ 配置文件（不含密码，支持 qrz.cn 和 qrz.com）
 
 **Phase 3：**
 - `Cargo.toml` - 添加 PostgreSQL、JWT、加密依赖
@@ -257,6 +343,20 @@
 - [ ] 可以退卡"已录入"和"已分发"状态的卡片
 - [ ] 退卡成功后状态更新为"已退卡"
 - [ ] 显示完整的卡片详情
+- [ ] 可以访问"数据配置"菜单
+- [ ] 数据配置页面显示锚点导航
+- [ ] 点击锚点自动滚动到对应区域
+- [ ] 滚动时锚点自动高亮
+- [ ] 可以在数据配置页面配置 QRZ.cn 登录凭据
+- [ ] 可以测试 QRZ.cn 连接并获取 Cookie
+- [ ] 打开分发弹框时自动显示缓存地址（如果有）
+- [ ] 缓存显示查询时间和有效性标识
+- [ ] 可以手动刷新查询最新地址
+- [ ] 查询结果正确显示中英文地址
+- [ ] 可以复制地址信息
+- [ ] 数据一致时仅更新缓存时间（智能去重）
+- [ ] 数据变化时追加新记录到地址历史
+- [ ] 同一来源超过 2 条时自动删除最旧记录
 
 ### Phase 3 验收（可选）
 
@@ -278,10 +378,10 @@
 ## 时间估算
 
 - **Phase 1**：18-24 小时（约 3 工作日）
-- **Phase 2**：20-26 小时（约 3-4 工作日）
+- **Phase 2**：24-31 小时（约 3-4 工作日，包含加密存储、数据配置页面和 QRZ.cn 集成）
 - **Phase 3（可选）**：16-20 小时（约 2-3 工作日）
 
-**总计**：54-70 小时（约 7-9 工作日）
+**总计**：58-75 小时（约 7-10 工作日）
 
 ## 依赖关系
 

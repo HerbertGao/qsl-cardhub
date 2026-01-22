@@ -62,7 +62,13 @@ pub struct ProjectWithStats {
     /// 更新时间
     pub updated_at: String,
     /// 卡片总数
-    pub card_count: i64,
+    pub total_cards: i64,
+    /// 待分发卡片数
+    pub pending_cards: i64,
+    /// 已分发卡片数
+    pub distributed_cards: i64,
+    /// 已退卡卡片数
+    pub returned_cards: i64,
 }
 
 impl From<Project> for ProjectWithStats {
@@ -72,7 +78,10 @@ impl From<Project> for ProjectWithStats {
             name: project.name,
             created_at: project.created_at,
             updated_at: project.updated_at,
-            card_count: 0,
+            total_cards: 0,
+            pending_cards: 0,
+            distributed_cards: 0,
+            returned_cards: 0,
         }
     }
 }
@@ -143,6 +152,30 @@ pub struct ReturnInfo {
     pub returned_at: String,
 }
 
+/// 地址历史记录
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddressHistory {
+    /// 数据来源（如 "qrz.cn", "qrz.com", "QRZ卡片查询"）
+    pub source: String,
+    /// 中文地址（QRZ.cn 使用）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chinese_address: Option<String>,
+    /// 英文地址（QRZ.cn 和 QRZ.com 使用）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub english_address: Option<String>,
+    /// 姓名（QRZ.herbertgao.me 使用）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// 邮寄方式（QRZ.herbertgao.me 使用）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mail_method: Option<String>,
+    /// 更新时间（数据最后更新时间）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+    /// 缓存时间（数据获取时间）
+    pub cached_at: String,
+}
+
 /// 卡片元数据
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CardMetadata {
@@ -153,6 +186,9 @@ pub struct CardMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "return")]
     pub return_info: Option<ReturnInfo>,
+    /// 地址历史记录（最多2条每个来源）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address_history: Option<Vec<AddressHistory>>,
 }
 
 /// 卡片
@@ -195,6 +231,131 @@ impl Card {
             created_at: now.clone(),
             updated_at: now,
         }
+    }
+
+    /// 添加或更新地址历史记录（智能去重）
+    ///
+    /// 规则：
+    /// - 如果数据与最新记录完全一致，只更新时间戳
+    /// - 否则添加新记录，同一来源最多保留2条
+    /// - 缓存有效期365天
+    pub fn add_or_update_address(
+        &mut self,
+        source: String,
+        chinese_address: Option<String>,
+        english_address: Option<String>,
+        name: Option<String>,
+        mail_method: Option<String>,
+        updated_at: Option<String>,
+    ) {
+        let now = format_datetime(&now_china());
+
+        // 确保 metadata 存在
+        if self.metadata.is_none() {
+            self.metadata = Some(CardMetadata::default());
+        }
+
+        let metadata = self.metadata.as_mut().unwrap();
+
+        // 确保 address_history 存在
+        if metadata.address_history.is_none() {
+            metadata.address_history = Some(Vec::new());
+        }
+
+        let history = metadata.address_history.as_mut().unwrap();
+
+        // 查找同一来源的最新记录
+        let latest_from_source = history
+            .iter_mut()
+            .filter(|h| h.source == source)
+            .max_by(|a, b| a.cached_at.cmp(&b.cached_at));
+
+        if let Some(latest) = latest_from_source {
+            // 根据数据源比较不同字段
+            let is_same = match source.as_str() {
+                "qrz.cn" => {
+                    latest.chinese_address == chinese_address
+                        && latest.english_address == english_address
+                }
+                "qrz.com" => latest.english_address == english_address,
+                "QRZ卡片查询" => {
+                    latest.english_address == english_address
+                        && latest.name == name
+                        && latest.mail_method == mail_method
+                }
+                _ => {
+                    // 未知数据源，比较所有字段
+                    latest.chinese_address == chinese_address
+                        && latest.english_address == english_address
+                        && latest.name == name
+                        && latest.mail_method == mail_method
+                }
+            };
+
+            if is_same {
+                // 数据完全一致，只更新时间戳
+                latest.updated_at = updated_at.clone();
+                latest.cached_at = now;
+                return;
+            }
+        }
+
+        // 创建新记录
+        let new_record = AddressHistory {
+            source: source.clone(),
+            chinese_address,
+            english_address,
+            name,
+            mail_method,
+            updated_at,
+            cached_at: now,
+        };
+
+        // 添加新记录
+        history.push(new_record);
+
+        // 清理同一来源的旧记录（保留最新2条）
+        let mut source_records: Vec<_> = history
+            .iter()
+            .enumerate()
+            .filter(|(_, h)| h.source == source)
+            .collect();
+
+        if source_records.len() > 2 {
+            // 按缓存时间降序排序
+            source_records.sort_by(|(_, a), (_, b)| b.cached_at.cmp(&a.cached_at));
+
+            // 标记要删除的索引（保留前2条）
+            let to_remove: Vec<_> = source_records.iter().skip(2).map(|(i, _)| *i).collect();
+
+            // 从后向前删除（避免索引变化）
+            for i in to_remove.into_iter().rev() {
+                history.remove(i);
+            }
+        }
+    }
+
+    /// 获取有效的地址历史记录（365天内）
+    pub fn get_valid_addresses(&self) -> Vec<AddressHistory> {
+        if let Some(metadata) = &self.metadata {
+            if let Some(history) = &metadata.address_history {
+                let now = now_china();
+                return history
+                    .iter()
+                    .filter(|h| {
+                        // 检查缓存是否在365天内
+                        if let Ok(cached_time) = parse_datetime(&h.cached_at) {
+                            let duration = now.signed_duration_since(cached_time);
+                            duration.num_days() <= 365
+                        } else {
+                            false
+                        }
+                    })
+                    .cloned()
+                    .collect();
+            }
+        }
+        Vec::new()
     }
 }
 
