@@ -221,7 +221,7 @@ jobs:
           # 获取签名文件内容（带重试机制）
           get_signature() {
             local sig_url="https://github.com/${REPO}/releases/download/v${VERSION}/$1"
-            local max_attempts=10
+            local max_attempts=20
             local attempt=1
             local wait_time=5
             
@@ -229,8 +229,8 @@ jobs:
               echo "尝试获取 $1 (第 ${attempt}/${max_attempts} 次)..." >&2
               local content=$(curl -sL "$sig_url" 2>/dev/null)
               
-              # 检查是否成功获取到内容（非空且不是HTML错误页面）
-              if [ -n "$content" ] && ! echo "$content" | grep -q "<!DOCTYPE html>"; then
+              # 检查是否成功获取到内容（非空且不是HTML错误页面或JSON错误）
+              if [ -n "$content" ] && ! echo "$content" | grep -qi "<!DOCTYPE html>" && ! echo "$content" | grep -qi '"message".*"Not Found"'; then
                 echo "成功获取 $1" >&2
                 echo "$content"
                 return 0
