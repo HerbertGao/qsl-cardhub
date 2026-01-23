@@ -124,6 +124,9 @@
 import { onMounted, ref, reactive } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useLoading } from '@/composables/useLoading'
+
+const { withLoading } = useLoading()
 
 interface LoginFormData {
   username: string
@@ -190,10 +193,12 @@ const handleSaveAndLogin = async (): Promise<void> => {
   loginStatus.message = ''
 
   try {
-    const result = await invoke<string>('qrz_save_and_login', {
-      username: form.username,
-      password: form.password
-    })
+    const result = await withLoading(async () => {
+      return await invoke<string>('qrz_save_and_login', {
+        username: form.username,
+        password: form.password
+      })
+    }, '正在登录...')
 
     hasSavedCredentials.value = true
     isLoggedIn.value = true
@@ -251,9 +256,11 @@ const handleTestConnection = async (): Promise<void> => {
 
   try {
     // 使用固定测试呼号 BY1CRA
-    const result = await invoke<any>('qrz_query_callsign', {
-      callsign: 'BY1CRA'
-    })
+    const result = await withLoading(async () => {
+      return await invoke<unknown>('qrz_query_callsign', {
+        callsign: 'BY1CRA'
+      })
+    }, '正在测试连接...')
 
     if (result) {
       ElMessage.success('连接测试成功，可以正常查询地址信息')

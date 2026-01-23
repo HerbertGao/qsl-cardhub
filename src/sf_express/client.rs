@@ -13,6 +13,8 @@ use uuid::Uuid;
 
 use super::models::{
     CloudPrintMsgData, CloudPrintResponse, PrintDocument, PrintFile, SFExpressConfig,
+    CreateOrderRequest, CreateOrderResponseData, UpdateOrderRequest, UpdateOrderResponseData,
+    SearchOrderRequest, SearchOrderResponseData, ApiBusinessResponse, get_user_friendly_error,
 };
 
 /// 顺丰速运 API 客户端
@@ -60,7 +62,7 @@ impl SFExpressClient {
 
         // 构造业务数据
         let msg_data = CloudPrintMsgData {
-            template_code: self.config.template_code.clone(),
+            template_code: self.config.template_code(),
             version: "2.0".to_string(),
             file_type: "pdf".to_string(),
             sync: true,
@@ -171,6 +173,119 @@ impl SFExpressClient {
         let file = self.print_waybill(waybill_no)?;
         self.download_pdf(&file)
     }
+
+    // ==================== 下单 API ====================
+
+    /// 发送通用 API 请求
+    fn send_api_request(&self, service_code: &str, msg_data: &str) -> Result<String> {
+        let timestamp = Self::get_timestamp();
+        let request_id = Uuid::new_v4().to_string();
+        let msg_digest = self.calculate_signature(msg_data, timestamp);
+
+        log::info!("API 请求: service={}, partnerID={}, requestID={}",
+            service_code, self.config.partner_id, request_id);
+
+        let form_data = [
+            ("partnerID", self.config.partner_id.as_str()),
+            ("requestID", &request_id),
+            ("serviceCode", service_code),
+            ("timestamp", &timestamp.to_string()),
+            ("msgDigest", &msg_digest),
+            ("msgData", msg_data),
+        ];
+
+        let response = self.http_client
+            .post(self.config.api_url())
+            .header("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
+            .form(&form_data)
+            .send()
+            .context("发送 API 请求失败")?;
+
+        let response_text = response.text().context("读取响应失败")?;
+        log::info!("API 响应: {}", response_text);
+
+        // 解析外层响应
+        let api_response: CloudPrintResponse = serde_json::from_str(&response_text)
+            .context("解析 API 响应失败")?;
+
+        if !api_response.is_success() {
+            log::error!("API 错误: code={}, msg={}",
+                api_response.api_result_code,
+                api_response.error_message());
+            bail!("{}", api_response.error_message());
+        }
+
+        api_response.api_result_data
+            .context("API 响应中缺少结果数据")
+    }
+
+    /// 创建订单 (EXP_RECE_CREATE_ORDER)
+    pub fn create_order(&self, request: &CreateOrderRequest) -> Result<CreateOrderResponseData> {
+        log::info!("创建顺丰订单: order_id={}", request.order_id);
+
+        let msg_data = serde_json::to_string(request)
+            .context("序列化下单请求失败")?;
+
+        let result_str = self.send_api_request("EXP_RECE_CREATE_ORDER", &msg_data)?;
+
+        let result: ApiBusinessResponse<CreateOrderResponseData> = serde_json::from_str(&result_str)
+            .context("解析下单响应失败")?;
+
+        if !result.success {
+            let error_code = result.error_code.unwrap_or_default();
+            let error_msg = result.error_msg.unwrap_or_else(|| "未知错误".to_string());
+            log::error!("下单失败: code={}, msg={}", error_code, error_msg);
+            bail!("{}", get_user_friendly_error(&error_code, &error_msg));
+        }
+
+        result.msg_data.context("下单响应中缺少业务数据")
+    }
+
+    /// 确认/取消订单 (EXP_RECE_UPDATE_ORDER)
+    pub fn update_order(&self, request: &UpdateOrderRequest) -> Result<UpdateOrderResponseData> {
+        let action = if request.deal_type == 1 { "确认" } else { "取消" };
+        log::info!("{}顺丰订单: order_id={}", action, request.order_id);
+
+        let msg_data = serde_json::to_string(request)
+            .context("序列化订单更新请求失败")?;
+
+        let result_str = self.send_api_request("EXP_RECE_UPDATE_ORDER", &msg_data)?;
+
+        let result: ApiBusinessResponse<UpdateOrderResponseData> = serde_json::from_str(&result_str)
+            .context("解析订单更新响应失败")?;
+
+        if !result.success {
+            let error_code = result.error_code.unwrap_or_default();
+            let error_msg = result.error_msg.unwrap_or_else(|| "未知错误".to_string());
+            log::error!("订单{}失败: code={}, msg={}", action, error_code, error_msg);
+            bail!("{}", get_user_friendly_error(&error_code, &error_msg));
+        }
+
+        result.msg_data.context("订单更新响应中缺少业务数据")
+    }
+
+    /// 查询订单 (EXP_RECE_SEARCH_ORDER_RESP)
+    pub fn search_order(&self, request: &SearchOrderRequest) -> Result<SearchOrderResponseData> {
+        log::info!("查询顺丰订单: order_id={:?}, waybill_no={:?}",
+            request.order_id, request.main_waybill_no);
+
+        let msg_data = serde_json::to_string(request)
+            .context("序列化订单查询请求失败")?;
+
+        let result_str = self.send_api_request("EXP_RECE_SEARCH_ORDER_RESP", &msg_data)?;
+
+        let result: ApiBusinessResponse<SearchOrderResponseData> = serde_json::from_str(&result_str)
+            .context("解析订单查询响应失败")?;
+
+        if !result.success {
+            let error_code = result.error_code.unwrap_or_default();
+            let error_msg = result.error_msg.unwrap_or_else(|| "未知错误".to_string());
+            log::error!("订单查询失败: code={}, msg={}", error_code, error_msg);
+            bail!("{}", get_user_friendly_error(&error_code, &error_msg));
+        }
+
+        result.msg_data.context("订单查询响应中缺少业务数据")
+    }
 }
 
 #[cfg(test)]
@@ -182,7 +297,6 @@ mod tests {
         let config = SFExpressConfig {
             environment: "sandbox".to_string(),
             partner_id: "test_partner".to_string(),
-            template_code: "test_template".to_string(),
         };
 
         let client = SFExpressClient::new(config, "test_checkword".to_string()).unwrap();

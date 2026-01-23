@@ -101,6 +101,20 @@
               </el-radio-group>
             </el-form-item>
 
+            <!-- 顺丰下单按钮（快递方式时显示） -->
+            <el-form-item v-if="form.method === '快递'">
+              <el-button
+                color="#141222"
+                @click="handleCreateSFOrder"
+              >
+                <el-icon><IconSfExpress /></el-icon>
+                顺丰速运下单
+              </el-button>
+              <div style="font-size: 12px; color: #909399; margin-top: 4px">
+                点击创建顺丰订单，获取运单号后可打印面单
+              </div>
+            </el-form-item>
+
             <el-form-item
               label="备注"
               prop="remarks"
@@ -109,7 +123,7 @@
                 v-model="form.remarks"
                 type="textarea"
                 :rows="3"
-                placeholder="可选，填写备注信息"
+                placeholder="可选，填写备注信息（如运单号）"
               />
               <div style="margin-top: 4px">
                 <el-button
@@ -330,6 +344,14 @@
       v-model:visible="waybillPrintDialogVisible"
       :default-waybill-no="form.remarks"
     />
+
+    <!-- 顺丰下单弹窗 -->
+    <CreateOrderDialog
+      v-model:visible="sfOrderDialogVisible"
+      :card-id="card?.id"
+      :default-recipient="defaultRecipient"
+      @success="handleSFOrderSuccess"
+    />
   </el-dialog>
 </template>
 
@@ -338,8 +360,13 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import type { CardWithProject, CardStatus, AddressEntry } from '@/types/models'
+import type { CardWithProject, CardStatus, AddressEntry, SFOrder, RecipientInfo } from '@/types/models'
 import WaybillPrintDialog from '@/components/cards/WaybillPrintDialog.vue'
+import CreateOrderDialog from '@/components/sf-express/CreateOrderDialog.vue'
+import IconSfExpress from '~icons/custom/sf-express'
+import { useLoading } from '@/composables/useLoading'
+
+const { withLoading } = useLoading()
 
 interface Props {
   visible: boolean
@@ -385,6 +412,10 @@ const submitting = ref<boolean>(false)
 
 // 运单打印弹窗
 const waybillPrintDialogVisible = ref<boolean>(false)
+
+// 顺丰下单弹窗
+const sfOrderDialogVisible = ref<boolean>(false)
+const defaultRecipient = ref<Partial<RecipientInfo> | null>(null)
 
 // 地址查询状态
 const querying = ref<boolean>(false)
@@ -469,7 +500,12 @@ const handleQueryAddress = async (isAutoQuery: boolean = false): Promise<void> =
 
   querying.value = true
 
-  try {
+  // 保存卡片引用，避免闭包中的 null 检查问题
+  const card = props.card
+
+  // 手动查询时显示全局 loading
+  const executeQuery = async () => {
+    try {
     // 并行检查两个数据源的登录状态
     const [cnLoggedIn, comLoggedIn] = await Promise.all([
       invoke<boolean>('qrz_check_login_status').catch(() => false),
@@ -511,7 +547,7 @@ const handleQueryAddress = async (isAutoQuery: boolean = false): Promise<void> =
           english_address: string | null
           updated_at: string | null
         } | null>('qrz_query_callsign', {
-          callsign: props.card.callsign
+          callsign: card.callsign
         }).catch(error => {
           console.error('QRZ.cn 查询失败:', error)
           return null
@@ -529,7 +565,7 @@ const handleQueryAddress = async (isAutoQuery: boolean = false): Promise<void> =
           address: string | null
           updated_at: string | null
         } | null>('qrz_com_query_callsign', {
-          callsign: props.card.callsign
+          callsign: card.callsign
         }).catch(error => {
           console.error('QRZ.com 查询失败:', error)
           return null
@@ -547,7 +583,7 @@ const handleQueryAddress = async (isAutoQuery: boolean = false): Promise<void> =
         mail_method: string
         created_at: string
       } | null>('qrz_herbertgao_query_callsign', {
-        callsign: props.card.callsign
+        callsign: card.callsign
       }).catch(error => {
         // 静默处理错误，仅记录到控制台
         console.error('QRZ.herbertgao.me 查询失败:', error)
@@ -600,7 +636,7 @@ const handleQueryAddress = async (isAutoQuery: boolean = false): Promise<void> =
         }
 
         await invoke<CardWithProject>('save_card_address_cmd', {
-          cardId: props.card.id,
+          cardId: card.id,
           source: result.source,
           chineseAddress,
           englishAddress,
@@ -613,11 +649,11 @@ const handleQueryAddress = async (isAutoQuery: boolean = false): Promise<void> =
 
     // 重新加载卡片以获取最新的地址缓存
     const updatedCard = await invoke<CardWithProject>('get_card_cmd', {
-      id: props.card.id
+      id: card.id
     })
 
     // 更新本地状态
-    props.card.metadata = updatedCard.metadata
+    card.metadata = updatedCard.metadata
 
     // 重新加载地址缓存
     loadAddressCache()
@@ -639,6 +675,14 @@ const handleQueryAddress = async (isAutoQuery: boolean = false): Promise<void> =
     }
   } finally {
     querying.value = false
+  }
+  }
+
+  // 手动查询时使用全局 loading，自动查询时静默执行
+  if (isAutoQuery) {
+    await executeQuery()
+  } else {
+    await withLoading(executeQuery, '正在查询地址...')
   }
 }
 
@@ -714,6 +758,31 @@ const handlePaste = async (): Promise<void> => {
 // 打印面单
 const handlePrintWaybill = (): void => {
   waybillPrintDialogVisible.value = true
+}
+
+// 创建顺丰订单
+const handleCreateSFOrder = (): void => {
+  // 尝试从地址缓存中获取收件人信息
+  if (addressCache.value.length > 0) {
+    const addr = addressCache.value[0]
+    // 尝试解析地址信息
+    defaultRecipient.value = {
+      name: addr.name || '',
+      address: addr.chinese_address || addr.english_address || ''
+    }
+  } else {
+    defaultRecipient.value = null
+  }
+  sfOrderDialogVisible.value = true
+}
+
+// 顺丰订单创建成功
+const handleSFOrderSuccess = (order: SFOrder): void => {
+  // 将运单号填入备注
+  if (order.waybill_no) {
+    form.value.remarks = order.waybill_no
+    ElMessage.success(`运单号已填入备注：${order.waybill_no}`)
+  }
 }
 
 // 提交表单

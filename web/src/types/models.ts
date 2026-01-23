@@ -202,3 +202,129 @@ export interface LogEntry {
   message: string
   target?: string
 }
+
+// ==================== 顺丰速运相关类型 ====================
+
+// 寄件人信息
+export interface SenderInfo {
+  id: string
+  name: string
+  phone: string
+  mobile?: string | null
+  province: string
+  city: string
+  district: string
+  address: string
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}
+
+// 创建/更新寄件人参数
+export interface SenderParams {
+  name: string
+  phone: string
+  mobile?: string | null
+  province: string
+  city: string
+  district: string
+  address: string
+}
+
+// 收件人信息
+export interface RecipientInfo {
+  name: string
+  phone: string
+  mobile?: string | null
+  province: string
+  city: string
+  district: string
+  address: string
+}
+
+// 顺丰订单状态
+export type SFOrderStatus = 'pending' | 'confirmed' | 'cancelled' | 'printed'
+
+// 顺丰订单
+export interface SFOrder {
+  id: string
+  order_id: string
+  waybill_no?: string | null
+  card_id?: string | null
+  status: SFOrderStatus
+  pay_method?: number | null
+  cargo_name?: string | null
+  sender_info: SenderInfo
+  recipient_info: RecipientInfo
+  created_at: string
+  updated_at: string
+}
+
+// 顺丰订单（带卡片信息）
+export interface SFOrderWithCard extends SFOrder {
+  callsign?: string | null
+  project_name?: string | null
+  qty?: number | null
+}
+
+// 创建订单参数
+export interface CreateOrderParams {
+  sender_id: string
+  recipient: RecipientInfo
+  cargo_name?: string | null
+  pay_method?: number | null
+  card_id?: string | null
+}
+
+// 创建订单响应
+export interface CreateOrderResponse {
+  order_id: string
+  waybill_no_list: string[]
+  filter_result?: number | null
+  local_order: SFOrder
+}
+
+// 确认订单响应
+export interface ConfirmOrderResponse {
+  order_id: string
+  waybill_no_list: string[]
+  res_status?: number | null
+  local_order: SFOrder
+}
+
+// 查询订单响应
+export interface SearchOrderResponse {
+  api_response: {
+    success: boolean
+    error_code?: string | null
+    error_msg?: string | null
+    order_id?: string | null
+    waybill_no?: string | null
+    order_state?: number | null
+    order_state_desc?: string | null
+  }
+}
+
+// 订单列表参数
+export interface ListOrdersParams {
+  status?: SFOrderStatus | null
+  card_id?: string | null
+  page?: number
+  page_size?: number
+}
+
+// 订单列表响应
+export interface ListOrdersResponse {
+  items: SFOrderWithCard[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+}
+
+// 地址区域
+export interface Region {
+  code: string
+  name: string
+  children?: Region[]
+}

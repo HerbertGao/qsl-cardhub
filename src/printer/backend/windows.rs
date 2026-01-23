@@ -3,7 +3,7 @@
 // 使用 Windows Win32 API 实现 RAW 打印
 
 #[cfg(target_os = "windows")]
-use super::PrinterBackend;
+use super::{PrinterBackend, PrintResult};
 
 #[cfg(target_os = "windows")]
 use anyhow::{Context, Result};
@@ -12,13 +12,16 @@ use anyhow::{Context, Result};
 use windows::core::PWSTR;
 
 #[cfg(target_os = "windows")]
-use windows::Win32::Foundation::HANDLE;
+use windows::Win32::Foundation::{GetLastError, HANDLE, WIN32_ERROR};
 
 #[cfg(target_os = "windows")]
 use windows::Win32::Graphics::Printing::{
     ClosePrinter, DOC_INFO_1W, EndDocPrinter, EndPagePrinter, EnumPrintersW, OpenPrinterW,
     PRINTER_ENUM_LOCAL, PRINTER_INFO_2W, StartDocPrinterW, StartPagePrinter, WritePrinter,
 };
+
+#[cfg(target_os = "windows")]
+use windows::Win32::System::Diagnostics::Debug::{FormatMessageW, FORMAT_MESSAGE_FROM_SYSTEM};
 
 #[cfg(target_os = "windows")]
 /// Windows 打印后端
@@ -28,6 +31,37 @@ pub struct WindowsBackend;
 impl WindowsBackend {
     pub fn new() -> Self {
         Self
+    }
+
+    /// 获取 Win32 错误码的可读描述
+    fn format_win32_error(error_code: WIN32_ERROR) -> String {
+        unsafe {
+            let mut buffer: [u16; 512] = [0; 512];
+            let len = FormatMessageW(
+                FORMAT_MESSAGE_FROM_SYSTEM,
+                None,
+                error_code.0,
+                0,
+                &mut buffer,
+            );
+            if len > 0 {
+                String::from_utf16_lossy(&buffer[..len as usize])
+                    .trim()
+                    .to_string()
+            } else {
+                format!("未知错误 (错误码: {})", error_code.0)
+            }
+        }
+    }
+
+    /// 获取并记录当前错误
+    fn log_last_error(context: &str) -> String {
+        unsafe {
+            let error = GetLastError();
+            let error_msg = Self::format_win32_error(error);
+            log::error!("❌ {}: {} (错误码: {})", context, error_msg, error.0);
+            error_msg
+        }
     }
 }
 
@@ -89,23 +123,34 @@ impl PrinterBackend for WindowsBackend {
         }
     }
 
-    fn send_raw(&self, printer_name: &str, data: &[u8]) -> Result<()> {
+    fn send_raw(&self, printer_name: &str, data: &[u8]) -> Result<PrintResult> {
+        log::info!(
+            "🖨️ 开始打印: 打印机={}, 数据大小={}字节",
+            printer_name,
+            data.len()
+        );
+
         unsafe {
             // 打开打印机
+            log::debug!("📤 打开打印机...");
             let mut printer_name_wide: Vec<u16> =
                 printer_name.encode_utf16().chain(Some(0)).collect();
             let mut printer_handle: HANDLE = HANDLE::default();
 
-            OpenPrinterW(
+            if let Err(e) = OpenPrinterW(
                 PWSTR(printer_name_wide.as_mut_ptr()),
                 &mut printer_handle,
                 None,
-            )
-            .context("无法打开打印机")?;
+            ) {
+                let error_msg = Self::log_last_error("无法打开打印机");
+                anyhow::bail!("无法打开打印机: {} ({})", error_msg, e);
+            }
+            log::debug!("✓ 打印机已打开");
 
             // 开始文档
+            log::debug!("📤 开始打印文档...");
             let doc_name = "QSL Card\0".encode_utf16().collect::<Vec<u16>>();
-            let mut doc_info = DOC_INFO_1W {
+            let doc_info = DOC_INFO_1W {
                 pDocName: PWSTR(doc_name.as_ptr() as *mut u16),
                 pOutputFile: PWSTR::null(),
                 pDatatype: PWSTR::null(),
@@ -113,18 +158,24 @@ impl PrinterBackend for WindowsBackend {
 
             let job_id = StartDocPrinterW(printer_handle, 1, &doc_info);
             if job_id == 0 {
-                ClosePrinter(printer_handle);
-                anyhow::bail!("无法开始打印文档");
+                let error_msg = Self::log_last_error("无法开始打印文档");
+                let _ = ClosePrinter(printer_handle);
+                anyhow::bail!("无法开始打印文档: {}", error_msg);
             }
+            log::info!("📋 文档 ID: {}", job_id);
 
             // 开始页面
+            log::debug!("📤 开始打印页面...");
             if !StartPagePrinter(printer_handle).as_bool() {
-                EndDocPrinter(printer_handle);
-                ClosePrinter(printer_handle);
-                anyhow::bail!("无法开始打印页面");
+                let error_msg = Self::log_last_error("无法开始打印页面");
+                let _ = EndDocPrinter(printer_handle);
+                let _ = ClosePrinter(printer_handle);
+                anyhow::bail!("无法开始打印页面: {}", error_msg);
             }
+            log::debug!("✓ 页面已开始");
 
             // 写入数据
+            log::info!("📤 写入打印数据...");
             let mut written: u32 = 0;
             if !WritePrinter(
                 printer_handle,
@@ -134,20 +185,35 @@ impl PrinterBackend for WindowsBackend {
             )
             .as_bool()
             {
-                EndPagePrinter(printer_handle);
-                EndDocPrinter(printer_handle);
-                ClosePrinter(printer_handle);
-                anyhow::bail!("无法写入打印数据");
+                let error_msg = Self::log_last_error("无法写入打印数据");
+                let _ = EndPagePrinter(printer_handle);
+                let _ = EndDocPrinter(printer_handle);
+                let _ = ClosePrinter(printer_handle);
+                anyhow::bail!("无法写入打印数据: {}", error_msg);
             }
+            log::info!("✓ 已写入 {} 字节", written);
 
             // 结束页面和文档
-            EndPagePrinter(printer_handle);
-            EndDocPrinter(printer_handle);
-            ClosePrinter(printer_handle);
+            log::debug!("📤 结束打印...");
+            let _ = EndPagePrinter(printer_handle);
+            let _ = EndDocPrinter(printer_handle);
+            let _ = ClosePrinter(printer_handle);
 
-            println!("✅ 打印成功: {} ({} 字节)", printer_name, written);
+            log::info!("✅ 打印成功: 作业ID={}", job_id);
 
-            Ok(())
+            // 构建结果
+            let result = PrintResult::success_with_job_id(
+                format!("打印成功: {} ({} 字节)", printer_name, written),
+                job_id.to_string(),
+            )
+            .with_details(format!(
+                "文档ID: {}, 写入字节: {}/{}",
+                job_id,
+                written,
+                data.len()
+            ));
+
+            Ok(result)
         }
     }
 }

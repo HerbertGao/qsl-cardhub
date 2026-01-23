@@ -63,7 +63,7 @@
             :src="`data:image/png;base64,${fetchedData.preview_image}`"
             alt="面单预览"
             class="preview-image"
-          />
+          >
         </div>
       </el-form-item>
 
@@ -128,6 +128,9 @@ import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
+import { useLoading } from '@/composables/useLoading'
+
+const { withLoading } = useLoading()
 
 interface PrinterInfo {
   name: string
@@ -243,9 +246,11 @@ const handleFetch = async (): Promise<void> => {
   fetchedData.value = null
 
   try {
-    const result = await invoke<FetchWaybillResponse>('sf_fetch_waybill', {
-      waybillNo: form.waybillNo
-    })
+    const result = await withLoading(async () => {
+      return await invoke<FetchWaybillResponse>('sf_fetch_waybill', {
+        waybillNo: form.waybillNo
+      })
+    }, '正在获取面单...')
 
     fetchedData.value = result
     status.message = '面单获取成功，请确认预览后点击打印'
@@ -272,10 +277,12 @@ const handlePrint = async (): Promise<void> => {
   printing.value = true
 
   try {
-    const result = await invoke<string>('sf_print_waybill', {
-      pdfData: fetchedData.value.pdf_data,
-      printerName: form.printerName
-    })
+    const result = await withLoading(async () => {
+      return await invoke<string>('sf_print_waybill', {
+        pdfData: fetchedData.value!.pdf_data,
+        printerName: form.printerName
+      })
+    }, '正在打印面单...')
 
     status.message = result
     status.type = 'success'

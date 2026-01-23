@@ -1,4 +1,7 @@
 <template>
+  <!-- 全局 Loading -->
+  <GlobalLoading />
+
   <el-container style="height: 100vh">
     <!-- 顶部标题栏 -->
     <el-header style="background: #409EFF; padding: 0">
@@ -10,7 +13,7 @@
       </div>
     </el-header>
 
-    <el-container>
+    <el-container style="flex: 1; overflow: hidden">
       <!-- 左侧导航 -->
       <el-aside
         width="220px"
@@ -21,15 +24,18 @@
           style="border: none; background: #f5f5f5"
           @select="handleMenuSelect"
         >
-          <div style="padding: 20px 15px 15px; font-weight: bold; color: #666; font-size: 13px">
-            功能菜单
-          </div>
-
           <el-menu-item index="cards">
             <el-icon>
               <Box />
             </el-icon>
             <span>卡片管理</span>
+          </el-menu-item>
+
+          <el-menu-item index="sf-orders">
+            <el-icon>
+              <IconSfExpress />
+            </el-icon>
+            <span>顺丰订单</span>
           </el-menu-item>
 
           <el-sub-menu index="data-config-menu">
@@ -48,18 +54,8 @@
               <span>QRZ.com</span>
             </el-menu-item>
 
-            <el-menu-item
-              index="data-config-cloud"
-              disabled
-            >
-              <span>云数据库</span>
-              <el-tag
-                size="small"
-                type="info"
-                style="margin-left: 8px"
-              >
-                待开发
-              </el-tag>
+            <el-menu-item index="data-config-data-transfer">
+              <span>数据管理</span>
             </el-menu-item>
 
             <el-menu-item index="data-config-sf-express">
@@ -119,7 +115,7 @@
       </el-aside>
 
       <!-- 主内容区 -->
-      <el-main style="background: #fff">
+      <el-main style="background: #fff; overflow: hidden">
         <!-- 打印页面 -->
         <PrintView v-if="activeMenu === 'print'" />
 
@@ -141,11 +137,14 @@
         <!-- QRZ.com 配置页面 -->
         <QRZComConfigView v-if="activeMenu === 'data-config-qrz-com'" />
 
-        <!-- 云数据库配置页面 -->
-        <CloudDatabaseConfigView v-if="activeMenu === 'data-config-cloud'" />
+        <!-- 数据管理页面 -->
+        <DataTransferView v-if="activeMenu === 'data-config-data-transfer'" />
 
         <!-- 顺丰速运配置页面 -->
         <SFExpressConfigView v-if="activeMenu === 'data-config-sf-express'" />
+
+        <!-- 顺丰订单列表页面 -->
+        <SFOrderListView v-if="activeMenu === 'sf-orders'" />
 
         <!-- 日志查看页面 -->
         <LogView v-if="activeMenu === 'logs'" />
@@ -169,8 +168,9 @@ import TemplateView from '@/views/TemplateView.vue'
 import CardManagementView from '@/views/CardManagementView.vue'
 import QRZConfigView from '@/views/QRZConfigView.vue'
 import QRZComConfigView from '@/views/QRZComConfigView.vue'
-import CloudDatabaseConfigView from '@/views/CloudDatabaseConfigView.vue'
+import DataTransferView from '@/views/DataTransferView.vue'
 import SFExpressConfigView from '@/views/SFExpressConfigView.vue'
+import SFOrderListView from '@/views/SFOrderListView.vue'
 import LogView from '@/views/LogView.vue'
 import AboutView from '@/views/AboutView.vue'
 import {
@@ -179,6 +179,8 @@ import {
   type UpdateInfo
 } from '@/stores/updateStore'
 import { logger } from '@/utils/logger'
+import IconSfExpress from '~icons/custom/sf-express'
+import GlobalLoading from '@/components/common/GlobalLoading.vue'
 
 const activeMenu = ref<string>('cards')
 const shouldAutoOpenNewConfig = ref<boolean>(false)
@@ -344,7 +346,9 @@ body {
 .page-content {
   padding: 30px;
   height: 100%;
+  max-height: 100%;
   overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .page-header {
