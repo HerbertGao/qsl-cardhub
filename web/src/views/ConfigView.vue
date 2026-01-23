@@ -58,13 +58,6 @@
             </el-button>
           </div>
         </el-form-item>
-
-        <el-form-item label="纸张大小">
-          <el-input
-            v-model="config.printer.paper_size"
-            placeholder="例如：76x130mm"
-          />
-        </el-form-item>
       </el-form>
     </el-card>
   </div>
@@ -80,8 +73,7 @@ import type { SinglePrinterConfig, PlatformInfo } from '@/types/models'
 // 配置数据
 const config = ref<SinglePrinterConfig>({
   printer: {
-    name: '',
-    paper_size: ''
+    name: ''
   },
   platform: {
     os: '',

@@ -257,10 +257,18 @@ const dialogVisible = computed<boolean>({
 // 计算下一个序列号（跳过包含4的数字）
 const calculateNextSerial = (current: number | null, skip4: boolean): number => {
   let next = (current || 0) + 1
+  // 超过999时重置为1
+  if (next > 999) {
+    next = 1
+  }
   if (skip4) {
     // 跳过包含数字4的序列号
     while (String(next).includes('4')) {
       next++
+      // 超过999时重置为1
+      if (next > 999) {
+        next = 1
+      }
     }
   }
   return next
@@ -270,6 +278,10 @@ const calculateNextSerial = (current: number | null, skip4: boolean): number => 
 const skip4Up = (number: number): number => {
   while (String(number).includes('4')) {
     number++
+    // 超过999时重置为1
+    if (number > 999) {
+      number = 1
+    }
   }
   return number
 }

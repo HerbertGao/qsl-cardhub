@@ -40,7 +40,7 @@ fn get_config_dir() -> Result<PathBuf, String> {
 ///
 /// 清除以下数据：
 /// - 数据库文件 (cards.db)
-/// - 配置文件 (config.toml, template_config.toml)
+/// - 配置文件 (config.toml, template_config.toml, printer.toml)
 /// - 所有钥匙串凭据
 ///
 /// 保留：
@@ -68,7 +68,7 @@ pub async fn factory_reset() -> Result<(), String> {
     }
 
     // 2. 删除配置文件
-    let config_files = ["config.toml", "template_config.toml"];
+    let config_files = ["config.toml", "template_config.toml", "printer.toml"];
     for file in &config_files {
         let file_path = config_dir.join(file);
         if file_path.exists() {

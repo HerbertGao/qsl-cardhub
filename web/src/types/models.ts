@@ -104,7 +104,6 @@ export interface ProjectWithStats {
 // 打印机配置
 export interface PrinterConfig {
   name: string
-  paper_size: string
 }
 
 // 平台信息
