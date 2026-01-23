@@ -9,4 +9,5 @@ pub use credentials::{
     get_credential,
     delete_credential,
     is_keyring_available,
+    clear_all_credentials,
 };

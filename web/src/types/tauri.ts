@@ -32,6 +32,7 @@ export interface CreateCardParams {
   project_id: string
   callsign: string
   qty: number
+  serial?: string | null
 }
 
 export interface ListCardsParams extends CardFilter {}
@@ -64,19 +65,15 @@ export interface ReturnCardParams {
 
 export interface CreateProfileParams {
   name: string
-  task_name?: string | null
   printer_name: string
   paper_size: string
-  orientation: string
 }
 
 export interface UpdateProfileParams {
   id: string
   name?: string
-  task_name?: string | null
   printer_name?: string
   paper_size?: string
-  orientation?: string
 }
 
 export interface DeleteProfileParams {
@@ -149,6 +146,7 @@ export interface TauriCommands {
   create_card_cmd: (params: CreateCardParams) => Promise<Card>
   list_cards_cmd: (params: ListCardsParams) => Promise<PagedCards>
   get_card_cmd: (params: { id: string }) => Promise<CardWithProject>
+  get_max_serial_cmd: (params: { project_id: string }) => Promise<number | null>
   update_card_cmd: (params: UpdateCardParams) => Promise<Card>
   delete_card_cmd: (params: DeleteCardParams) => Promise<void>
   distribute_card_cmd: (params: DistributeCardParams) => Promise<Card>

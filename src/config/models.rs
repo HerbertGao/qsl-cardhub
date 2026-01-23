@@ -53,6 +53,29 @@ pub struct Template {
     pub path: String,
 }
 
+/// 单配置模式的打印机配置（用于替代多 Profile 模式）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SinglePrinterConfig {
+    /// 打印机配置
+    pub printer: PrinterConfig,
+    /// 平台信息
+    pub platform: Platform,
+}
+
+impl Default for SinglePrinterConfig {
+    fn default() -> Self {
+        Self {
+            printer: PrinterConfig {
+                name: String::new(),
+            },
+            platform: Platform {
+                os: std::env::consts::OS.to_string(),
+                arch: std::env::consts::ARCH.to_string(),
+            },
+        }
+    }
+}
+
 /// 应用全局配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {

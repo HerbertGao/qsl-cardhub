@@ -11,6 +11,6 @@ pub mod models;
 pub mod profile_manager;
 pub mod template;
 
-pub use models::{Platform, Profile};
+pub use models::{Platform, PrinterConfig, Profile, SinglePrinterConfig};
 pub use profile_manager::ProfileManager;
 pub use template::TemplateConfig;

@@ -1,312 +1,127 @@
 <template>
   <div class="page-content">
-    <h1>配置文件管理</h1>
+    <h1>打印机配置</h1>
 
-    <div style="display: flex; gap: 20px; margin-top: 30px">
-      <!-- 左侧列表 -->
-      <el-card
-        style="width: 300px; flex-shrink: 0"
-        shadow="hover"
-      >
-        <template #header>
-          <div style="display: flex; justify-content: space-between; align-items: center">
-            <span style="font-weight: bold">配置列表</span>
-            <el-button
-              type="primary"
-              size="small"
-              @click="handleNewConfig"
-            >
-              <el-icon>
-                <Plus />
-              </el-icon>
-              新建
-            </el-button>
-          </div>
-        </template>
-
-        <el-menu
-          :default-active="selectedConfigId"
-          @select="handleConfigSelect"
-        >
-          <el-menu-item
-            v-for="profile in profiles"
-            :key="profile.id"
-            :index="profile.id"
-          >
-            <span>{{ profile.name }}</span>
-            <el-tag
-              v-if="profile.id === defaultProfileId"
-              size="small"
-              type="success"
-              style="margin-left: 10px"
-            >
-              默认
-            </el-tag>
-          </el-menu-item>
-        </el-menu>
-
-        <div style="margin-top: 15px; display: flex; gap: 10px">
+    <el-card
+      style="max-width: 600px; margin-top: 30px"
+      shadow="hover"
+    >
+      <template #header>
+        <div style="display: flex; justify-content: space-between; align-items: center">
+          <span style="font-weight: bold">打印机设置</span>
           <el-button
+            type="primary"
             size="small"
-            type="danger"
-            :disabled="!selectedConfigId"
-            style="flex: 1"
-            @click="handleDeleteConfig"
+            :loading="saving"
+            @click="handleSaveConfig"
           >
-            删除
-          </el-button>
-          <el-button
-            size="small"
-            type="success"
-            :disabled="!selectedConfigId"
-            style="flex: 1"
-            @click="handleSetDefault"
-          >
-            设为默认
+            保存
           </el-button>
         </div>
-      </el-card>
+      </template>
 
-      <!-- 右侧详情 -->
-      <el-card
-        style="flex: 1"
-        shadow="hover"
+      <el-form
+        v-loading="loading"
+        :model="config"
+        label-width="120px"
       >
-        <template #header>
-          <div style="display: flex; justify-content: space-between; align-items: center">
-            <span style="font-weight: bold">配置详情</span>
-            <div v-if="selectedConfig">
-              <el-button
-                type="primary"
-                size="small"
-                @click="handleSaveConfig"
-              >
-                保存修改
-              </el-button>
-            </div>
-          </div>
-        </template>
-
-        <!-- 空状态提示 -->
-        <el-empty
-          v-if="!selectedConfig"
-          description="请从左侧选择一个配置或新建配置"
-          :image-size="120"
-        />
-
-        <!-- 配置表单 -->
-        <el-form
-          v-else-if="selectedConfig"
-          :model="selectedConfig"
-          label-width="120px"
-          style="max-width: 800px"
-        >
-          <el-form-item label="配置名称">
-            <el-input v-model="selectedConfig.name" />
-          </el-form-item>
-
-          <el-form-item label="任务名称">
-            <el-input
-              v-model="selectedConfig.task_name"
-              placeholder="请输入任务名称（可选）"
-              maxlength="50"
-              show-word-limit
-              clearable
-            />
-          </el-form-item>
-
-          <el-form-item label="操作系统">
-            <el-input
-              :value="`${selectedConfig.platform.os} (${selectedConfig.platform.arch})`"
-              disabled
-            />
-          </el-form-item>
-
-          <el-form-item label="打印机名称">
-            <div style="display: flex; gap: 10px; width: 100%">
-              <el-select
-                v-model="selectedConfig.printer.name"
-                placeholder="请选择打印机"
-                style="flex: 1; min-width: 0"
-                :fit-input-width="true"
-                :popper-options="{ strategy: 'fixed' }"
-              >
-                <el-option
-                  v-for="printer in availablePrinters"
-                  :key="printer"
-                  :label="printer"
-                  :value="printer"
-                />
-              </el-select>
-              <el-button @click="refreshPrinters">
-                <el-icon>
-                  <Refresh />
-                </el-icon>
-              </el-button>
-            </div>
-          </el-form-item>
-
-          <el-form-item label="打印模板">
-            <el-input
-              :value="selectedConfig.template_display_name || selectedConfig.template.path"
-              disabled
-            />
-          </el-form-item>
-        </el-form>
-      </el-card>
-    </div>
-  </div>
-
-  <!-- 新建配置对话框 -->
-  <el-dialog
-    v-model="newConfigDialogVisible"
-    title="新建配置文件"
-    width="500px"
-  >
-    <el-form
-      :model="newConfigForm"
-      label-width="120px"
-    >
-      <el-form-item
-        label="配置名称"
-        required
-      >
-        <el-input
-          v-model="newConfigForm.name"
-          placeholder="请输入配置名称"
-        />
-      </el-form-item>
-
-      <el-form-item label="任务名称">
-        <el-input
-          v-model="newConfigForm.taskName"
-          placeholder="请输入任务名称（可选）"
-          maxlength="50"
-          show-word-limit
-          clearable
-        />
-      </el-form-item>
-
-      <el-form-item label="操作系统">
-        <el-input
-          :value="platformInfo"
-          disabled
-        />
-      </el-form-item>
-
-      <el-form-item
-        label="打印机名称"
-        required
-      >
-        <el-select
-          v-model="newConfigForm.printerName"
-          placeholder="请选择打印机"
-          style="width: 100%"
-        >
-          <el-option
-            v-for="printer in availablePrinters"
-            :key="printer"
-            :label="printer"
-            :value="printer"
+        <el-form-item label="操作系统">
+          <el-input
+            :value="platformDisplay"
+            disabled
           />
-        </el-select>
-      </el-form-item>
+        </el-form-item>
 
-      <el-form-item label="打印模板">
-        <el-input
-          :value="defaultTemplateName"
-          disabled
-        />
-      </el-form-item>
-    </el-form>
+        <el-form-item
+          label="打印机名称"
+          required
+        >
+          <div style="display: flex; gap: 10px; width: 100%">
+            <el-select
+              v-model="config.printer.name"
+              placeholder="请选择打印机"
+              style="flex: 1; min-width: 0"
+              :fit-input-width="true"
+              :popper-options="{ strategy: 'fixed' }"
+            >
+              <el-option
+                v-for="printer in availablePrinters"
+                :key="printer"
+                :label="printer"
+                :value="printer"
+              />
+            </el-select>
+            <el-button @click="refreshPrinters">
+              <el-icon>
+                <Refresh />
+              </el-icon>
+            </el-button>
+          </div>
+        </el-form-item>
 
-    <template #footer>
-      <el-button @click="newConfigDialogVisible = false">
-        取消
-      </el-button>
-      <el-button
-        type="primary"
-        @click="handleCreateConfig"
-      >
-        创建
-      </el-button>
-    </template>
-  </el-dialog>
+        <el-form-item label="纸张大小">
+          <el-input
+            v-model="config.printer.paper_size"
+            placeholder="例如：76x130mm"
+          />
+        </el-form-item>
+      </el-form>
+    </el-card>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh } from '@element-plus/icons-vue'
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { Refresh } from '@element-plus/icons-vue'
 import { invoke } from '@tauri-apps/api/core'
-import type { Profile, PlatformInfo } from '@/types/models'
+import type { SinglePrinterConfig, PlatformInfo } from '@/types/models'
 
-interface Props {
-  autoOpenNewDialog: boolean
-}
-
-interface NewConfigForm {
-  name: string
-  taskName: string
-  printerName: string
-}
-
-const props = withDefaults(defineProps<Props>(), {
-  autoOpenNewDialog: false
+// 配置数据
+const config = ref<SinglePrinterConfig>({
+  printer: {
+    name: '',
+    paper_size: ''
+  },
+  platform: {
+    os: '',
+    arch: ''
+  }
 })
 
-// 生成默认配置名称（格式：配置YYYYMMDD）
-const getDefaultConfigName = (): string => {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-  return `配置${year}${month}${day}`
-}
-
-const profiles = ref<Profile[]>([])
-const selectedConfigId = ref<string>('')
-const selectedConfig = ref<Profile | null>(null)
 const availablePrinters = ref<string[]>([])
-const defaultProfileId = ref<string>('')
-const newConfigDialogVisible = ref<boolean>(false)
-const platformInfo = ref<string>('')
-const defaultTemplateName = ref<string>('加载中...')
+const loading = ref<boolean>(true)
+const saving = ref<boolean>(false)
 
-const newConfigForm = ref<NewConfigForm>({
-  name: '',
-  taskName: '',
-  printerName: ''
+// 计算平台显示文本
+const platformDisplay = computed(() => {
+  if (config.value.platform.os && config.value.platform.arch) {
+    return `${config.value.platform.os} (${config.value.platform.arch})`
+  }
+  return '加载中...'
 })
 
-const loadProfiles = async (): Promise<void> => {
+// 加载打印机配置
+const loadConfig = async (): Promise<void> => {
+  loading.value = true
   try {
-    const allProfiles = await invoke<Profile[]>('get_profiles')
-    profiles.value = allProfiles || []
-
-    const defaultId = await invoke<string>('get_default_profile_id')
-    defaultProfileId.value = defaultId || ''
-
-    // 自动选中配置（优先选中默认配置，否则选中第一个）
-    if (profiles.value.length > 0 && !selectedConfigId.value) {
-      const autoSelectId = defaultProfileId.value || profiles.value[0].id
-      handleConfigSelect(autoSelectId)
+    const savedConfig = await invoke<SinglePrinterConfig>('get_printer_config')
+    config.value = savedConfig
+  } catch (error) {
+    console.error('加载打印机配置失败:', error)
+    // 如果加载失败，获取平台信息作为基础配置
+    try {
+      const platform = await invoke<PlatformInfo>('get_platform_info')
+      config.value.platform = platform
+    } catch (platformError) {
+      console.error('获取平台信息失败:', platformError)
     }
-  } catch (error) {
-    console.error('加载配置失败:', error)
-    ElMessage.error('加载配置失败: ' + error)
+  } finally {
+    loading.value = false
   }
 }
 
-const loadPlatformInfo = async (): Promise<void> => {
-  try {
-    const info = await invoke<PlatformInfo>('get_platform_info')
-    platformInfo.value = `${info.os} (${info.arch})`
-  } catch (error) {
-    console.error('获取平台信息失败:', error)
-  }
-}
-
+// 加载打印机列表
 const loadPrinters = async (): Promise<void> => {
   try {
     availablePrinters.value = await invoke<string[]>('get_printers')
@@ -316,155 +131,37 @@ const loadPrinters = async (): Promise<void> => {
   }
 }
 
-const loadDefaultTemplate = async (): Promise<void> => {
-  try {
-    defaultTemplateName.value = await invoke<string>('get_default_template_name')
-  } catch (error) {
-    console.error('获取默认模板失败:', error)
-    defaultTemplateName.value = '默认模板'
-  }
-}
-
+// 刷新打印机列表
 const refreshPrinters = async (): Promise<void> => {
   await loadPrinters()
   ElMessage.success('打印机列表已刷新')
 }
 
-const handleConfigSelect = (configId: string): void => {
-  selectedConfigId.value = configId
-  const config = profiles.value.find(p => p.id === configId)
-  if (config) {
-    // 使用响应式拷贝，确保深层属性也是响应式的
-    selectedConfig.value = {
-      ...config,
-      task_name: config.task_name || '',
-      printer: { ...config.printer },
-      platform: { ...config.platform },
-      template: { ...config.template },
-      template_display_name: config.template_display_name
-    }
-  }
-}
-
-const handleNewConfig = (): void => {
-  newConfigForm.value = {
-    name: getDefaultConfigName(),
-    taskName: '',
-    printerName: availablePrinters.value[0] || ''
-  }
-  newConfigDialogVisible.value = true
-}
-
-const handleCreateConfig = async (): Promise<void> => {
-  if (!newConfigForm.value.name.trim()) {
-    ElMessage.warning('请输入配置名称')
-    return
-  }
-  if (!newConfigForm.value.printerName) {
+// 保存配置
+const handleSaveConfig = async (): Promise<void> => {
+  if (!config.value.printer.name) {
     ElMessage.warning('请选择打印机')
     return
   }
-  if (newConfigForm.value.taskName && newConfigForm.value.taskName.length > 50) {
-    ElMessage.warning('任务名称最长 50 字符')
-    return
-  }
 
+  saving.value = true
   try {
-    // 获取平台信息
-    const platform = await invoke<PlatformInfo>('get_platform_info')
-
-    // 创建配置
-    await invoke('create_profile', {
-      name: newConfigForm.value.name,
-      taskName: newConfigForm.value.taskName?.trim() || null,
-      printerName: newConfigForm.value.printerName,
-      platform: platform
+    await invoke('save_printer_config', {
+      config: config.value
     })
-
-    ElMessage.success('配置创建成功')
-    newConfigDialogVisible.value = false
-    await loadProfiles()
+    ElMessage.success('打印机配置已保存')
   } catch (error) {
-    console.error('创建配置失败:', error)
-    ElMessage.error('创建失败: ' + error)
-  }
-}
-
-const handleSaveConfig = async (): Promise<void> => {
-  if (!selectedConfig.value) return
-
-  // 验证任务名称长度
-  if (selectedConfig.value.task_name && selectedConfig.value.task_name.length > 50) {
-    ElMessage.warning('任务名称最长 50 字符')
-    return
-  }
-
-  try {
-    await invoke('update_profile', {
-      id: selectedConfig.value.id,
-      profile: selectedConfig.value
-    })
-
-    ElMessage.success('配置已保存')
-    await loadProfiles()
-  } catch (error) {
-    console.error('保存配置失败:', error)
+    console.error('保存打印机配置失败:', error)
     ElMessage.error('保存失败: ' + error)
-  }
-}
-
-const handleDeleteConfig = async (): Promise<void> => {
-  if (!selectedConfigId.value) return
-
-  try {
-    await ElMessageBox.confirm('确定要删除此配置吗？', '删除确认', {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-
-    await invoke('delete_profile', {
-      id: selectedConfigId.value
-    })
-
-    ElMessage.success('配置已删除')
-    selectedConfigId.value = ''
-    selectedConfig.value = null
-    await loadProfiles()
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('删除配置失败:', error)
-      ElMessage.error('删除失败: ' + error)
-    }
-  }
-}
-
-const handleSetDefault = async (): Promise<void> => {
-  if (!selectedConfigId.value) return
-
-  try {
-    await invoke('set_default_profile', {
-      id: selectedConfigId.value
-    })
-
-    ElMessage.success('已设为默认配置')
-    await loadProfiles()
-  } catch (error) {
-    console.error('设置默认配置失败:', error)
-    ElMessage.error('设置失败: ' + error)
+  } finally {
+    saving.value = false
   }
 }
 
 onMounted(async (): Promise<void> => {
-  await loadProfiles()
-  await loadPlatformInfo()
-  await loadPrinters()
-  await loadDefaultTemplate()
-
-  // 如果需要自动打开新建配置对话框
-  if (props.autoOpenNewDialog) {
-    await nextTick()
-    handleNewConfig()
-  }
+  await Promise.all([
+    loadConfig(),
+    loadPrinters()
+  ])
 })
 </script>

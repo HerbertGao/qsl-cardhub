@@ -211,7 +211,7 @@ mod tests {
         // 准备测试数据
         let config = TemplateConfig::default_qsl_card();
         let mut data = HashMap::new();
-        data.insert("task_name".to_string(), "CQWW DX".to_string());
+        data.insert("project_name".to_string(), "CQWW DX".to_string());
         data.insert("callsign".to_string(), "BG7XXX".to_string());
         data.insert("sn".to_string(), "001".to_string());
         data.insert("qty".to_string(), "100".to_string());
@@ -250,7 +250,7 @@ mod tests {
     fn test_generate_full_bitmap() {
         let config = TemplateConfig::default_qsl_card();
         let mut data = HashMap::new();
-        data.insert("task_name".to_string(), "测试".to_string());
+        data.insert("project_name".to_string(), "测试".to_string());
         data.insert("callsign".to_string(), "BD7AA".to_string());
         data.insert("sn".to_string(), "999".to_string());
         data.insert("qty".to_string(), "50".to_string());

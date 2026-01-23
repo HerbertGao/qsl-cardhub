@@ -226,7 +226,7 @@ impl TemplateConfig {
                     element_type: "text".to_string(),
                     source: "input".to_string(),
                     value: None,
-                    key: Some("task_name".to_string()),
+                    key: Some("project_name".to_string()),
                     format: None,
                     max_height_mm: Some(16.0),
                     barcode_type: None,

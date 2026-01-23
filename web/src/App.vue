@@ -54,37 +54,31 @@
               <span>QRZ.com</span>
             </el-menu-item>
 
-            <el-menu-item index="data-config-data-transfer">
-              <span>数据管理</span>
-            </el-menu-item>
-
             <el-menu-item index="data-config-sf-express">
               <span>顺丰速运</span>
             </el-menu-item>
+
+            <el-menu-item index="data-config-data-transfer">
+              <span>数据管理</span>
+            </el-menu-item>
           </el-sub-menu>
 
-          <el-divider style="margin: 20px 0" />
+          <el-sub-menu index="print-config-menu">
+            <template #title>
+              <el-icon>
+                <Setting />
+              </el-icon>
+              <span>打印配置</span>
+            </template>
 
-          <el-menu-item index="print">
-            <el-icon>
-              <Printer />
-            </el-icon>
-            <span>打印</span>
-          </el-menu-item>
+            <el-menu-item index="print-config-printer">
+              <span>打印机配置</span>
+            </el-menu-item>
 
-          <el-menu-item index="config">
-            <el-icon>
-              <Setting />
-            </el-icon>
-            <span>打印配置</span>
-          </el-menu-item>
-
-          <el-menu-item index="template">
-            <el-icon>
-              <Edit />
-            </el-icon>
-            <span>打印模板</span>
-          </el-menu-item>
+            <el-menu-item index="print-config-template">
+              <span>标签模板配置</span>
+            </el-menu-item>
+          </el-sub-menu>
 
           <el-divider style="margin: 20px 0" />
 
@@ -116,17 +110,13 @@
 
       <!-- 主内容区 -->
       <el-main style="background: #fff; overflow: hidden">
-        <!-- 打印页面 -->
-        <PrintView v-if="activeMenu === 'print'" />
-
-        <!-- 配置管理页面 -->
+        <!-- 打印机配置页面 -->
         <ConfigView
-          v-if="activeMenu === 'config'"
-          :auto-open-new-dialog="shouldAutoOpenNewConfig"
+          v-if="activeMenu === 'print-config-printer'"
         />
 
-        <!-- 模板设置页面 -->
-        <TemplateView v-if="activeMenu === 'template'" />
+        <!-- 标签模板配置页面 -->
+        <TemplateView v-if="activeMenu === 'print-config-template'" />
 
         <!-- 卡片管理页面 -->
         <CardManagementView v-if="activeMenu === 'cards'" />
@@ -157,12 +147,11 @@
 </template>
 
 <script setup lang="ts">
-import { h, onMounted, onUnmounted, ref, watch } from 'vue'
+import { h, onMounted, onUnmounted, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { getVersion } from '@tauri-apps/api/app'
 import { ElNotification, ElButton } from 'element-plus'
-import type { Profile } from '@/types/models'
-import PrintView from '@/views/PrintView.vue'
+import type { SinglePrinterConfig } from '@/types/models'
 import ConfigView from '@/views/ConfigView.vue'
 import TemplateView from '@/views/TemplateView.vue'
 import CardManagementView from '@/views/CardManagementView.vue'
@@ -183,7 +172,6 @@ import IconSfExpress from '~icons/custom/sf-express'
 import GlobalLoading from '@/components/common/GlobalLoading.vue'
 
 const activeMenu = ref<string>('cards')
-const shouldAutoOpenNewConfig = ref<boolean>(false)
 
 // 更新检查定时器
 let updateCheckTimer: ReturnType<typeof setInterval> | null = null
@@ -278,30 +266,20 @@ const handleMenuSelect = (index: string): void => {
   activeMenu.value = index
 }
 
-// 监听菜单切换，重置自动打开新建配置的标志
-watch(activeMenu, (newMenu: string, oldMenu: string) => {
-  // 当离开配置页面时，重置标志，避免下次进入时重复打开
-  if (oldMenu === 'config' && newMenu !== 'config') {
-    shouldAutoOpenNewConfig.value = false
-  }
-})
-
 // 启动时检查配置状态
 onMounted(async () => {
   try {
-    // 调用后端 API 获取配置列表
-    const profiles = await invoke<Profile[]>('get_profiles')
+    // 调用后端 API 获取打印机配置（单配置模式）
+    const config = await invoke<SinglePrinterConfig>('get_printer_config')
 
-    // 如果没有任何配置，跳转到配置页面并自动打开新建弹框
-    if (!profiles || profiles.length === 0) {
-      activeMenu.value = 'config'
-      shouldAutoOpenNewConfig.value = true
+    // 如果没有配置打印机，跳转到打印机配置页面
+    if (!config || !config.printer.name) {
+      activeMenu.value = 'print-config-printer'
     }
   } catch (error) {
-    console.error('获取配置失败:', error)
-    // 出错时也跳转到配置页面并自动打开新建弹框
-    activeMenu.value = 'config'
-    shouldAutoOpenNewConfig.value = true
+    console.error('获取打印机配置失败:', error)
+    // 出错时也跳转到打印机配置页面
+    activeMenu.value = 'print-config-printer'
   }
 
   // 启动时静默检查更新（不阻塞启动流程）

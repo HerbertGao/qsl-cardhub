@@ -1,6 +1,6 @@
 // Profile 配置管理 Commands
 
-use crate::config::{Platform, Profile, ProfileManager};
+use crate::config::{Platform, Profile, ProfileManager, SinglePrinterConfig};
 use std::sync::{Arc, Mutex};
 use tauri::State;
 
@@ -141,4 +141,35 @@ pub async fn get_default_template_name(state: State<'_, ProfileState>) -> Result
         .lock()
         .map_err(|e| format!("锁定失败: {}", e))?;
     Ok(manager.get_default_template_name())
+}
+
+// ========== 单配置模式命令 ==========
+
+/// 获取打印机配置（单配置模式）
+#[tauri::command]
+pub async fn get_printer_config(
+    state: State<'_, ProfileState>,
+) -> Result<SinglePrinterConfig, String> {
+    let manager = state
+        .manager
+        .lock()
+        .map_err(|e| format!("锁定失败: {}", e))?;
+    manager
+        .get_printer_config()
+        .map_err(|e| format!("获取打印机配置失败: {}", e))
+}
+
+/// 保存打印机配置（单配置模式）
+#[tauri::command]
+pub async fn save_printer_config(
+    config: SinglePrinterConfig,
+    state: State<'_, ProfileState>,
+) -> Result<(), String> {
+    let manager = state
+        .manager
+        .lock()
+        .map_err(|e| format!("锁定失败: {}", e))?;
+    manager
+        .save_printer_config(&config)
+        .map_err(|e| format!("保存打印机配置失败: {}", e))
 }

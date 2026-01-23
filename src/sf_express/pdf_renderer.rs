@@ -410,6 +410,7 @@ impl Default for PdfRenderer {
 
 #[cfg(test)]
 mod tests {
+    use image::Luma;
     use super::*;
 
     #[test]

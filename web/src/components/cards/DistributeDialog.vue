@@ -30,6 +30,9 @@
             <el-descriptions-item label="数量">
               {{ card.qty }}
             </el-descriptions-item>
+            <el-descriptions-item label="序列号">
+              {{ formatSerial(card.serial) }}
+            </el-descriptions-item>
             <el-descriptions-item label="状态">
               <el-tag
                 :type="getStatusType(card.status)"
@@ -365,6 +368,7 @@ import WaybillPrintDialog from '@/components/cards/WaybillPrintDialog.vue'
 import CreateOrderDialog from '@/components/sf-express/CreateOrderDialog.vue'
 import IconSfExpress from '~icons/custom/sf-express'
 import { useLoading } from '@/composables/useLoading'
+import { formatSerial } from '@/utils/format'
 
 const { withLoading } = useLoading()
 

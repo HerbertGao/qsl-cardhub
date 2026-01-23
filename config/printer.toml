@@ -1,0 +1,9 @@
+# qsl-cardhub 打印机配置
+# 单配置模式
+
+[printer]
+name = "PDF 测试打印机"
+
+[platform]
+os = "macOS"
+arch = "arm64"

@@ -131,15 +131,15 @@ fn export_cards(conn: &rusqlite::Connection) -> Result<Vec<Card>, AppError> {
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, project_id, creator_id, callsign, qty, status, metadata, created_at, updated_at
+            "SELECT id, project_id, creator_id, callsign, qty, serial, status, metadata, created_at, updated_at
              FROM cards ORDER BY created_at"
         )
         .map_err(|e| AppError::Other(format!("准备卡片查询失败: {}", e)))?;
 
     let cards = stmt
         .query_map([], |row| {
-            let status_str: String = row.get(5)?;
-            let metadata_str: Option<String> = row.get(6)?;
+            let status_str: String = row.get(6)?;
+            let metadata_str: Option<String> = row.get(7)?;
 
             Ok(Card {
                 id: row.get(0)?,
@@ -147,10 +147,11 @@ fn export_cards(conn: &rusqlite::Connection) -> Result<Vec<Card>, AppError> {
                 creator_id: row.get(2)?,
                 callsign: row.get(3)?,
                 qty: row.get(4)?,
+                serial: row.get(5)?,
                 status: CardStatus::from_str(&status_str).unwrap_or(CardStatus::Pending),
                 metadata: metadata_str.and_then(|s| serde_json::from_str(&s).ok()),
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
             })
         })
         .map_err(|e| AppError::Other(format!("查询卡片失败: {}", e)))?

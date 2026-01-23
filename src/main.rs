@@ -18,17 +18,18 @@ mod utils;
 
 use commands::{
     cards::{
-        create_card_cmd, delete_card_cmd, distribute_card_cmd, get_card_cmd, list_cards_cmd,
-        return_card_cmd, save_card_address_cmd,
+        create_card_cmd, delete_card_cmd, distribute_card_cmd, get_card_cmd, get_max_serial_cmd,
+        list_cards_cmd, return_card_cmd, save_card_address_cmd,
     },
     data_transfer::{export_data, import_data, preview_import_data},
+    factory_reset::factory_reset,
     logger::{clear_logs, export_logs, get_log_file_path, get_logs, log_from_frontend},
     platform::get_platform_info,
     printer::{PrinterState, generate_tspl, get_printers, get_template_config, load_template, preview_qsl, print_qsl, save_template, save_template_config},
     profile::{
         ProfileState, create_profile, delete_profile, export_profile, get_default_profile_id,
-        get_default_template_name, get_profile, get_profiles, import_profile, set_default_profile,
-        update_profile,
+        get_default_template_name, get_printer_config, get_profile, get_profiles, import_profile,
+        save_printer_config, set_default_profile, update_profile,
     },
     projects::{
         create_project_cmd, delete_project_cmd, get_project_cmd, list_projects_cmd,
@@ -118,7 +119,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             // 平台信息
             get_platform_info,
-            // Profile 管理
+            // Profile 管理（多配置模式，已废弃）
             get_profiles,
             get_profile,
             create_profile,
@@ -129,6 +130,9 @@ fn main() {
             get_default_template_name,
             export_profile,
             import_profile,
+            // 单配置模式
+            get_printer_config,
+            save_printer_config,
             // 打印机管理
             get_printers,
             preview_qsl,
@@ -154,6 +158,7 @@ fn main() {
             create_card_cmd,
             list_cards_cmd,
             get_card_cmd,
+            get_max_serial_cmd,
             distribute_card_cmd,
             return_card_cmd,
             delete_card_cmd,
@@ -214,6 +219,8 @@ fn main() {
             clear_sync_config_cmd,
             test_sync_connection_cmd,
             execute_sync_cmd,
+            // 恢复出厂设置
+            factory_reset,
         ])
         .run(tauri::generate_context!())
         .expect("运行 Tauri 应用时出错");

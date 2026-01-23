@@ -28,6 +28,9 @@
           <el-descriptions-item label="数量">
             {{ card.qty }}
           </el-descriptions-item>
+          <el-descriptions-item label="序列号">
+            {{ formatSerial(card.serial) }}
+          </el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag
               :type="getStatusType(card.status)"
@@ -132,6 +135,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { CardWithProject, CardStatus } from '@/types/models'
+import { formatSerial } from '@/utils/format'
 
 interface Props {
   visible: boolean

@@ -2,7 +2,7 @@
 //
 // 负责 Profile 的 CRUD 操作和持久化
 
-use super::models::{AppConfig, Platform, Profile};
+use super::models::{AppConfig, Platform, PrinterConfig, Profile, SinglePrinterConfig};
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::PathBuf;
@@ -176,6 +176,76 @@ impl ProfileManager {
     pub fn get_default_template_name(&self) -> String {
         self.load_template_display_name("default.toml")
             .unwrap_or_else(|| "默认模板".to_string())
+    }
+
+    // ========== 单配置模式方法 ==========
+
+    /// 获取单配置打印机配置
+    pub fn get_printer_config(&self) -> Result<SinglePrinterConfig> {
+        let config_path = self.config_dir.join("printer.toml");
+
+        if config_path.exists() {
+            let content = fs::read_to_string(&config_path).context("无法读取 printer.toml")?;
+            let config: SinglePrinterConfig =
+                toml::from_str(&content).context("无法解析 printer.toml")?;
+            Ok(config)
+        } else {
+            // 尝试从旧的多配置迁移
+            self.migrate_to_single_config()
+        }
+    }
+
+    /// 保存单配置打印机配置
+    pub fn save_printer_config(&self, config: &SinglePrinterConfig) -> Result<()> {
+        let config_path = self.config_dir.join("printer.toml");
+        let content = toml::to_string_pretty(config).context("无法序列化打印机配置")?;
+
+        let content_with_comment = format!(
+            "# qsl-cardhub 打印机配置\n# 单配置模式\n\n{}",
+            content
+        );
+
+        fs::write(&config_path, content_with_comment).context("无法写入 printer.toml")?;
+        Ok(())
+    }
+
+    /// 从旧的多配置迁移到单配置
+    fn migrate_to_single_config(&self) -> Result<SinglePrinterConfig> {
+        // 尝试获取默认配置或第一个配置
+        let profiles = self.get_all()?;
+
+        if profiles.is_empty() {
+            // 没有旧配置，返回默认配置
+            return Ok(SinglePrinterConfig::default());
+        }
+
+        // 优先使用默认配置
+        let profile = if let Some(default_id) = &self.app_config.default_profile_id {
+            profiles
+                .iter()
+                .find(|p| &p.id == default_id)
+                .unwrap_or(&profiles[0])
+        } else {
+            &profiles[0]
+        };
+
+        // 迁移到单配置
+        let config = SinglePrinterConfig {
+            printer: PrinterConfig {
+                name: profile.printer.name.clone(),
+            },
+            platform: profile.platform.clone(),
+        };
+
+        // 保存新配置
+        self.save_printer_config(&config)?;
+
+        log::info!(
+            "✅ 已从多配置迁移到单配置，使用配置: {}",
+            profile.name
+        );
+
+        Ok(config)
     }
 
     // ========== 私有方法 ==========

@@ -10,9 +10,10 @@ pub async fn create_card_cmd(
     project_id: String,
     callsign: String,
     qty: i32,
+    serial: Option<i32>,
 ) -> Result<Card, String> {
     tokio::task::spawn_blocking(move || {
-        db::create_card(project_id, callsign, qty).map_err(|e| e.to_string())
+        db::create_card(project_id, callsign, qty, serial).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -88,6 +89,16 @@ pub async fn delete_card_cmd(id: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || db::delete_card(&id).map_err(|e| e.to_string()))
         .await
         .map_err(|e| e.to_string())?
+}
+
+/// 获取项目的最大序列号
+#[tauri::command]
+pub async fn get_max_serial_cmd(project_id: String) -> Result<Option<u32>, String> {
+    tokio::task::spawn_blocking(move || {
+        db::get_max_serial_by_project(&project_id).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// 保存地址到卡片

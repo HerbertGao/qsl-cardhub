@@ -132,16 +132,37 @@
       closable
       @close="showLatestMessage = false"
     />
+
+    <!-- 危险操作区域 -->
+    <el-card
+      style="margin-top: 30px; max-width: 600px"
+      shadow="hover"
+    >
+      <template #header>
+        <span style="color: #f56c6c">危险操作</span>
+      </template>
+      <div style="margin-bottom: 12px; color: #909399; font-size: 13px">
+        此操作将删除所有数据（项目、卡片、配置、登录凭据等），且无法恢复。默认打印模板将被保留。
+      </div>
+      <el-button
+        type="danger"
+        :loading="resetting"
+        @click="handleFactoryReset"
+      >
+        抹掉所有内容和设置
+      </el-button>
+    </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { getVersion } from '@tauri-apps/api/app'
+import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-shell'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   updateState,
   markAsViewed,
@@ -161,6 +182,9 @@ const appVersion = ref('0.0.0')
 
 // 显示"已是最新版本"提示
 const showLatestMessage = ref(false)
+
+// 恢复出厂设置状态
+const resetting = ref(false)
 
 // GitHub 仓库信息
 const GITHUB_OWNER = 'HerbertGao'
@@ -354,6 +378,43 @@ async function handleOpenReleasePage(): Promise<void> {
   } catch (error) {
     console.error('打开链接失败:', error)
     ElMessage.error('打开链接失败')
+  }
+}
+
+// 抹掉所有内容和设置
+async function handleFactoryReset(): Promise<void> {
+  try {
+    await ElMessageBox.confirm(
+      '此操作将删除以下数据，且无法恢复：\n\n' +
+      '• 所有项目和卡片数据\n' +
+      '• 打印机配置\n' +
+      '• QRZ.cn / QRZ.com 登录凭据\n' +
+      '• 顺丰速运配置\n' +
+      '• 云同步配置\n\n' +
+      '默认打印模板将被保留。\n\n' +
+      '确定要继续吗？',
+      '抹掉所有内容和设置',
+      {
+        confirmButtonText: '确认重置',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+
+    resetting.value = true
+    await invoke('factory_reset')
+    ElMessage.success('重置完成，即将重启应用...')
+
+    setTimeout(async () => {
+      await relaunch()
+    }, 1500)
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('重置失败:', error)
+      ElMessage.error(`重置失败: ${error}`)
+    }
+  } finally {
+    resetting.value = false
   }
 }
 </script>

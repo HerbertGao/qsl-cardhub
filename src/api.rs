@@ -140,7 +140,7 @@ impl Default for QslCardGenerator {
 /// use std::path::PathBuf;
 ///
 /// let mut data = HashMap::new();
-/// data.insert("task_name".to_string(), "CQWW DX".to_string());
+/// data.insert("project_name".to_string(), "CQWW DX".to_string());
 /// data.insert("callsign".to_string(), "BG7XXX".to_string());
 /// data.insert("sn".to_string(), "001".to_string());
 /// data.insert("qty".to_string(), "100".to_string());
@@ -191,7 +191,7 @@ pub fn quick_generate_png(
 /// use std::collections::HashMap;
 ///
 /// let mut data = HashMap::new();
-/// data.insert("task_name".to_string(), "CQWW DX".to_string());
+/// data.insert("project_name".to_string(), "CQWW DX".to_string());
 /// data.insert("callsign".to_string(), "BG7XXX".to_string());
 /// data.insert("sn".to_string(), "001".to_string());
 /// data.insert("qty".to_string(), "100".to_string());
@@ -234,7 +234,7 @@ mod tests {
     fn test_quick_generate_png() {
         let temp_dir = TempDir::new().unwrap();
         let mut data = HashMap::new();
-        data.insert("task_name".to_string(), "测试".to_string());
+        data.insert("project_name".to_string(), "测试".to_string());
         data.insert("callsign".to_string(), "BG7XXX".to_string());
         data.insert("sn".to_string(), "001".to_string());
         data.insert("qty".to_string(), "100".to_string());
@@ -251,7 +251,7 @@ mod tests {
     #[test]
     fn test_quick_generate_tspl() {
         let mut data = HashMap::new();
-        data.insert("task_name".to_string(), "测试".to_string());
+        data.insert("project_name".to_string(), "测试".to_string());
         data.insert("callsign".to_string(), "BG7XXX".to_string());
         data.insert("sn".to_string(), "001".to_string());
         data.insert("qty".to_string(), "100".to_string());
@@ -272,7 +272,7 @@ mod tests {
 
         let config = TemplateConfig::default_qsl_card();
         let mut data = HashMap::new();
-        data.insert("task_name".to_string(), "测试".to_string());
+        data.insert("project_name".to_string(), "测试".to_string());
         data.insert("callsign".to_string(), "BD7AA".to_string());
         data.insert("sn".to_string(), "999".to_string());
         data.insert("qty".to_string(), "50".to_string());
@@ -299,7 +299,7 @@ mod tests {
 
         let config = TemplateConfig::default_qsl_card();
         let mut data = HashMap::new();
-        data.insert("task_name".to_string(), "IARU HF".to_string());
+        data.insert("project_name".to_string(), "IARU HF".to_string());
         data.insert("callsign".to_string(), "BH1ABC".to_string());
         data.insert("sn".to_string(), "042".to_string());
         data.insert("qty".to_string(), "100".to_string());

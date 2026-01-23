@@ -41,6 +41,7 @@ export interface Card {
   creator_id?: string | null
   callsign: string
   qty: number
+  serial?: number | null
   status: CardStatus
   metadata?: CardMetadata | null
   created_at: string
@@ -55,6 +56,7 @@ export interface CardWithProject {
   creator_id?: string | null
   callsign: string
   qty: number
+  serial?: number | null
   status: CardStatus
   metadata?: CardMetadata | null
   created_at: string
@@ -103,7 +105,6 @@ export interface ProjectWithStats {
 export interface PrinterConfig {
   name: string
   paper_size: string
-  orientation: string
 }
 
 // 平台信息
@@ -117,17 +118,22 @@ export interface TemplatePathConfig {
   path: string
 }
 
-// Profile 配置
+// Profile 配置（将被废弃，改为单配置模式）
 export interface Profile {
   id: string
   name: string
-  task_name?: string | null
   printer: PrinterConfig
   platform: PlatformInfo
   template: TemplatePathConfig
   template_display_name?: string
   created_at: string
   updated_at: string
+}
+
+// 单配置模式的打印机配置
+export interface SinglePrinterConfig {
+  printer: PrinterConfig
+  platform: PlatformInfo
 }
 
 // 模板字段
