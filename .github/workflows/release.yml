@@ -133,7 +133,7 @@ jobs:
           VERSION=${{ needs.create-release.outputs.version }}
           mkdir -p dist
 
-          # DMG 文件（必需）
+          # DMG 文件（用于手动下载，必需）
           DMG_PATH=$(find ${{ matrix.bundle_path }}/dmg -name "*.dmg" | head -n 1)
           if [ -z "$DMG_PATH" ] || [ ! -f "$DMG_PATH" ]; then
             echo "错误：未找到 DMG 文件"
@@ -141,13 +141,21 @@ jobs:
           fi
           cp "$DMG_PATH" "dist/qsl-cardhub-v${VERSION}-${{ matrix.platform }}.dmg"
 
-          # 更新包签名文件（必需）
-          DMG_SIG=$(find ${{ matrix.bundle_path }}/dmg -name "*.dmg.sig" | head -n 1)
-          if [ -z "$DMG_SIG" ] || [ ! -f "$DMG_SIG" ]; then
-            echo "错误：未找到 DMG 签名文件"
+          # .app.tar.gz 文件（用于更新器，必需）
+          APP_TAR_PATH=$(find ${{ matrix.bundle_path }}/macos -name "*.app.tar.gz" | head -n 1)
+          if [ -z "$APP_TAR_PATH" ] || [ ! -f "$APP_TAR_PATH" ]; then
+            echo "错误：未找到 .app.tar.gz 文件"
             exit 1
           fi
-          cp "$DMG_SIG" "dist/qsl-cardhub-v${VERSION}-${{ matrix.platform }}.dmg.sig"
+          cp "$APP_TAR_PATH" "dist/qsl-cardhub-v${VERSION}-${{ matrix.platform }}.app.tar.gz"
+
+          # .app.tar.gz 签名文件（用于更新器，必需）
+          APP_TAR_SIG=$(find ${{ matrix.bundle_path }}/macos -name "*.app.tar.gz.sig" | head -n 1)
+          if [ -z "$APP_TAR_SIG" ] || [ ! -f "$APP_TAR_SIG" ]; then
+            echo "错误：未找到 .app.tar.gz.sig 签名文件"
+            exit 1
+          fi
+          cp "$APP_TAR_SIG" "dist/qsl-cardhub-v${VERSION}-${{ matrix.platform }}.app.tar.gz.sig"
 
           ls -la dist/
 
@@ -252,10 +260,10 @@ jobs:
             return 1
           }
 
-          # macOS ARM64 签名
-          MACOS_ARM64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-macos-arm64.dmg.sig") || exit 1
-          # macOS x64 签名
-          MACOS_X64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-macos-x64.dmg.sig") || exit 1
+          # macOS ARM64 签名（.app.tar.gz 用于更新器）
+          MACOS_ARM64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-macos-arm64.app.tar.gz.sig") || exit 1
+          # macOS x64 签名（.app.tar.gz 用于更新器）
+          MACOS_X64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-macos-x64.app.tar.gz.sig") || exit 1
           # Windows x64 签名
           WINDOWS_X64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-windows-x64-setup.exe.sig") || exit 1
           # Windows ARM64 签名
@@ -270,11 +278,11 @@ jobs:
             "platforms": {
               "darwin-aarch64": {
                 "signature": "${MACOS_ARM64_SIG}",
-                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/qsl-cardhub-v${VERSION}-macos-arm64.dmg"
+                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/qsl-cardhub-v${VERSION}-macos-arm64.app.tar.gz"
               },
               "darwin-x86_64": {
                 "signature": "${MACOS_X64_SIG}",
-                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/qsl-cardhub-v${VERSION}-macos-x64.dmg"
+                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/qsl-cardhub-v${VERSION}-macos-x64.app.tar.gz"
               },
               "windows-x86_64": {
                 "signature": "${WINDOWS_X64_SIG}",
