@@ -11,4 +11,6 @@ pub mod logger;
 pub mod printer;
 pub mod qrz;
 pub mod security;
+pub mod sf_express;
+pub mod sync;
 pub mod utils;

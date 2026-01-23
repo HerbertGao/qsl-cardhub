@@ -2,7 +2,7 @@
 //
 // 接收 RenderResult 并生成 PNG/PDF 文件
 
-use super::PrinterBackend;
+use super::{PrinterBackend, PrintResult};
 use crate::printer::barcode_renderer::BarcodeRenderer;
 use crate::printer::render_pipeline::{BarcodeElement, RenderResult};
 use anyhow::{Context, Result};
@@ -330,7 +330,7 @@ impl PrinterBackend for PdfBackend {
         Ok(vec!["PDF 测试打印机".to_string()])
     }
 
-    fn send_raw(&self, _printer_name: &str, _data: &[u8]) -> Result<()> {
+    fn send_raw(&self, _printer_name: &str, _data: &[u8]) -> Result<PrintResult> {
         // PDF 后端不支持发送原始数据
         anyhow::bail!("PDF 后端不支持打印，仅用于预览")
     }

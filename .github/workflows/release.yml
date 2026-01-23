@@ -60,29 +60,29 @@ jobs:
           - platform: macos-arm64
             os: macos-latest
             target: aarch64-apple-darwin
-            artifact_name: qsl-cardhub-v${{ needs.create-release.outputs.version }}-macos-arm64.dmg
-            bundle_path: target/aarch64-apple-darwin/release/bundle/dmg
+            bundle_path: target/aarch64-apple-darwin/release/bundle
 
           # macOS Intel (x86_64)
           - platform: macos-x64
             os: macos-15-intel
             target: x86_64-apple-darwin
-            artifact_name: qsl-cardhub-v${{ needs.create-release.outputs.version }}-macos-x64.dmg
-            bundle_path: target/x86_64-apple-darwin/release/bundle/dmg
+            bundle_path: target/x86_64-apple-darwin/release/bundle
 
           # Windows x64
           - platform: windows-x64
             os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact_name: qsl-cardhub-v${{ needs.create-release.outputs.version }}-windows-x64.msi
-            bundle_path: target/x86_64-pc-windows-msvc/release/bundle/msi
+            bundle_path: target/x86_64-pc-windows-msvc/release/bundle
 
           # Windows ARM64
           - platform: windows-arm64
             os: windows-11-arm
             target: aarch64-pc-windows-msvc
-            artifact_name: qsl-cardhub-v${{ needs.create-release.outputs.version }}-windows-arm64.msi
-            bundle_path: target/aarch64-pc-windows-msvc/release/bundle/msi
+            bundle_path: target/aarch64-pc-windows-msvc/release/bundle
+
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
     steps:
       - name: 检出代码
@@ -130,40 +130,197 @@ jobs:
       - name: 准备产物 (macOS)
         if: startsWith(matrix.platform, 'macos')
         run: |
+          VERSION=${{ needs.create-release.outputs.version }}
           mkdir -p dist
-          DMG_PATH=$(find ${{ matrix.bundle_path }} -name "*.dmg" | head -n 1)
-          cp "$DMG_PATH" "dist/${{ matrix.artifact_name }}"
-          echo "ARTIFACT_PATH=dist/${{ matrix.artifact_name }}" >> $GITHUB_ENV
+
+          # DMG 文件（用于手动下载，必需）
+          DMG_PATH=$(find ${{ matrix.bundle_path }}/dmg -name "*.dmg" | head -n 1)
+          if [ -z "$DMG_PATH" ] || [ ! -f "$DMG_PATH" ]; then
+            echo "错误：未找到 DMG 文件"
+            exit 1
+          fi
+          cp "$DMG_PATH" "dist/qsl-cardhub-v${VERSION}-${{ matrix.platform }}.dmg"
+
+          # .app.tar.gz 文件（用于更新器，必需）
+          APP_TAR_PATH=$(find ${{ matrix.bundle_path }}/macos -name "*.app.tar.gz" | head -n 1)
+          if [ -z "$APP_TAR_PATH" ] || [ ! -f "$APP_TAR_PATH" ]; then
+            echo "错误：未找到 .app.tar.gz 文件"
+            exit 1
+          fi
+          cp "$APP_TAR_PATH" "dist/qsl-cardhub-v${VERSION}-${{ matrix.platform }}.app.tar.gz"
+
+          # .app.tar.gz 签名文件（用于更新器，必需）
+          APP_TAR_SIG=$(find ${{ matrix.bundle_path }}/macos -name "*.app.tar.gz.sig" | head -n 1)
+          if [ -z "$APP_TAR_SIG" ] || [ ! -f "$APP_TAR_SIG" ]; then
+            echo "错误：未找到 .app.tar.gz.sig 签名文件"
+            exit 1
+          fi
+          cp "$APP_TAR_SIG" "dist/qsl-cardhub-v${VERSION}-${{ matrix.platform }}.app.tar.gz.sig"
+
+          ls -la dist/
 
       - name: 准备产物 (Windows)
         if: startsWith(matrix.platform, 'windows')
         shell: bash
         run: |
+          VERSION=${{ needs.create-release.outputs.version }}
           mkdir -p dist
-          MSI_PATH=$(find ${{ matrix.bundle_path }} -name "*.msi" | head -n 1)
-          cp "$MSI_PATH" "dist/${{ matrix.artifact_name }}"
-          echo "ARTIFACT_PATH=dist/${{ matrix.artifact_name }}" >> $GITHUB_ENV
+
+          # MSI 文件（可选）
+          MSI_PATH=$(find ${{ matrix.bundle_path }}/msi -name "*.msi" | head -n 1)
+          if [ -f "$MSI_PATH" ]; then
+            cp "$MSI_PATH" "dist/qsl-cardhub-v${VERSION}-${{ matrix.platform }}.msi"
+          fi
+
+          # NSIS 安装包（必需）
+          NSIS_PATH=$(find ${{ matrix.bundle_path }}/nsis -name "*.exe" | head -n 1)
+          if [ -z "$NSIS_PATH" ] || [ ! -f "$NSIS_PATH" ]; then
+            echo "错误：未找到 NSIS 安装包"
+            exit 1
+          fi
+          cp "$NSIS_PATH" "dist/qsl-cardhub-v${VERSION}-${{ matrix.platform }}-setup.exe"
+
+          # NSIS 签名文件（必需）
+          NSIS_SIG=$(find ${{ matrix.bundle_path }}/nsis -name "*.exe.sig" | head -n 1)
+          if [ -z "$NSIS_SIG" ] || [ ! -f "$NSIS_SIG" ]; then
+            echo "错误：未找到 NSIS 签名文件"
+            exit 1
+          fi
+          cp "$NSIS_SIG" "dist/qsl-cardhub-v${VERSION}-${{ matrix.platform }}-setup.exe.sig"
+
+          ls -la dist/
 
       - name: 上传到 Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.create-release.outputs.version }}
-          files: ${{ env.ARTIFACT_PATH }}
+          files: dist/*
+
+  generate-update-manifest:
+    name: 生成更新清单
+    needs: [create-release, build-and-upload]
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 下载 Release 资产信息
+        id: release_info
+        run: |
+          VERSION=${{ needs.create-release.outputs.version }}
+          REPO=${{ github.repository }}
+
+          # 获取 Release 信息
+          RELEASE_JSON=$(curl -s "https://api.github.com/repos/${REPO}/releases/tags/v${VERSION}")
+          RELEASE_BODY=$(echo "$RELEASE_JSON" | jq -r '.body // "No release notes"')
+          RELEASE_DATE=$(echo "$RELEASE_JSON" | jq -r '.published_at')
+
+          echo "release_body<<EOF" >> $GITHUB_OUTPUT
+          echo "$RELEASE_BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "release_date=$RELEASE_DATE" >> $GITHUB_OUTPUT
+
+      - name: 生成 latest.json
+        run: |
+          VERSION=${{ needs.create-release.outputs.version }}
+          REPO=${{ github.repository }}
+          RELEASE_DATE="${{ steps.release_info.outputs.release_date }}"
+          NOTES=$(cat << 'NOTES_EOF'
+          ${{ steps.release_info.outputs.release_body }}
+          NOTES_EOF
+          )
+
+          # 获取签名文件内容（带重试机制）
+          get_signature() {
+            local sig_url="https://github.com/${REPO}/releases/download/v${VERSION}/$1"
+            local max_attempts=20
+            local attempt=1
+            local wait_time=5
+            
+            while [ $attempt -le $max_attempts ]; do
+              echo "尝试获取 $1 (第 ${attempt}/${max_attempts} 次)..." >&2
+              local content=$(curl -sL "$sig_url" 2>/dev/null)
+              
+              # 检查是否成功获取到内容（非空且不是HTML错误页面或JSON错误）
+              if [ -n "$content" ] && ! echo "$content" | grep -qi "<!DOCTYPE html>" && ! echo "$content" | grep -qi '"message".*"Not Found"'; then
+                echo "成功获取 $1" >&2
+                echo "$content"
+                return 0
+              fi
+              
+              if [ $attempt -lt $max_attempts ]; then
+                echo "资产尚未可用，等待 ${wait_time} 秒后重试..." >&2
+                sleep $wait_time
+              fi
+              
+              attempt=$((attempt + 1))
+            done
+            
+            echo "错误：在 $max_attempts 次尝试后仍无法获取 $1" >&2
+            return 1
+          }
+
+          # macOS ARM64 签名（.app.tar.gz 用于更新器）
+          MACOS_ARM64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-macos-arm64.app.tar.gz.sig") || exit 1
+          # macOS x64 签名（.app.tar.gz 用于更新器）
+          MACOS_X64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-macos-x64.app.tar.gz.sig") || exit 1
+          # Windows x64 签名
+          WINDOWS_X64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-windows-x64-setup.exe.sig") || exit 1
+          # Windows ARM64 签名
+          WINDOWS_ARM64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-windows-arm64-setup.exe.sig") || exit 1
+
+          # 生成 latest.json
+          cat > latest.json << EOF
+          {
+            "version": "${VERSION}",
+            "notes": $(echo "$NOTES" | jq -Rs .),
+            "pub_date": "${RELEASE_DATE}",
+            "platforms": {
+              "darwin-aarch64": {
+                "signature": "${MACOS_ARM64_SIG}",
+                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/qsl-cardhub-v${VERSION}-macos-arm64.app.tar.gz"
+              },
+              "darwin-x86_64": {
+                "signature": "${MACOS_X64_SIG}",
+                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/qsl-cardhub-v${VERSION}-macos-x64.app.tar.gz"
+              },
+              "windows-x86_64": {
+                "signature": "${WINDOWS_X64_SIG}",
+                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/qsl-cardhub-v${VERSION}-windows-x64-setup.exe"
+              },
+              "windows-aarch64": {
+                "signature": "${WINDOWS_ARM64_SIG}",
+                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/qsl-cardhub-v${VERSION}-windows-arm64-setup.exe"
+              }
+            }
+          }
+          EOF
+
+          cat latest.json
+
+      - name: 上传 latest.json 到 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.create-release.outputs.version }}
+          files: latest.json
 
   release-summary:
     name: 发布总结
-    needs: [create-release, build-and-upload]
+    needs: [create-release, build-and-upload, generate-update-manifest]
     runs-on: ubuntu-latest
     if: always()
     steps:
       - name: 检查发布状态
         run: |
           echo "📦 Release: v${{ needs.create-release.outputs.version }}"
-          if [ "${{ needs.build-and-upload.result }}" == "success" ]; then
+          if [ "${{ needs.build-and-upload.result }}" == "success" ] && [ "${{ needs.generate-update-manifest.result }}" == "success" ]; then
             echo "✅ 所有平台构建并上传成功"
             echo ""
             echo "下载地址："
             echo "https://github.com/${{ github.repository }}/releases/tag/v${{ needs.create-release.outputs.version }}"
+            echo ""
+            echo "更新清单："
+            echo "https://github.com/${{ github.repository }}/releases/latest/download/latest.json"
             exit 0
           else
             echo "❌ 部分平台构建失败"

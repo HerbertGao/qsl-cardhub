@@ -17,6 +17,9 @@ strip = true        # 移除符号信息
 # Tauri 框架
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
+tauri-plugin-process = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-updater = "2"
 
 # 序列化
 serde = { version = "1.0", features = ["derive"] }
@@ -68,6 +71,9 @@ regex = "1.0"
 # SQLite 数据库
 rusqlite = { version = "0.32", features = ["bundled"] }
 
+# 编译时嵌入文件
+include_dir = "0.7"
+
 # 凭据加密存储
 keyring = "3.0"
 aes-gcm = "0.10"
@@ -81,13 +87,18 @@ reqwest = { version = "0.12", features = ["blocking", "cookies", "json"] }
 scraper = "0.22"
 encoding_rs = "0.8"
 
+# 顺丰速运集成
+md5 = "0.8"
+pdfium-render = "0.8"
+
 # Windows 平台依赖
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.58", features = [
+windows = { version = "0.62.2", features = [
     "Win32_Graphics_Printing",
     "Win32_Graphics_Gdi",
     "Win32_Foundation",
-    "Win32_Security"
+    "Win32_Security",
+    "Win32_System_Diagnostics_Debug"
 ] }
 
 # 构建依赖

@@ -193,6 +193,155 @@
 
 ---
 
+### version.sh - 版本管理脚本
+
+**用途**：一键升级版本号并同步到所有配置文件。
+
+**使用方法**：
+
+```bash
+./scripts/version.sh [命令]
+```
+
+**命令**：
+- `(无参数)` - 显示当前版本号
+- `major` - 升级主版本号 (1.0.0 → 2.0.0)
+- `minor` - 升级次版本号 (1.0.0 → 1.1.0)
+- `patch` - 升级补丁版本号 (1.0.0 → 1.0.1)
+- `x.y.z` - 设置自定义版本号
+- `check` - 检查所有文件的版本一致性
+- `sync` - 从 Cargo.toml 同步版本到其他文件
+
+**功能**：
+- 从 Cargo.toml 读取当前版本
+- 自动计算新版本号（major/minor/patch）
+- 同步更新 Cargo.toml、tauri.conf.json、web/package.json
+- 验证 semver 格式
+
+**前置要求**：
+- bash
+- sed (macOS/Linux)
+
+**示例**：
+
+```bash
+# 显示当前版本
+./scripts/version.sh
+
+# 升级补丁版本 (0.3.0 → 0.3.1)
+./scripts/version.sh patch
+
+# 升级次版本 (0.3.0 → 0.4.0)
+./scripts/version.sh minor
+
+# 设置自定义版本
+./scripts/version.sh 1.0.0
+
+# 检查版本一致性
+./scripts/version.sh check
+```
+
+**示例输出**：
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  qsl-cardhub 版本升级
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ℹ 当前版本: 0.3.0
+ℹ 新版本:   0.3.1
+
+✓ 已更新 Cargo.toml
+✓ 已更新 tauri.conf.json
+✓ 已更新 web/package.json
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✓ 版本升级完成: 0.3.0 → 0.3.1
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+---
+
+### release.sh - 发布脚本
+
+**用途**：一键发布新版本，整合版本升级、构建验证和 Git 操作。
+
+**使用方法**：
+
+```bash
+./scripts/release.sh [版本类型]
+```
+
+**参数**：
+- `major` - 主版本升级 (1.0.0 → 2.0.0)
+- `minor` - 次版本升级 (1.0.0 → 1.1.0)
+- `patch` - 补丁版本升级 (1.0.0 → 1.0.1)
+- `x.y.z` - 自定义版本号
+
+**完整流程**：
+1. 检查 Git 仓库状态
+2. 检查当前分支（非主分支会提示确认）
+3. 检查工作区是否干净
+4. 拉取最新代码
+5. 调用 version.sh 升级版本号
+6. 运行 `cargo check` 验证 Rust 代码
+7. 创建版本提交
+8. 创建 Git 标签
+9. 推送到远程（可选）
+
+**前置要求**：
+- bash
+- git
+- cargo (Rust)
+
+**示例**：
+
+```bash
+# 发布补丁版本
+./scripts/release.sh patch
+
+# 发布次版本
+./scripts/release.sh minor
+
+# 发布自定义版本
+./scripts/release.sh 1.0.0
+```
+
+**示例输出**：
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  qsl-cardhub 发布工具
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ Git 仓库检查通过
+✓ 当前分支: master
+✓ 工作区干净
+✓ 已拉取最新代码
+
+ℹ 升级版本号...
+  [version.sh 输出]
+
+ℹ 运行构建验证...
+✓ Rust 代码检查通过
+
+ℹ 创建版本提交...
+✓ 已创建提交: chore: bump version to 0.4.0
+
+ℹ 创建 Git 标签: v0.4.0
+✓ 已创建标签: v0.4.0
+
+是否推送到远程仓库? [Y/n] y
+ℹ 推送到远程...
+✓ 已推送到远程
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✓ 发布准备完成: v0.4.0
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+---
+
 ## 工作流程
 
 ### 本地开发构建
@@ -213,31 +362,45 @@
 
 ### 版本发布流程
 
+#### 方式一：使用一键发布脚本（推荐）
+
+```bash
+# 发布补丁版本 (0.3.0 → 0.3.1)
+./scripts/release.sh patch
+
+# 发布次版本 (0.3.0 → 0.4.0)
+./scripts/release.sh minor
+
+# 发布主版本 (0.3.0 → 1.0.0)
+./scripts/release.sh major
+
+# 发布自定义版本
+./scripts/release.sh 1.0.0
+```
+
+脚本会自动完成：版本升级 → 构建验证 → 提交 → 打标签 → 推送
+
+#### 方式二：手动发布
+
 1. **更新版本号**：
    ```bash
-   # 编辑 Cargo.toml
-   # 将 version = "0.1.0" 修改为 version = "0.2.0"
+   ./scripts/version.sh patch  # 或 minor/major/x.y.z
    ```
 
-2. **同步版本号**：
+2. **提交更改**：
    ```bash
-   ./scripts/sync-version.sh
-   ```
-
-3. **提交更改**：
-   ```bash
-   git add Cargo.toml tauri.conf.json
-   git commit -m "chore: bump version to 0.2.0"
+   git add Cargo.toml tauri.conf.json web/package.json
+   git commit -m "chore: bump version to 0.4.0"
    git push origin master
    ```
 
-4. **创建发布标签**：
+3. **创建发布标签**：
    ```bash
-   git tag v0.2.0
-   git push origin v0.2.0
+   git tag v0.4.0
+   git push origin v0.4.0
    ```
 
-5. **自动构建和发布**：
+4. **自动构建和发布**：
    - GitHub Actions 会自动触发
    - 在 macOS、Windows x64 和 Windows ARM64 上并行构建
    - 创建 GitHub Release

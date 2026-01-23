@@ -42,19 +42,19 @@
             v-model="selectedLevel"
             @change="refreshLogs"
           >
-            <el-radio-button label="">
+            <el-radio-button value="">
               全部
             </el-radio-button>
-            <el-radio-button label="debug">
+            <el-radio-button value="debug">
               DEBUG
             </el-radio-button>
-            <el-radio-button label="info">
+            <el-radio-button value="info">
               INFO
             </el-radio-button>
-            <el-radio-button label="warning">
+            <el-radio-button value="warning">
               WARNING
             </el-radio-button>
-            <el-radio-button label="error">
+            <el-radio-button value="error">
               ERROR
             </el-radio-button>
           </el-radio-group>
@@ -148,12 +148,6 @@
             </el-tag>
           </template>
         </el-table-column>
-
-        <el-table-column
-          prop="source"
-          label="来源"
-          width="150"
-        />
 
         <el-table-column
           prop="message"

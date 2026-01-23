@@ -299,11 +299,19 @@ pub async fn print_qsl(
             .lock()
             .map_err(|e| format!("锁定系统打印机后端失败: {}", e))?;
 
-        system_backend
+        let print_result = system_backend
             .send_raw(&printer_name, tspl.as_bytes())
             .map_err(|e| format!("发送到打印机失败: {}", e))?;
 
-        log::info!("✅ TSPL指令已发送到打印机: {}", printer_name);
+        // 记录详细的打印结果
+        if let Some(job_id) = &print_result.job_id {
+            log::info!("✅ TSPL指令已发送到打印机: {}, 作业ID: {}", printer_name, job_id);
+        } else {
+            log::info!("✅ TSPL指令已发送到打印机: {}", printer_name);
+        }
+        if let Some(details) = &print_result.details {
+            log::debug!("打印详情: {}", details);
+        }
     }
 
     Ok(())

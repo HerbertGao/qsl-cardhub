@@ -30,17 +30,30 @@ impl Default for KeyringStorage {
 
 impl CredentialStorage for KeyringStorage {
     fn save(&self, key: &str, value: &str) -> Result<()> {
+        log::info!("[Keyring] 保存: service={}, key={}", self.service_name, key);
         let entry = self.get_entry(key)?;
         entry.set_password(value)
-            .map_err(|e| anyhow::anyhow!("无法保存到钥匙串: {}", e))
+            .map_err(|e| anyhow::anyhow!("无法保存到钥匙串: {}", e))?;
+        log::info!("[Keyring] 保存成功: key={}", key);
+        Ok(())
     }
 
     fn get(&self, key: &str) -> Result<Option<String>> {
+        log::info!("[Keyring] 获取: service={}, key={}", self.service_name, key);
         let entry = self.get_entry(key)?;
         match entry.get_password() {
-            Ok(password) => Ok(Some(password)),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(e) => Err(anyhow::anyhow!("无法从钥匙串读取: {}", e)),
+            Ok(password) => {
+                log::info!("[Keyring] 获取成功: key={}, len={}", key, password.len());
+                Ok(Some(password))
+            },
+            Err(keyring::Error::NoEntry) => {
+                log::info!("[Keyring] 条目不存在: key={}", key);
+                Ok(None)
+            },
+            Err(e) => {
+                log::error!("[Keyring] 获取失败: key={}, error={}", key, e);
+                Err(anyhow::anyhow!("无法从钥匙串读取: {}", e))
+            },
         }
     }
 

@@ -124,6 +124,9 @@
 import { onMounted, ref, reactive } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useLoading } from '@/composables/useLoading'
+
+const { withLoading } = useLoading()
 
 interface LoginFormData {
   username: string
@@ -133,6 +136,11 @@ interface LoginFormData {
 interface LoginStatus {
   message: string
   type: 'success' | 'warning' | 'error' | 'info'
+}
+
+interface QrzCredentials {
+  username: string | null
+  password: string | null
 }
 
 const form = reactive<LoginFormData>({
@@ -157,16 +165,15 @@ const loadCredentials = async (): Promise<void> => {
     const keyringAvailable = await invoke<boolean>('check_keyring_available')
     storageInfo.value = keyringAvailable ? '系统钥匙串' : '本地加密文件'
 
-    // 尝试加载密码
-    const password = await invoke<string | null>('qrz_load_credentials')
-    if (password) {
-      form.password = password
+    // 尝试加载凭据
+    const credentials = await invoke<QrzCredentials>('qrz_load_credentials')
+    if (credentials.username) {
+      form.username = credentials.username
+    }
+    if (credentials.password) {
+      form.password = credentials.password
       hasSavedCredentials.value = true
     }
-
-    // 从配置文件加载用户名（需要从 qrz.toml 读取）
-    // 这里简化处理，实际应该从配置文件读取
-    // 暂时只标记有保存的凭据
 
     // 检查登录状态
     isLoggedIn.value = await invoke<boolean>('qrz_check_login_status')
@@ -186,10 +193,12 @@ const handleSaveAndLogin = async (): Promise<void> => {
   loginStatus.message = ''
 
   try {
-    const result = await invoke<string>('qrz_save_and_login', {
-      username: form.username,
-      password: form.password
-    })
+    const result = await withLoading(async () => {
+      return await invoke<string>('qrz_save_and_login', {
+        username: form.username,
+        password: form.password
+      })
+    }, '正在登录...')
 
     hasSavedCredentials.value = true
     isLoggedIn.value = true
@@ -247,9 +256,11 @@ const handleTestConnection = async (): Promise<void> => {
 
   try {
     // 使用固定测试呼号 BY1CRA
-    const result = await invoke<any>('qrz_query_callsign', {
-      callsign: 'BY1CRA'
-    })
+    const result = await withLoading(async () => {
+      return await invoke<unknown>('qrz_query_callsign', {
+        callsign: 'BY1CRA'
+      })
+    }, '正在测试连接...')
 
     if (result) {
       ElMessage.success('连接测试成功，可以正常查询地址信息')

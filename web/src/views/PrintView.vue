@@ -179,6 +179,9 @@ import { ElMessage } from 'element-plus'
 import { QuestionFilled, Refresh } from '@element-plus/icons-vue'
 import { invoke } from '@tauri-apps/api/core'
 import type { Profile } from '@/types/models'
+import { useLoading } from '@/composables/useLoading'
+
+const { withLoading } = useLoading()
 
 interface PrintFormData {
   callsign: string
@@ -287,22 +290,24 @@ const handlePrint = async (): Promise<void> => {
     }
 
     // 调用 Tauri API
-    await invoke('print_qsl', {
-      printerName: profile.printer.name,
-      request: {
-        template_path: null,  // 使用默认模板
-        data: {
-          task_name: profile.task_name || '',
-          callsign: printForm.value.callsign,
-          sn: String(currentSerial).padStart(3, '0'),
-          qty: String(printForm.value.qty)
-        },
-        output_config: {
-          mode: "text_bitmap_plus_native_barcode",
-          threshold: 160
+    await withLoading(async () => {
+      await invoke('print_qsl', {
+        printerName: profile.printer.name,
+        request: {
+          template_path: null,  // 使用默认模板
+          data: {
+            task_name: profile.task_name || '',
+            callsign: printForm.value.callsign,
+            sn: String(currentSerial).padStart(3, '0'),
+            qty: String(printForm.value.qty)
+          },
+          output_config: {
+            mode: "text_bitmap_plus_native_barcode",
+            threshold: 160
+          }
         }
-      }
-    })
+      })
+    }, '正在打印...')
 
     ElMessage.success('打印成功')
     // 清空呼号，序列号自动增长
@@ -376,9 +381,11 @@ const handlePrintCalibration = async (): Promise<void> => {
   }
 
   try {
-    await invoke('print_calibration', {
-      printerName: profile.printer.name
-    })
+    await withLoading(async () => {
+      await invoke('print_calibration', {
+        printerName: profile.printer.name
+      })
+    }, '正在打印校准页...')
     ElMessage.success('校准页打印成功')
   } catch (error) {
     console.error('打印校准页失败:', error)

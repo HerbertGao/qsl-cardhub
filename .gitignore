@@ -75,3 +75,4 @@ logs/
 test_output/
 /dist/
 /data/
+/.tauri-keys/

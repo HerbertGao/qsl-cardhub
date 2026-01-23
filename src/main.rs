@@ -12,6 +12,8 @@ mod logger;
 mod printer;
 mod qrz;
 mod security;
+mod sf_express;
+mod sync;
 mod utils;
 
 use commands::{
@@ -19,7 +21,8 @@ use commands::{
         create_card_cmd, delete_card_cmd, distribute_card_cmd, get_card_cmd, list_cards_cmd,
         return_card_cmd, save_card_address_cmd,
     },
-    logger::{clear_logs, export_logs, get_log_file_path, get_logs},
+    data_transfer::{export_data, import_data, preview_import_data},
+    logger::{clear_logs, export_logs, get_log_file_path, get_logs, log_from_frontend},
     platform::get_platform_info,
     printer::{PrinterState, generate_tspl, get_printers, get_template_config, load_template, preview_qsl, print_qsl, save_template, save_template_config},
     profile::{
@@ -43,6 +46,21 @@ use commands::{
     security::{
         check_keyring_available, clear_credentials, load_credentials, save_credentials,
     },
+    sf_express::{
+        sf_clear_config, sf_fetch_waybill, sf_load_config, sf_print_waybill, sf_save_config,
+        // 寄件人管理
+        sf_create_sender, sf_update_sender, sf_delete_sender, sf_list_senders,
+        sf_get_default_sender, sf_set_default_sender,
+        // 下单管理
+        sf_create_order, sf_confirm_order, sf_cancel_order, sf_search_order,
+        // 订单列表
+        sf_list_orders, sf_get_order, sf_get_order_by_order_id, sf_get_order_by_card_id,
+        sf_delete_order, sf_mark_order_printed,
+    },
+    sync::{
+        clear_sync_config_cmd, execute_sync_cmd, load_sync_config_cmd, save_sync_config_cmd,
+        test_sync_connection_cmd,
+    },
 };
 use config::ProfileManager;
 use std::fs;
@@ -53,6 +71,9 @@ use tauri::Manager;
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             // 获取配置目录
             let config_dir = get_config_dir()?;
@@ -122,6 +143,7 @@ fn main() {
             clear_logs,
             export_logs,
             get_log_file_path,
+            log_from_frontend,
             // 项目管理
             create_project_cmd,
             list_projects_cmd,
@@ -157,6 +179,41 @@ fn main() {
             qrz_com_test_connection,
             // QRZ.herbertgao.me 集成
             qrz_herbertgao_query_callsign,
+            // 顺丰速运集成
+            sf_save_config,
+            sf_load_config,
+            sf_clear_config,
+            sf_fetch_waybill,
+            sf_print_waybill,
+            // 顺丰寄件人管理
+            sf_create_sender,
+            sf_update_sender,
+            sf_delete_sender,
+            sf_list_senders,
+            sf_get_default_sender,
+            sf_set_default_sender,
+            // 顺丰下单管理
+            sf_create_order,
+            sf_confirm_order,
+            sf_cancel_order,
+            sf_search_order,
+            // 顺丰订单列表
+            sf_list_orders,
+            sf_get_order,
+            sf_get_order_by_order_id,
+            sf_get_order_by_card_id,
+            sf_delete_order,
+            sf_mark_order_printed,
+            // 数据导出导入
+            export_data,
+            preview_import_data,
+            import_data,
+            // 云端同步
+            save_sync_config_cmd,
+            load_sync_config_cmd,
+            clear_sync_config_cmd,
+            test_sync_connection_cmd,
+            execute_sync_cmd,
         ])
         .run(tauri::generate_context!())
         .expect("运行 Tauri 应用时出错");

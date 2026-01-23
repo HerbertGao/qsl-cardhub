@@ -50,6 +50,7 @@
           @distribute="handleDistributeCard"
           @return="handleReturnCard"
           @delete="handleDeleteCard"
+          @print-waybill="handlePrintWaybill"
           @search="handleSearchCard"
           @filter="handleFilterCard"
           @page-change="handlePageChange"
@@ -95,6 +96,12 @@
       @distribute="handleDistributeCard"
       @return="handleReturnCard"
     />
+
+    <!-- 运单打印弹窗 -->
+    <WaybillPrintDialog
+      v-model:visible="waybillPrintDialogVisible"
+      :default-waybill-no="waybillPrintDefaultNo"
+    />
   </div>
 </template>
 
@@ -111,6 +118,7 @@ import CardInputDialog from '@/components/cards/CardInputDialog.vue'
 import DistributeDialog from '@/components/cards/DistributeDialog.vue'
 import ReturnDialog from '@/components/cards/ReturnDialog.vue'
 import CardDetailDialog from '@/components/cards/CardDetailDialog.vue'
+import WaybillPrintDialog from '@/components/cards/WaybillPrintDialog.vue'
 
 // ==================== 侧边栏状态 ====================
 const sidebarCollapsed = ref<boolean>(false)
@@ -144,6 +152,8 @@ const cardInputDialogVisible = ref<boolean>(false)
 const distributeDialogVisible = ref<boolean>(false)
 const returnDialogVisible = ref<boolean>(false)
 const cardDetailDialogVisible = ref<boolean>(false)
+const waybillPrintDialogVisible = ref<boolean>(false)
+const waybillPrintDefaultNo = ref<string>('')
 const operatingCard = ref<CardWithProject | null>(null)
 
 // ==================== 项目相关方法 ====================
@@ -258,6 +268,16 @@ const handleDistributeCard = (card: CardWithProject): void => {
 const handleReturnCard = (card: CardWithProject): void => {
   operatingCard.value = card
   returnDialogVisible.value = true
+}
+
+const handlePrintWaybill = (card: CardWithProject): void => {
+  // 如果卡片已分发且有备注，使用备注作为默认运单号
+  if (card.metadata?.distribution?.remarks) {
+    waybillPrintDefaultNo.value = card.metadata.distribution.remarks
+  } else {
+    waybillPrintDefaultNo.value = ''
+  }
+  waybillPrintDialogVisible.value = true
 }
 
 const handleDeleteCard = async (card: CardWithProject): Promise<void> => {

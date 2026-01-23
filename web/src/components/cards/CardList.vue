@@ -158,6 +158,12 @@
                     </el-icon>
                     退回
                   </el-dropdown-item>
+                  <el-dropdown-item command="print-waybill">
+                    <el-icon>
+                      <Printer />
+                    </el-icon>
+                    打印面单
+                  </el-dropdown-item>
                   <el-dropdown-item
                     command="delete"
                     divided
@@ -216,6 +222,7 @@ interface Emits {
   (e: 'distribute', card: CardWithProject): void
   (e: 'return', card: CardWithProject): void
   (e: 'delete', card: CardWithProject): void
+  (e: 'print-waybill', card: CardWithProject): void
   (e: 'search', keyword: string): void
   (e: 'filter', status: string): void
   (e: 'page-change', data: { page: number; pageSize: number }): void
@@ -254,6 +261,8 @@ const handleRowCommand = (command: string, row: CardWithProject): void => {
     emit('distribute', row)
   } else if (command === 'return') {
     emit('return', row)
+  } else if (command === 'print-waybill') {
+    emit('print-waybill', row)
   } else if (command === 'delete') {
     emit('delete', row)
   }

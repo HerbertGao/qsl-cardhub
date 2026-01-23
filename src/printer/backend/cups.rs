@@ -3,7 +3,7 @@
 // 用于 macOS 和 Linux 平台，通过 lp 命令行工具与 CUPS 交互
 
 #[cfg(target_family = "unix")]
-use super::PrinterBackend;
+use super::{PrinterBackend, PrintResult};
 
 #[cfg(target_family = "unix")]
 use anyhow::{Context, Result};
@@ -22,6 +22,23 @@ pub struct CupsBackend;
 impl CupsBackend {
     pub fn new() -> Self {
         Self
+    }
+
+    /// 解析 lp 命令输出获取作业 ID
+    ///
+    /// lp 成功时输出格式：`request id is PRINTER-123 (1 file(s))`
+    fn parse_job_id(output: &str) -> Option<String> {
+        if let Some(start) = output.find("request id is ") {
+            let rest = &output[start + 14..];
+            if let Some(end) = rest.find(' ') {
+                return Some(rest[..end].to_string());
+            }
+            // 如果没有空格，尝试找括号
+            if let Some(end) = rest.find('(') {
+                return Some(rest[..end].trim().to_string());
+            }
+        }
+        None
     }
 }
 
@@ -80,9 +97,17 @@ impl PrinterBackend for CupsBackend {
         Ok(printers)
     }
 
-    fn send_raw(&self, printer_name: &str, data: &[u8]) -> Result<()> {
+    fn send_raw(&self, printer_name: &str, data: &[u8]) -> Result<PrintResult> {
+        log::info!(
+            "🖨️ 开始打印: 打印机={}, 数据大小={}字节",
+            printer_name,
+            data.len()
+        );
+
         // 使用 lp 命令发送原始数据
         // lp -d <printer> -o raw -
+        log::info!("📤 发送打印数据...");
+
         let mut child = Command::new("lp")
             .arg("-d")
             .arg(printer_name)
@@ -105,14 +130,56 @@ impl PrinterBackend for CupsBackend {
         // 等待命令完成
         let output = child.wait_with_output().context("lp 命令执行失败")?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("打印失败: {}", stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+        // 记录系统响应
+        if !stdout.is_empty() {
+            log::info!("📋 系统响应 (stdout): {}", stdout.trim());
+        }
+        if !stderr.is_empty() {
+            log::debug!("📋 系统响应 (stderr): {}", stderr.trim());
         }
 
-        println!("✅ 打印成功: {} ({} 字节)", printer_name, data.len());
+        if !output.status.success() {
+            log::error!("❌ 打印失败: {}", stderr.trim());
+            log::error!("详细信息: stdout={}, stderr={}", stdout, stderr);
+            anyhow::bail!("打印失败: {}", stderr.trim());
+        }
 
-        Ok(())
+        // 解析作业 ID
+        let job_id = Self::parse_job_id(&stdout);
+        if let Some(ref id) = job_id {
+            log::debug!("📋 解析到作业 ID: {}", id);
+        }
+
+        // 构建详细信息
+        let details = if !stdout.is_empty() || !stderr.is_empty() {
+            Some(format!(
+                "stdout: {}, stderr: {}",
+                stdout.trim(),
+                stderr.trim()
+            ))
+        } else {
+            None
+        };
+
+        let result = if let Some(id) = job_id {
+            log::info!("✅ 打印成功: 作业ID={}", id);
+            PrintResult::success_with_job_id(
+                format!("打印成功: {} ({} 字节)", printer_name, data.len()),
+                id,
+            )
+        } else {
+            log::info!("✅ 打印成功: {} ({} 字节)", printer_name, data.len());
+            PrintResult::success(format!("打印成功: {} ({} 字节)", printer_name, data.len()))
+        };
+
+        Ok(if let Some(d) = details {
+            result.with_details(d)
+        } else {
+            result
+        })
     }
 }
 
@@ -120,5 +187,30 @@ impl PrinterBackend for CupsBackend {
 impl Default for CupsBackend {
     fn default() -> Self {
         Self::new()
+    }
+
+}
+
+#[cfg(test)]
+#[cfg(target_family = "unix")]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_job_id() {
+        // 标准格式
+        assert_eq!(
+            CupsBackend::parse_job_id("request id is TSC_TDP-225-456 (1 file(s))"),
+            Some("TSC_TDP-225-456".to_string())
+        );
+
+        // 无括号格式
+        assert_eq!(
+            CupsBackend::parse_job_id("request id is PRINTER-123"),
+            Some("PRINTER-123".to_string())
+        );
+
+        // 无效格式
+        assert_eq!(CupsBackend::parse_job_id("some random output"), None);
     }
 }
