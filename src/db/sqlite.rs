@@ -257,7 +257,14 @@ fn migrate_version_number(old_version: i32) -> i32 {
         }
     }
 
-    // 未知的旧版本，保持不变
+    // 未知的旧版本（6-999）：映射到最新的已知迁移版本
+    // 这种情况通常出现在开发或测试版本中
+    if old_version > 0 && old_version < 1000 {
+        log::warn!("检测到未映射的旧版本号 {}，将其迁移到最新的基础版本", old_version);
+        return OLD_VERSION_MAPPING.last().map(|(_, new)| *new).unwrap_or(old_version);
+    }
+
+    // 版本 0 或负数：保持不变（通常是空数据库）
     old_version
 }
 
@@ -375,8 +382,11 @@ mod tests {
         assert_eq!(migrate_version_number(5), 60123003);
         // 新格式版本号保持不变
         assert_eq!(migrate_version_number(60123001), 60123001);
-        // 未知旧版本保持不变
-        assert_eq!(migrate_version_number(6), 6);
+        // 未知旧版本映射到最新的基础版本
+        assert_eq!(migrate_version_number(6), 60123003);
+        assert_eq!(migrate_version_number(100), 60123003);
+        // 版本 0 保持不变
+        assert_eq!(migrate_version_number(0), 0);
     }
 
     #[test]
