@@ -28,6 +28,16 @@ print_warning() {
     echo -e "${YELLOW}!${NC} $1"
 }
 
+# 解析参数
+FORCE_FLAG=""
+for arg in "$@"; do
+    case $arg in
+        --force|-f)
+            FORCE_FLAG="--force"
+            ;;
+    esac
+done
+
 # 切换到项目根目录
 cd "$(dirname "$0")/.."
 
@@ -59,7 +69,7 @@ echo ""
 
 # 运行 Tauri 签名生成命令
 # 注意：这个命令会交互式询问密码，也可以使用 -w 指定输出文件
-cargo tauri signer generate -w "$KEYS_DIR/qsl-cardhub.key"
+cargo tauri signer generate -w "$KEYS_DIR/qsl-cardhub.key" $FORCE_FLAG
 
 echo ""
 print_success "密钥生成完成！"

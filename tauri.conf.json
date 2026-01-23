@@ -63,7 +63,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJDMkY3MjI1QzM5MEY2RDEKUldUUjlwRERKWEl2dk80R0FmeU1uR3dQd2V1cDJNNUFKSUVUbXhYMHB2REtSWVRGK0QxanFTR3cK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU1MjlFMEVCNzg5RTI4RDIKUldUU0tKNTQ2K0FwVmVoMXE4dmNNUnczKzgxOGpTR2pLUXFFczFWU1pRckVLUTJpYWhTYTlPWWIK",
       "endpoints": [
         "https://github.com/HerbertGao/QSL-CardHub/releases/latest/download/latest.json"
       ],
