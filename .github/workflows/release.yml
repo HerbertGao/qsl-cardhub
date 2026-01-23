@@ -214,10 +214,34 @@ jobs:
           NOTES_EOF
           )
 
-          # 获取签名文件内容
+          # 获取签名文件内容（带重试机制）
           get_signature() {
             local sig_url="https://github.com/${REPO}/releases/download/v${VERSION}/$1"
-            curl -sL "$sig_url" 2>/dev/null || echo ""
+            local max_attempts=10
+            local attempt=1
+            local wait_time=5
+            
+            while [ $attempt -le $max_attempts ]; do
+              echo "尝试获取 $1 (第 ${attempt}/${max_attempts} 次)..." >&2
+              local content=$(curl -sL "$sig_url" 2>/dev/null)
+              
+              # 检查是否成功获取到内容（非空且不是HTML错误页面）
+              if [ -n "$content" ] && ! echo "$content" | grep -q "<!DOCTYPE html>"; then
+                echo "成功获取 $1" >&2
+                echo "$content"
+                return 0
+              fi
+              
+              if [ $attempt -lt $max_attempts ]; then
+                echo "资产尚未可用，等待 ${wait_time} 秒后重试..." >&2
+                sleep $wait_time
+              fi
+              
+              attempt=$((attempt + 1))
+            done
+            
+            echo "错误：在 $max_attempts 次尝试后仍无法获取 $1" >&2
+            return 1
           }
 
           # macOS ARM64 签名
