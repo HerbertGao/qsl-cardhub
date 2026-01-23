@@ -141,11 +141,13 @@ jobs:
           fi
           cp "$DMG_PATH" "dist/qsl-cardhub-v${VERSION}-${{ matrix.platform }}.dmg"
 
-          # 更新包签名文件（可选）
+          # 更新包签名文件（必需）
           DMG_SIG=$(find ${{ matrix.bundle_path }}/dmg -name "*.dmg.sig" | head -n 1)
-          if [ -f "$DMG_SIG" ]; then
-            cp "$DMG_SIG" "dist/qsl-cardhub-v${VERSION}-${{ matrix.platform }}.dmg.sig"
+          if [ -z "$DMG_SIG" ] || [ ! -f "$DMG_SIG" ]; then
+            echo "错误：未找到 DMG 签名文件"
+            exit 1
           fi
+          cp "$DMG_SIG" "dist/qsl-cardhub-v${VERSION}-${{ matrix.platform }}.dmg.sig"
 
           ls -la dist/
 
@@ -170,11 +172,13 @@ jobs:
           fi
           cp "$NSIS_PATH" "dist/qsl-cardhub-v${VERSION}-${{ matrix.platform }}-setup.exe"
 
-          # NSIS 签名文件（可选）
+          # NSIS 签名文件（必需）
           NSIS_SIG=$(find ${{ matrix.bundle_path }}/nsis -name "*.exe.sig" | head -n 1)
-          if [ -f "$NSIS_SIG" ]; then
-            cp "$NSIS_SIG" "dist/qsl-cardhub-v${VERSION}-${{ matrix.platform }}-setup.exe.sig"
+          if [ -z "$NSIS_SIG" ] || [ ! -f "$NSIS_SIG" ]; then
+            echo "错误：未找到 NSIS 签名文件"
+            exit 1
           fi
+          cp "$NSIS_SIG" "dist/qsl-cardhub-v${VERSION}-${{ matrix.platform }}-setup.exe.sig"
 
           ls -la dist/
 
