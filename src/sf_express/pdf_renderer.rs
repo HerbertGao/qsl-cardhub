@@ -7,7 +7,7 @@
 
 use anyhow::{Context, Result, bail};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use image::{GrayImage, Luma, DynamicImage};
+use image::{GrayImage, DynamicImage};
 use pdfium_render::prelude::*;
 use std::io::Cursor;
 

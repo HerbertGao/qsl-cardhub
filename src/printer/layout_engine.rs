@@ -2,10 +2,10 @@
 //
 // 负责计算每个元素的精确位置、字号和整体居中布局
 
-use crate::config::template::{LayoutConfig, PageConfig, TemplateConfig};
+use crate::config::template::{PageConfig, TemplateConfig};
 use crate::printer::template_engine::ResolvedElement;
 use crate::printer::text_renderer::TextRenderer;
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 /// 单位转换：mm转换为dots
 fn mm_to_dots(mm: f32, dpi: u32) -> u32 {
@@ -336,7 +336,7 @@ impl LayoutEngine {
         &mut self,
         element: &ResolvedElement,
         config: &TemplateConfig,
-        available_width: u32,
+        _available_width: u32,
     ) -> Result<LayoutedElement> {
         let barcode_type = element
             .barcode_type

@@ -3,8 +3,8 @@
 // 提供卡片的 CRUD 操作
 
 use crate::db::models::{
-    format_datetime, now_china, Card, CardFilter, CardMetadata, CardStatus, CardWithProject,
-    DistributionInfo, PagedCards, Pagination, ReturnInfo,
+    format_datetime, now_china, Card, CardFilter, CardStatus, CardWithProject, DistributionInfo,
+    PagedCards, Pagination, ReturnInfo,
 };
 use crate::db::sqlite::get_connection;
 use crate::error::AppError;

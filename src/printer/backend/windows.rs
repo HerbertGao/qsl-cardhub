@@ -43,7 +43,9 @@ impl WindowsBackend {
                 None,
                 error_code.0,
                 0,
-                &mut buffer,
+                PWSTR(buffer.as_mut_ptr()),
+                buffer.len() as u32,
+                None,
             );
             if len > 0 {
                 String::from_utf16_lossy(&buffer[..len as usize])

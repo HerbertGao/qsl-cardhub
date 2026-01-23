@@ -6,7 +6,7 @@
 use super::font_loader::FontLoader;
 use anyhow::Result;
 use image::{GrayImage, ImageBuffer, Luma, RgbImage};
-use rusttype::{Font, Scale, point};
+use rusttype::{Scale, point};
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -174,7 +174,7 @@ impl TextRenderer {
             let positioned_glyph = glyph.positioned(point(x_offset, v_metrics.ascent));
             if let Some(bounding_box) = positioned_glyph.pixel_bounding_box() {
                 positioned_glyph.draw(|x, y, v| {
-                    let px = ((x as i32 + bounding_box.min.x + x_adjust) as u32);
+                    let px = (x as i32 + bounding_box.min.x + x_adjust) as u32;
                     let py = (y as i32 + bounding_box.min.y) as u32;
 
                     if px < width && py < height {
