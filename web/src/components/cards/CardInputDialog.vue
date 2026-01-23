@@ -363,12 +363,11 @@ const loadMaxSerial = async (projectId: string): Promise<void> => {
   }
 }
 
-// 重置序列号到自动计算值
+// 重置序列号到 1
 const handleResetSerial = (): void => {
-  if (nextSerial.value !== null) {
-    serialNumber.value = nextSerial.value
-    previousSerial.value = nextSerial.value
-  }
+  serialNumber.value = 1
+  previousSerial.value = 1
+  ElMessage.success('序列号已重置')
 }
 
 // 项目选择变化时加载序列号
