@@ -245,13 +245,13 @@ jobs:
           }
 
           # macOS ARM64 签名
-          MACOS_ARM64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-macos-arm64.dmg.sig")
+          MACOS_ARM64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-macos-arm64.dmg.sig") || exit 1
           # macOS x64 签名
-          MACOS_X64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-macos-x64.dmg.sig")
+          MACOS_X64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-macos-x64.dmg.sig") || exit 1
           # Windows x64 签名
-          WINDOWS_X64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-windows-x64-setup.exe.sig")
+          WINDOWS_X64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-windows-x64-setup.exe.sig") || exit 1
           # Windows ARM64 签名
-          WINDOWS_ARM64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-windows-arm64-setup.exe.sig")
+          WINDOWS_ARM64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-windows-arm64-setup.exe.sig") || exit 1
 
           # 生成 latest.json
           cat > latest.json << EOF
@@ -297,7 +297,7 @@ jobs:
       - name: 检查发布状态
         run: |
           echo "📦 Release: v${{ needs.create-release.outputs.version }}"
-          if [ "${{ needs.build-and-upload.result }}" == "success" ]; then
+          if [ "${{ needs.build-and-upload.result }}" == "success" ] && [ "${{ needs.generate-update-manifest.result }}" == "success" ]; then
             echo "✅ 所有平台构建并上传成功"
             echo ""
             echo "下载地址："
