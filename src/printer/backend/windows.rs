@@ -12,12 +12,13 @@ use anyhow::{Context, Result};
 use windows::core::PWSTR;
 
 #[cfg(target_os = "windows")]
-use windows::Win32::Foundation::{GetLastError, HANDLE, WIN32_ERROR};
+use windows::Win32::Foundation::{GetLastError, WIN32_ERROR};
 
 #[cfg(target_os = "windows")]
 use windows::Win32::Graphics::Printing::{
     ClosePrinter, DOC_INFO_1W, EndDocPrinter, EndPagePrinter, EnumPrintersW, OpenPrinterW,
-    PRINTER_ENUM_LOCAL, PRINTER_INFO_2W, StartDocPrinterW, StartPagePrinter, WritePrinter,
+    PRINTER_ENUM_LOCAL, PRINTER_HANDLE, PRINTER_INFO_2W, StartDocPrinterW, StartPagePrinter,
+    WritePrinter,
 };
 
 #[cfg(target_os = "windows")]
@@ -135,11 +136,11 @@ impl PrinterBackend for WindowsBackend {
             log::debug!("📤 打开打印机...");
             let mut printer_name_wide: Vec<u16> =
                 printer_name.encode_utf16().chain(Some(0)).collect();
-            let mut printer_handle: HANDLE = HANDLE::default();
+            let mut printer_handle: PRINTER_HANDLE = PRINTER_HANDLE::default();
 
             if let Err(e) = OpenPrinterW(
                 PWSTR(printer_name_wide.as_mut_ptr()),
-                &mut printer_handle,
+                &mut printer_handle as *mut PRINTER_HANDLE,
                 None,
             ) {
                 let error_msg = Self::log_last_error("无法打开打印机");
