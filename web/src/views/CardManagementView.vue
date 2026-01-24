@@ -432,8 +432,15 @@ watch(selectedProjectId, (newId: string | null): void => {
 })
 
 // 组件挂载时加载数据
-onMounted(() => {
-  loadProjects()
+onMounted(async () => {
+  await loadProjects()
+
+  // 如果有项目，自动选中第一个；否则打开新建弹窗
+  if (projects.value.length > 0) {
+    selectedProjectId.value = projects.value[0].id
+  } else {
+    handleCreateProject()
+  }
 })
 </script>
 

@@ -347,6 +347,47 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 更新 Release 说明
+        if: needs.build-and-upload.result == 'success' && needs.generate-update-manifest.result == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=${{ needs.create-release.outputs.version }}
+          REPO=${{ github.repository }}
+          BASE_URL="https://github.com/${REPO}/releases/download/v${VERSION}"
+
+          # 生成下载表格
+          DOWNLOAD_TABLE=$(cat << 'EOF'
+          ## 下载
+
+          | 架构 | Windows | macOS |
+          |------|---------|-------|
+          | x86_64 (Intel) | [EXE](BASE_URL/qsl-cardhub-vVERSION-windows-x64-setup.exe) &nbsp; [MSI](BASE_URL/qsl-cardhub-vVERSION-windows-x64.msi) | [DMG](BASE_URL/qsl-cardhub-vVERSION-macos-x64.dmg) |
+          | ARM64 | [EXE](BASE_URL/qsl-cardhub-vVERSION-windows-arm64-setup.exe) &nbsp; [MSI](BASE_URL/qsl-cardhub-vVERSION-windows-arm64.msi) | [DMG](BASE_URL/qsl-cardhub-vVERSION-macos-arm64.dmg) |
+
+          EOF
+          )
+
+          # 替换占位符
+          DOWNLOAD_TABLE="${DOWNLOAD_TABLE//BASE_URL/$BASE_URL}"
+          DOWNLOAD_TABLE="${DOWNLOAD_TABLE//VERSION/$VERSION}"
+
+          # 获取当前 Release body（自动生成的 changelog）
+          CURRENT_BODY=$(gh release view "v${VERSION}" --json body -q '.body')
+
+          # 组合新的 Release body
+          NEW_BODY="${DOWNLOAD_TABLE}
+
+          ## 更新日志
+
+          ${CURRENT_BODY}"
+
+          # 更新 Release
+          gh release edit "v${VERSION}" --notes "$NEW_BODY"
+
       - name: 检查发布状态
         run: |
           echo "📦 Release: v${{ needs.create-release.outputs.version }}"
