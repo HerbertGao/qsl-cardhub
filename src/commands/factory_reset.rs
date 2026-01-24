@@ -7,10 +7,10 @@ use std::path::PathBuf;
 
 /// 获取配置目录路径
 fn get_config_dir() -> Result<PathBuf, String> {
-    // 开发模式：使用项目根目录
+    // 开发模式：使用项目根目录的 config/
     #[cfg(debug_assertions)]
     {
-        return Ok(PathBuf::from("."));
+        return Ok(PathBuf::from("config"));
     }
 
     // 生产模式：使用系统配置目录
