@@ -1,6 +1,6 @@
 {
   "name": "qsl-cardhub-frontend",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "qsl-cardhub 前端项目",
   "type": "module",
   "scripts": {
