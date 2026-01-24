@@ -17,16 +17,18 @@ fn clear_and_delete_database(db_path: &Path) -> Result<(), String> {
         .map_err(|e| format!("无法打开数据库: {}", e))?;
 
     // 查询所有用户表（排除 SQLite 系统表）
-    let mut stmt = conn
-        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-        .map_err(|e| format!("无法查询表列表: {}", e))?;
+    let tables: Vec<String> = {
+        let mut stmt = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+            .map_err(|e| format!("无法查询表列表: {}", e))?;
 
-    let tables: Result<Vec<String>, _> = stmt
-        .query_map([], |row| row.get(0))
-        .map_err(|e| format!("无法读取表列表: {}", e))?
-        .collect();
+        let tables: Result<Vec<String>, _> = stmt
+            .query_map([], |row| row.get(0))
+            .map_err(|e| format!("无法读取表列表: {}", e))?
+            .collect();
 
-    let tables = tables.map_err(|e| format!("无法解析表名: {}", e))?;
+        tables.map_err(|e| format!("无法解析表名: {}", e))?
+    };
 
     // 删除所有用户表
     for table in tables {

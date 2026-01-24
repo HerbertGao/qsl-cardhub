@@ -1,157 +1,195 @@
 <template>
-  <div class="page-content">
-    <h1>关于 qsl-cardhub</h1>
+  <div class="page-content about-page">
+    <div class="about-layout">
+      <!-- 左侧：应用信息 -->
+      <div class="about-main">
+        <h1>关于 qsl-cardhub</h1>
 
-    <el-card
-      style="margin-top: 30px; max-width: 600px"
-      shadow="hover"
-    >
-      <el-descriptions
-        :column="1"
-        border
-      >
-        <el-descriptions-item label="应用名称">
-          qsl-cardhub
-        </el-descriptions-item>
-        <el-descriptions-item label="版本">
-          <div style="display: flex; align-items: center; gap: 12px">
-            <span>v{{ appVersion }}</span>
+        <el-card
+          style="margin-top: 30px"
+          shadow="hover"
+        >
+          <el-descriptions
+            :column="1"
+            border
+          >
+            <el-descriptions-item label="应用名称">
+              qsl-cardhub
+            </el-descriptions-item>
+            <el-descriptions-item label="版本">
+              <div style="display: flex; align-items: center; gap: 12px">
+                <span>v{{ appVersion }}</span>
+                <el-button
+                  type="primary"
+                  size="small"
+                  :loading="updateState.checking"
+                  @click="handleCheckUpdate"
+                >
+                  {{ updateState.checking ? '检查中...' : '检查更新' }}
+                </el-button>
+                <el-tag
+                  v-if="updateState.hasUpdate"
+                  type="success"
+                  size="small"
+                >
+                  有新版本
+                </el-tag>
+              </div>
+            </el-descriptions-item>
+            <el-descriptions-item label="描述">
+              业余无线电卡片打印系统
+            </el-descriptions-item>
+            <el-descriptions-item label="技术栈">
+              Rust + Tauri 2 + Vue 3 + Element Plus
+            </el-descriptions-item>
+            <el-descriptions-item label="平台支持">
+              Windows / macOS / Linux
+            </el-descriptions-item>
+            <el-descriptions-item label="版权">
+              © 2026 Herbert Software
+            </el-descriptions-item>
+          </el-descriptions>
+        </el-card>
+
+        <!-- 更新提示卡片 -->
+        <el-card
+          v-if="updateState.hasUpdate && updateState.updateInfo"
+          style="margin-top: 20px"
+          shadow="hover"
+        >
+          <template #header>
+            <div style="display: flex; align-items: center; justify-content: space-between">
+              <span>发现新版本</span>
+              <el-tag type="success">
+                v{{ updateState.updateInfo.version }}
+              </el-tag>
+            </div>
+          </template>
+
+          <div style="margin-bottom: 16px">
+            <div style="color: #909399; font-size: 13px; margin-bottom: 8px">
+              发布日期：{{ formatDate(updateState.updateInfo.pubDate) }}
+            </div>
+            <div
+              v-if="updateState.updateInfo.notes"
+              style="white-space: pre-wrap; line-height: 1.6"
+            >
+              {{ updateState.updateInfo.notes }}
+            </div>
+          </div>
+
+          <!-- 下载进度 -->
+          <div
+            v-if="updateState.downloading"
+            style="margin-bottom: 16px"
+          >
+            <el-progress
+              :percentage="updateState.downloadProgress"
+              :status="updateState.downloadProgress === 100 ? 'success' : undefined"
+            />
+            <div style="color: #909399; font-size: 12px; margin-top: 4px">
+              正在下载更新...
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 12px">
             <el-button
               type="primary"
-              size="small"
-              :loading="updateState.checking"
-              @click="handleCheckUpdate"
+              :loading="updateState.downloading"
+              :disabled="updateState.downloadProgress === 100"
+              @click="handleDownloadUpdate"
             >
-              {{ updateState.checking ? '检查中...' : '检查更新' }}
+              {{ updateState.downloading ? '下载中...' : (updateState.downloadProgress === 100 ? '下载完成' : '下载更新') }}
             </el-button>
-            <el-tag
-              v-if="updateState.hasUpdate"
+            <el-button
+              v-if="updateState.downloadProgress === 100"
               type="success"
-              size="small"
+              @click="handleInstallUpdate"
             >
-              有新版本
-            </el-tag>
+              立即安装
+            </el-button>
+            <el-button @click="handleOpenReleasePage">
+              查看发布页
+            </el-button>
           </div>
-        </el-descriptions-item>
-        <el-descriptions-item label="描述">
-          业余无线电卡片打印系统
-        </el-descriptions-item>
-        <el-descriptions-item label="技术栈">
-          Rust + Tauri 2 + Vue 3 + Element Plus
-        </el-descriptions-item>
-        <el-descriptions-item label="平台支持">
-          Windows / macOS / Linux
-        </el-descriptions-item>
-        <el-descriptions-item label="版权">
-          © 2026 Herbert Software
-        </el-descriptions-item>
-      </el-descriptions>
-    </el-card>
+        </el-card>
 
-    <!-- 更新提示卡片 -->
-    <el-card
-      v-if="updateState.hasUpdate && updateState.updateInfo"
-      style="margin-top: 20px; max-width: 600px"
-      shadow="hover"
-    >
-      <template #header>
-        <div style="display: flex; align-items: center; justify-content: space-between">
-          <span>发现新版本</span>
-          <el-tag type="success">
-            v{{ updateState.updateInfo.version }}
-          </el-tag>
-        </div>
-      </template>
-
-      <div style="margin-bottom: 16px">
-        <div style="color: #909399; font-size: 13px; margin-bottom: 8px">
-          发布日期：{{ formatDate(updateState.updateInfo.pubDate) }}
-        </div>
-        <div
-          v-if="updateState.updateInfo.notes"
-          style="white-space: pre-wrap; line-height: 1.6"
-        >
-          {{ updateState.updateInfo.notes }}
-        </div>
-      </div>
-
-      <!-- 下载进度 -->
-      <div
-        v-if="updateState.downloading"
-        style="margin-bottom: 16px"
-      >
-        <el-progress
-          :percentage="updateState.downloadProgress"
-          :status="updateState.downloadProgress === 100 ? 'success' : undefined"
+        <!-- 错误提示 -->
+        <el-alert
+          v-if="updateState.error"
+          :title="updateState.error"
+          type="error"
+          style="margin-top: 20px"
+          show-icon
+          closable
+          @close="updateState.error = null"
         />
-        <div style="color: #909399; font-size: 12px; margin-top: 4px">
-          正在下载更新...
-        </div>
-      </div>
 
-      <div style="display: flex; gap: 12px">
-        <el-button
-          type="primary"
-          :loading="updateState.downloading"
-          :disabled="updateState.downloadProgress === 100"
-          @click="handleDownloadUpdate"
-        >
-          {{ updateState.downloading ? '下载中...' : (updateState.downloadProgress === 100 ? '下载完成' : '下载更新') }}
-        </el-button>
-        <el-button
-          v-if="updateState.downloadProgress === 100"
+        <!-- 已是最新版本提示 -->
+        <el-alert
+          v-if="showLatestMessage"
+          title="已是最新版本"
           type="success"
-          @click="handleInstallUpdate"
+          style="margin-top: 20px"
+          show-icon
+          closable
+          @close="showLatestMessage = false"
+        />
+
+        <!-- 危险操作区域 -->
+        <el-card
+          style="margin-top: 30px"
+          shadow="hover"
         >
-          立即安装
-        </el-button>
-        <el-button @click="handleOpenReleasePage">
-          查看发布页
-        </el-button>
+          <template #header>
+            <span style="color: #f56c6c">危险操作</span>
+          </template>
+          <div style="margin-bottom: 12px; color: #909399; font-size: 13px">
+            此操作将删除所有数据（项目、卡片、配置、登录凭据等），且无法恢复。默认打印模板将被保留。
+          </div>
+          <el-button
+            type="danger"
+            :loading="resetting"
+            @click="handleFactoryReset"
+          >
+            抹掉所有内容和设置
+          </el-button>
+        </el-card>
       </div>
-    </el-card>
 
-    <!-- 错误提示 -->
-    <el-alert
-      v-if="updateState.error"
-      :title="updateState.error"
-      type="error"
-      style="margin-top: 20px; max-width: 600px"
-      show-icon
-      closable
-      @close="updateState.error = null"
-    />
-
-    <!-- 已是最新版本提示 -->
-    <el-alert
-      v-if="showLatestMessage"
-      title="已是最新版本"
-      type="success"
-      style="margin-top: 20px; max-width: 600px"
-      show-icon
-      closable
-      @close="showLatestMessage = false"
-    />
-
-    <!-- 危险操作区域 -->
-    <el-card
-      style="margin-top: 30px; max-width: 600px"
-      shadow="hover"
-    >
-      <template #header>
-        <span style="color: #f56c6c">危险操作</span>
-      </template>
-      <div style="margin-bottom: 12px; color: #909399; font-size: 13px">
-        此操作将删除所有数据（项目、卡片、配置、登录凭据等），且无法恢复。默认打印模板将被保留。
+      <!-- 右侧：赞助信息 -->
+      <div class="about-sidebar">
+        <el-card shadow="hover">
+          <template #header>
+            <div class="sponsor-header">
+              <el-icon><CoffeeCup /></el-icon>
+              <span>赞助支持</span>
+            </div>
+          </template>
+          <div class="sponsor-content">
+            <p class="sponsor-desc">
+              如果这个项目对您有帮助，欢迎请作者喝杯咖啡
+            </p>
+            <div class="qrcode-container">
+              <div class="qrcode-item">
+                <img
+                  :src="alipayQR"
+                  alt="支付宝"
+                  class="qrcode-image"
+                />
+              </div>
+              <div class="qrcode-item">
+                <img
+                  :src="wechatQR"
+                  alt="微信"
+                  class="qrcode-image"
+                />
+              </div>
+            </div>
+          </div>
+        </el-card>
       </div>
-      <el-button
-        type="danger"
-        :loading="resetting"
-        @click="handleFactoryReset"
-      >
-        抹掉所有内容和设置
-      </el-button>
-    </el-card>
+    </div>
   </div>
 </template>
 
@@ -163,6 +201,9 @@ import { open } from '@tauri-apps/plugin-shell'
 import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { CoffeeCup } from '@element-plus/icons-vue'
+import alipayQR from '@/assets/alipay.jpg'
+import wechatQR from '@/assets/wechat.jpg'
 import {
   updateState,
   markAsViewed,
@@ -418,3 +459,91 @@ async function handleFactoryReset(): Promise<void> {
   }
 }
 </script>
+
+<style scoped>
+.about-page {
+  max-width: 1200px;
+}
+
+.about-layout {
+  display: flex;
+  gap: 30px;
+  align-items: flex-start;
+}
+
+.about-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.about-main h1 {
+  margin-top: 0;
+}
+
+.about-sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 20px;
+}
+
+.sponsor-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.sponsor-content {
+  text-align: center;
+}
+
+.sponsor-desc {
+  color: #606266;
+  font-size: 14px;
+  margin: 0 0 16px 0;
+  line-height: 1.5;
+}
+
+.qrcode-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.qrcode-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.qrcode-image {
+  width: 200px;
+  height: auto;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 响应式布局 */
+@media (max-width: 900px) {
+  .about-layout {
+    flex-direction: column;
+  }
+
+  .about-sidebar {
+    width: 100%;
+    max-width: 400px;
+    position: static;
+  }
+
+  .qrcode-container {
+    flex-direction: row;
+    justify-content: center;
+  }
+
+  .qrcode-image {
+    width: 150px;
+  }
+}
+</style>

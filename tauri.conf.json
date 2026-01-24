@@ -57,7 +57,8 @@
         "sidebarImage": null,
         "installMode": "currentUser",
         "languages": ["SimpChinese", "English"],
-        "displayLanguageSelector": false
+        "displayLanguageSelector": false,
+        "installerHooks": "./hooks.nsi"
       }
     }
   },
