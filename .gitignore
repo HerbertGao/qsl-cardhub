@@ -64,6 +64,7 @@ output/
 
 # Config (keep example files)
 config/config.toml
+config/printer.toml
 config/profiles/*.toml
 !config/profiles/example.toml
 

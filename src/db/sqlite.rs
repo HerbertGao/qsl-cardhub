@@ -298,12 +298,49 @@ fn run_migrations(conn: &Connection) -> Result<(), AppError> {
     for migration in pending {
         log::info!("📦 执行迁移: {} (v{})", migration.name, format_version(migration.version));
 
-        conn.execute_batch(&migration.sql).map_err(|e| {
-            AppError::Other(format!("迁移 {} 执行失败: {}", migration.name, e))
-        })?;
+        // 执行迁移，对 ALTER TABLE ADD COLUMN 语句忽略"duplicate column name"错误
+        execute_migration_sql(conn, &migration.sql, &migration.name)?;
 
         set_db_version(conn, migration.version)?;
         log::info!("✅ 迁移完成: {}", migration.name);
+    }
+
+    Ok(())
+}
+
+/// 执行迁移 SQL，对 ALTER TABLE ADD COLUMN 语句忽略"duplicate column name"错误
+fn execute_migration_sql(conn: &Connection, sql: &str, migration_name: &str) -> Result<(), AppError> {
+    // 将 SQL 拆分为单独的语句
+    let statements: Vec<&str> = sql
+        .split(';')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty() && !s.starts_with("--"))
+        .collect();
+
+    for statement in statements {
+        // 跳过纯注释行
+        if statement.lines().all(|line| line.trim().is_empty() || line.trim().starts_with("--")) {
+            continue;
+        }
+
+        // 执行语句
+        let result = conn.execute(statement, []);
+
+        // 检查是否是 ALTER TABLE ADD COLUMN 导致的"duplicate column name"错误
+        if let Err(rusqlite::Error::SqliteFailure(err, Some(msg))) = &result {
+            // SQLite 错误码 1: SQLITE_ERROR (SQL error or missing database)
+            // 当列已存在时，错误消息包含 "duplicate column name"
+            if err.code == rusqlite::ErrorCode::Unknown && msg.contains("duplicate column name") {
+                if statement.to_uppercase().contains("ALTER TABLE") && statement.to_uppercase().contains("ADD COLUMN") {
+                    log::debug!("忽略重复列错误: {}", msg);
+                    continue;
+                }
+            }
+            // 其他错误则返回
+            return Err(AppError::Other(format!("迁移 {} 执行失败: {}", migration_name, msg)));
+        } else if let Err(e) = result {
+            return Err(AppError::Other(format!("迁移 {} 执行失败: {}", migration_name, e)));
+        }
     }
 
     Ok(())

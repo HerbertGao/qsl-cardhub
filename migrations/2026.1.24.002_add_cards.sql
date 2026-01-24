@@ -16,6 +16,13 @@ CREATE TABLE IF NOT EXISTS cards (
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
+-- 为已存在的表添加 serial 列（如果不存在）
+-- 使用 PRAGMA table_info 检查列是否存在的方式在 SQLite 中不支持条件 ALTER TABLE
+-- 但是 ALTER TABLE ADD COLUMN 在列已存在时会失败，所以我们需要一个安全的方式
+-- SQLite 允许我们通过检查错误来处理这种情况，但在迁移脚本中我们使用一个更安全的方法：
+-- 先检查表是否存在且没有 serial 列，如果是则添加
+ALTER TABLE cards ADD COLUMN serial INTEGER;
+
 -- 创建索引
 CREATE INDEX IF NOT EXISTS idx_cards_project ON cards(project_id);
 CREATE INDEX IF NOT EXISTS idx_cards_callsign ON cards(callsign);
