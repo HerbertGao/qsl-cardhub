@@ -176,14 +176,14 @@
                   :src="alipayQR"
                   alt="支付宝"
                   class="qrcode-image"
-                />
+                >
               </div>
               <div class="qrcode-item">
                 <img
                   :src="wechatQR"
                   alt="微信"
                   class="qrcode-image"
-                />
+                >
               </div>
             </div>
           </div>
