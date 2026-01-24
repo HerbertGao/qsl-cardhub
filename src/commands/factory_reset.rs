@@ -3,7 +3,51 @@
 // 清除所有用户数据并重置应用
 
 use crate::security::clear_all_credentials;
-use std::path::PathBuf;
+use rusqlite::Connection;
+use std::path::{Path, PathBuf};
+
+/// 清空数据库内容并删除数据库文件
+///
+/// 此函数先打开数据库连接，删除所有用户表和数据，
+/// 然后关闭连接，最后删除数据库文件。
+/// 这样可以避免 Windows 上的文件锁问题。
+fn clear_and_delete_database(db_path: &Path) -> Result<(), String> {
+    // 打开数据库连接
+    let conn = Connection::open(db_path)
+        .map_err(|e| format!("无法打开数据库: {}", e))?;
+
+    // 查询所有用户表（排除 SQLite 系统表）
+    let mut stmt = conn
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+        .map_err(|e| format!("无法查询表列表: {}", e))?;
+
+    let tables: Result<Vec<String>, _> = stmt
+        .query_map([], |row| row.get(0))
+        .map_err(|e| format!("无法读取表列表: {}", e))?
+        .collect();
+
+    let tables = tables.map_err(|e| format!("无法解析表名: {}", e))?;
+
+    // 删除所有用户表
+    for table in tables {
+        conn.execute(&format!("DROP TABLE IF EXISTS {}", table), [])
+            .map_err(|e| format!("无法删除表 {}: {}", table, e))?;
+        log::debug!("已删除表: {}", table);
+    }
+
+    // 重置数据库版本号
+    conn.execute("PRAGMA user_version = 0", [])
+        .map_err(|e| format!("无法重置数据库版本: {}", e))?;
+
+    // 显式关闭连接
+    drop(conn);
+
+    // 现在尝试删除数据库文件
+    std::fs::remove_file(db_path)
+        .map_err(|e| format!("无法删除数据库文件: {}", e))?;
+
+    Ok(())
+}
 
 /// 获取配置目录路径
 fn get_config_dir() -> Result<PathBuf, String> {
@@ -52,18 +96,20 @@ pub async fn factory_reset() -> Result<(), String> {
     let config_dir = get_config_dir()?;
     let mut errors = Vec::new();
 
-    // 1. 删除数据库文件
+    // 1. 清空并删除数据库文件
     #[cfg(debug_assertions)]
     let db_path = PathBuf::from("data").join("cards.db");
     #[cfg(not(debug_assertions))]
     let db_path = config_dir.join("cards.db");
 
     if db_path.exists() {
-        if let Err(e) = std::fs::remove_file(&db_path) {
-            log::error!("删除数据库文件失败: {}", e);
-            errors.push(format!("删除数据库失败: {}", e));
+        // 先清空数据库内容，然后关闭连接再删除文件
+        // 这样可以避免 Windows 上的文件锁问题
+        if let Err(e) = clear_and_delete_database(&db_path) {
+            log::error!("清空数据库失败: {}", e);
+            errors.push(format!("清空数据库失败: {}", e));
         } else {
-            log::info!("已删除数据库文件: {}", db_path.display());
+            log::info!("已清空并删除数据库文件: {}", db_path.display());
         }
     }
 
