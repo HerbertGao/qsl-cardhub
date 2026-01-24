@@ -7,18 +7,18 @@
     "devUrl": "http://localhost:5173",
     "frontendDist": "web/dist",
     "beforeDevCommand": {
-      "script": "npm run dev",
+      "script": "pnpm run dev",
       "cwd": "web/"
     },
     "beforeBuildCommand": {
-      "script": "npm run build",
+      "script": "pnpm run build",
       "cwd": "web/"
     }
   },
   "app": {
     "windows": [
       {
-        "title": "qsl-cardhub",
+        "title": "QSL 分卡助手",
         "width": 1400,
         "height": 900,
         "resizable": true,
@@ -44,8 +44,8 @@
     "publisher": "Herbert Software",
     "copyright": "Copyright © 2026 Herbert Software. All rights reserved.",
     "category": "Utility",
-    "shortDescription": "QSL 卡片打印工具",
-    "longDescription": "QSL CardHub 是一个专业的 QSL 卡片设计和打印工具，支持自定义模板、批量打印和多种导出格式。",
+    "shortDescription": "QSL 卡片管理工具",
+    "longDescription": "QSL 分卡助手是一款专为业余无线电爱好者设计的 QSL 卡片管理工具，支持卡片录入、分发、打印标签、集成顺丰等功能。",
     "resources": [
       "config/templates/*",
       "resources/pdfium/**/*"

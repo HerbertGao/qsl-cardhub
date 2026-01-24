@@ -1,6 +1,16 @@
-; QSL CardHub NSIS 卸载钩子
-; 用于在卸载时询问用户是否删除用户数据
+; QSL CardHub NSIS 钩子
+; 用于自定义安装和卸载行为
 
+; 安装后钩子：重命名快捷方式为中文名称
+!macro NSIS_HOOK_POSTINSTALL
+  ; 重命名桌面快捷方式
+  Rename "$DESKTOP\${PRODUCTNAME}.lnk" "$DESKTOP\QSL 分卡助手.lnk"
+
+  ; 重命名开始菜单快捷方式
+  Rename "$SMPROGRAMS\${PRODUCTNAME}.lnk" "$SMPROGRAMS\QSL 分卡助手.lnk"
+!macroend
+
+; 卸载前钩子：询问用户是否删除用户数据
 !macro NSIS_HOOK_PREUNINSTALL
   ; 询问用户是否删除用户数据
   MessageBox MB_YESNO|MB_ICONQUESTION \
@@ -40,4 +50,13 @@
     ; 用户选择不删除数据，继续正常卸载
 
   done:
+!macroend
+
+; 卸载后钩子：删除中文名称的快捷方式（如果存在）
+!macro NSIS_HOOK_POSTUNINSTALL
+  ; 删除中文名称的桌面快捷方式
+  Delete "$DESKTOP\QSL 分卡助手.lnk"
+
+  ; 删除中文名称的开始菜单快捷方式
+  Delete "$SMPROGRAMS\QSL 分卡助手.lnk"
 !macroend

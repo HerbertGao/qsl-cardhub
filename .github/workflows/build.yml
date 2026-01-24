@@ -21,24 +21,29 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: 安装 Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: web/package-lock.json
+          cache: 'pnpm'
+          cache-dependency-path: web/pnpm-lock.yaml
 
       - name: 安装依赖
         working-directory: web
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: TypeScript 类型检查
         working-directory: web
-        run: npm run type-check
+        run: pnpm run type-check
 
       - name: ESLint 检查
         working-directory: web
-        run: npm run lint
+        run: pnpm run lint
 
   build:
     name: Build ${{ matrix.platform }}
@@ -88,12 +93,17 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: 安装 Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: web/package-lock.json
+          cache: 'pnpm'
+          cache-dependency-path: web/pnpm-lock.yaml
 
       - name: Rust 缓存
         uses: actions/cache@v4
@@ -110,11 +120,11 @@ jobs:
 
       - name: 安装前端依赖
         working-directory: web
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: 构建前端
         working-directory: web
-        run: npm run build
+        run: pnpm run build
 
       - name: 安装 Tauri CLI
         run: cargo install tauri-cli --version "^2.0" --locked --force

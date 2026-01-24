@@ -58,13 +58,13 @@ check_dependencies() {
         print_error "Node.js 未安装"
     fi
 
-    # 检查 npm
-    if command_exists npm; then
-        NPM_VERSION=$(npm --version)
-        print_success "npm: v$NPM_VERSION"
+    # 检查 pnpm
+    if command_exists pnpm; then
+        PNPM_VERSION=$(pnpm --version)
+        print_success "pnpm: v$PNPM_VERSION"
     else
-        missing_deps+=("npm")
-        print_error "npm 未安装"
+        missing_deps+=("pnpm")
+        print_error "pnpm 未安装"
     fi
 
     # 检查 Rust
@@ -93,8 +93,11 @@ check_dependencies() {
         echo "请安装缺失的依赖："
         for dep in "${missing_deps[@]}"; do
             case $dep in
-                "Node.js"|"npm")
+                "Node.js")
                     echo "  - Node.js: https://nodejs.org/"
+                    ;;
+                "pnpm")
+                    echo "  - pnpm: https://pnpm.io/"
                     ;;
                 "Rust"|"cargo")
                     echo "  - Rust: https://rustup.rs/"
@@ -131,11 +134,11 @@ build_frontend() {
     # 检查是否需要安装依赖
     if [ ! -d "node_modules" ]; then
         print_info "安装前端依赖..."
-        npm install
+        pnpm install
     fi
 
     print_info "构建前端..."
-    npm run build
+    pnpm run build
 
     cd ..
 
