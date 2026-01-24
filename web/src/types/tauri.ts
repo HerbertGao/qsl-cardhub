@@ -32,7 +32,7 @@ export interface CreateCardParams {
   project_id: string
   callsign: string
   qty: number
-  serial?: string | null
+  serial?: number | null
 }
 
 export interface ListCardsParams extends CardFilter {}
