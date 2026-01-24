@@ -353,6 +353,9 @@ impl PdfRenderer {
         // 纸张配置（使用 \r\n 作为行尾符，TSPL 标准要求）
         tspl.extend_from_slice(format!("SIZE {} mm, {} mm\r\n", self.size.width_mm, self.size.height_mm).as_bytes());
         tspl.extend_from_slice(b"GAP 0 mm, 0 mm\r\n");
+        // DIRECTION 1,0: 打印方向旋转 180 度，镜像关闭
+        // 这是针对实际打印机硬件测试后确定的正确方向，确保面单正向出纸时内容朝向正确
+        // DIRECTION 0 会导致面单内容上下颠倒
         tspl.extend_from_slice(b"DIRECTION 1,0\r\n");
         tspl.extend_from_slice(b"CLS\r\n");
 
