@@ -153,10 +153,12 @@ impl PrinterBackend for WindowsBackend {
             // 开始文档
             log::debug!("📤 开始打印文档...");
             let doc_name = "QSL Card\0".encode_utf16().collect::<Vec<u16>>();
+            // 指定 RAW 数据类型，让打印后台处理程序直接传递数据给打印机
+            let datatype = "RAW\0".encode_utf16().collect::<Vec<u16>>();
             let doc_info = DOC_INFO_1W {
                 pDocName: PWSTR(doc_name.as_ptr() as *mut u16),
                 pOutputFile: PWSTR::null(),
-                pDatatype: PWSTR::null(),
+                pDatatype: PWSTR(datatype.as_ptr() as *mut u16),
             };
 
             let job_id = StartDocPrinterW(printer_handle, 1, &doc_info);

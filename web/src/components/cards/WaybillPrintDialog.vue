@@ -24,33 +24,20 @@
         />
       </el-form-item>
 
-      <el-form-item
-        label="打印机"
-        prop="printerName"
-      >
-        <el-select
+      <el-form-item label="打印机">
+        <el-input
           v-model="form.printerName"
-          placeholder="请选择打印机"
-          style="width: 100%"
-          :loading="loadingPrinters"
+          :placeholder="loadingPrinter ? '正在加载...' : '未配置打印机'"
+          readonly
+          :disabled="loadingPrinter"
         >
-          <el-option
-            v-for="printer in printers"
-            :key="printer"
-            :label="printer"
-            :value="printer"
-          />
-        </el-select>
-        <el-button
-          type="primary"
-          link
-          size="small"
-          style="margin-top: 4px"
-          @click="loadPrinters"
-        >
-          <el-icon><Refresh /></el-icon>
-          刷新打印机列表
-        </el-button>
+          <template #prefix>
+            <el-icon><Printer /></el-icon>
+          </template>
+        </el-input>
+        <div style="margin-top: 4px; font-size: 12px; color: #909399;">
+          打印机配置位于：打印配置 → 打印机配置
+        </div>
       </el-form-item>
 
       <!-- PDF 预览区域 -->
@@ -132,12 +119,14 @@ import { useLoading } from '@/composables/useLoading'
 
 const { withLoading } = useLoading()
 
-interface PrinterInfo {
-  name: string
-  driver: string
-  port: string
-  status: string
-  is_default: boolean
+interface PrinterConfig {
+  printer: {
+    name: string
+  }
+  platform: {
+    os: string
+    arch: string
+  }
 }
 
 interface FetchWaybillResponse {
@@ -172,9 +161,8 @@ const form = reactive({
   printerName: ''
 })
 
-// 打印机列表
-const printers = ref<string[]>([])
-const loadingPrinters = ref<boolean>(false)
+// 打印机配置
+const loadingPrinter = ref<boolean>(false)
 
 // 获取状态
 const fetching = ref<boolean>(false)
@@ -205,29 +193,23 @@ const dialogVisible = computed<boolean>({
   set: (val: boolean): void => emit('update:visible', val)
 })
 
-// 加载打印机列表
-const loadPrinters = async (): Promise<void> => {
-  loadingPrinters.value = true
+// 加载打印机配置
+const loadPrinterConfig = async (): Promise<void> => {
+  loadingPrinter.value = true
 
   try {
-    const printerList = await invoke<PrinterInfo[]>('get_printers')
-    printers.value = printerList.map(p => p.name)
-
-    // 如果只有一个打印机，自动选中
-    if (printers.value.length === 1 && !form.printerName) {
-      form.printerName = printers.value[0]
-    }
-
-    // 尝试选择默认打印机
-    const defaultPrinter = printerList.find(p => p.is_default)
-    if (defaultPrinter && !form.printerName) {
-      form.printerName = defaultPrinter.name
+    const config = await invoke<PrinterConfig>('get_printer_config')
+    if (config.printer.name) {
+      form.printerName = config.printer.name
+    } else {
+      form.printerName = ''
+      ElMessage.warning('未配置默认打印机，请在设置中配置')
     }
   } catch (error) {
-    console.error('加载打印机列表失败:', error)
-    ElMessage.error(`加载打印机列表失败: ${error}`)
+    console.error('加载打印机配置失败:', error)
+    ElMessage.error(`加载打印机配置失败: ${error}`)
   } finally {
-    loadingPrinters.value = false
+    loadingPrinter.value = false
   }
 }
 
@@ -268,9 +250,9 @@ const handleFetch = async (): Promise<void> => {
 const handlePrint = async (): Promise<void> => {
   if (printing.value || !fetchedData.value) return
 
-  // 检查打印机选择
+  // 检查打印机配置
   if (!form.printerName) {
-    ElMessage.warning('请选择打印机')
+    ElMessage.warning('请先在设置中配置打印机')
     return
   }
 
@@ -325,10 +307,8 @@ watch(() => props.visible, (newVal: boolean): void => {
       formRef.value?.clearValidate()
     })
 
-    // 加载打印机列表
-    if (printers.value.length === 0) {
-      loadPrinters()
-    }
+    // 加载打印机配置
+    loadPrinterConfig()
   }
 })
 </script>

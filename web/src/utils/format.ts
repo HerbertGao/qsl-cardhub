@@ -7,7 +7,7 @@
  */
 export function formatSerial(serial: number | string | null | undefined): string {
   if (serial === null || serial === undefined || serial === '') {
-    return ''
+    return '-'
   }
   return String(serial).padStart(3, '0')
 }

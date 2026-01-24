@@ -35,20 +35,20 @@ impl TSPLGenerator {
     /// - `paper_height_mm`: 纸张高度(mm)
     ///
     /// # 返回
-    /// TSPL 指令字符串
+    /// TSPL 指令字节数组（包含二进制位图数据）
     pub fn generate(
         &self,
         result: RenderResult,
         paper_width_mm: f32,
         paper_height_mm: f32,
-    ) -> Result<String> {
-        let mut tspl = String::new();
+    ) -> Result<Vec<u8>> {
+        let mut tspl: Vec<u8> = Vec::new();
 
-        // 纸张配置
-        tspl.push_str(&format!("SIZE {} mm, {} mm\n", paper_width_mm, paper_height_mm));
-        tspl.push_str("GAP 2 mm, 0 mm\n");
-        tspl.push_str("DIRECTION 0\n");
-        tspl.push_str("CLS\n");
+        // 纸张配置（使用 \r\n 作为行尾符，TSPL 标准要求）
+        tspl.extend_from_slice(format!("SIZE {} mm, {} mm\r\n", paper_width_mm, paper_height_mm).as_bytes());
+        tspl.extend_from_slice(b"GAP 2 mm, 0 mm\r\n");
+        tspl.extend_from_slice(b"DIRECTION 1\r\n");
+        tspl.extend_from_slice(b"CLS\r\n");
 
         // 根据渲染模式生成内容
         match result {
@@ -62,8 +62,14 @@ impl TSPLGenerator {
 
                 // 生成文本位图指令
                 for (i, (x, y, bitmap)) in bitmaps.iter().enumerate() {
-                    log::debug!("生成位图[{}]指令: {}x{} at ({}, {})", i, bitmap.width(), bitmap.height(), x, y);
-                    tspl.push_str(&self.generate_bitmap_command(*x, *y, bitmap)?);
+                    let width = bitmap.width();
+                    let height = bitmap.height();
+                    let bytes_per_row = ((width + 7) / 8) as usize;
+                    log::info!(
+                        "生成位图[{}]: {}x{} 像素, {}字节/行, 总{}字节 at ({}, {})",
+                        i, width, height, bytes_per_row, bytes_per_row * height as usize, x, y
+                    );
+                    tspl.extend_from_slice(&self.generate_bitmap_command(*x, *y, bitmap)?);
                 }
 
                 // 生成条形码指令
@@ -76,13 +82,13 @@ impl TSPLGenerator {
                         barcode.x,
                         barcode.y
                     );
-                    tspl.push_str(&self.generate_barcode_command(barcode)?);
+                    tspl.extend_from_slice(&self.generate_barcode_command(barcode)?);
                 }
 
                 // 绘制边框
                 if let Some(border_config) = border {
                     log::debug!("生成边框指令");
-                    tspl.push_str(&self.generate_border_command(&border_config));
+                    tspl.extend_from_slice(&self.generate_border_command(&border_config));
                 }
 
                 log::info!(
@@ -97,14 +103,14 @@ impl TSPLGenerator {
                 log::info!("生成全位图模式TSPL指令");
 
                 // 生成完整画布位图指令
-                tspl.push_str(&self.generate_bitmap_command(0, 0, &canvas)?);
+                tspl.extend_from_slice(&self.generate_bitmap_command(0, 0, &canvas)?);
 
                 log::info!("全位图模式: 画布 {}x{}", canvas_size.0, canvas_size.1);
             }
         }
 
         // 打印命令
-        tspl.push_str("PRINT 1\n");
+        tspl.extend_from_slice(b"PRINT 1\r\n");
 
         Ok(tspl)
     }
@@ -112,9 +118,13 @@ impl TSPLGenerator {
     /// 生成 BITMAP 指令
     ///
     /// TSPL BITMAP 格式: BITMAP x,y,width,height,mode,data
-    /// - mode: 1 = 1bpp (每像素1位)
-    /// - data: 十六进制字符串，每行从左到右，按字节对齐
-    fn generate_bitmap_command(&self, x: u32, y: u32, bitmap: &GrayImage) -> Result<String> {
+    /// - mode: 0 = OVERWRITE
+    /// - data: 二进制数据，每行从左到右，按字节对齐
+    ///
+    /// 在当前实现中（基于实测打印结果，实际打印正确）：
+    /// - 0 = 打印黑点
+    /// - 1 = 不打印（白色）
+    fn generate_bitmap_command(&self, x: u32, y: u32, bitmap: &GrayImage) -> Result<Vec<u8>> {
         let width = bitmap.width();
         let height = bitmap.height();
 
@@ -122,34 +132,42 @@ impl TSPLGenerator {
         let bytes_per_row = ((width + 7) / 8) as usize;
 
         // 转换为1bpp数据
-        let mut data = Vec::with_capacity(bytes_per_row * height as usize);
+        let mut bitmap_data = Vec::with_capacity(bytes_per_row * height as usize);
 
         for row_y in 0..height {
-            let mut row_bytes = vec![0u8; bytes_per_row];
+            // 初始化为 0xFF（全部为1=白色/不打印）
+            // 这样 padding 位也是白色，不会打印出黑线
+            let mut row_bytes = vec![0xFFu8; bytes_per_row];
 
             for col_x in 0..width {
                 let pixel = bitmap.get_pixel(col_x, row_y);
 
-                // 0=黑色应该设置为1，255=白色应该设置为0（TSPL位图格式）
-                if pixel.0[0] == 0 {
+                // 渲染后的位图: 文字=黑色(0), 背景=白色(255)
+                // TSPL 位图中: 0=打印(黑), 1=不打印(白)
+                // 像素值 < 128 (偏黑/文字) -> 清除位为0 (打印黑点)
+                // 像素值 >= 128 (偏白/背景) -> 保持位为1 (不打印)
+                if pixel.0[0] < 128 {
                     let byte_idx = (col_x / 8) as usize;
                     let bit_idx = 7 - (col_x % 8); // MSB first
-                    row_bytes[byte_idx] |= 1 << bit_idx;
+                    row_bytes[byte_idx] &= !(1 << bit_idx); // 清除该位
                 }
             }
 
-            data.extend_from_slice(&row_bytes);
+            bitmap_data.extend_from_slice(&row_bytes);
         }
 
-        // 转换为十六进制字符串
-        let hex_data: String = data.iter().map(|b| format!("{:02X}", b)).collect();
-
-        // 生成 BITMAP 指令
+        // 生成 BITMAP 指令（使用二进制数据）
         // BITMAP x, y, width_bytes, height, mode, data
-        Ok(format!(
-            "BITMAP {},{},{},{},1,{}\n",
-            x, y, bytes_per_row, height, hex_data
-        ))
+        // mode 0 = OVERWRITE
+        let mut result = Vec::new();
+        result.extend_from_slice(
+            format!("BITMAP {},{},{},{},0,", x, y, bytes_per_row, height).as_bytes()
+        );
+        result.extend_from_slice(&bitmap_data);
+        // BITMAP 数据后需要换行以分隔下一条指令
+        result.extend_from_slice(b"\r\n");
+
+        Ok(result)
     }
 
     /// 生成 BARCODE 指令
@@ -158,7 +176,7 @@ impl TSPLGenerator {
     fn generate_barcode_command(
         &self,
         barcode: &crate::printer::render_pipeline::BarcodeElement,
-    ) -> Result<String> {
+    ) -> Result<Vec<u8>> {
         // 将条码类型转换为TSPL格式
         let tspl_type = match barcode.barcode_type.to_lowercase().as_str() {
             "code128" | "128" => "128",
@@ -171,23 +189,24 @@ impl TSPLGenerator {
         // - readable: 1 = 显示人类可读文本, 0 = 不显示
         // - rotation: 0 = 不旋转
         // - narrow/wide: 窄条和宽条的宽度（默认 2,2）
+        let readable = if barcode.human_readable { 1 } else { 0 };
         Ok(format!(
-            "BARCODE {},{},\"{}\",{},1,0,2,2,\"{}\"\n",
-            barcode.x, barcode.y, tspl_type, barcode.height, barcode.content
-        ))
+            "BARCODE {},{},\"{}\",{},{},0,2,2,\"{}\"\r\n",
+            barcode.x, barcode.y, tspl_type, barcode.height, readable, barcode.content
+        ).into_bytes())
     }
 
     /// 生成 BOX 边框指令
-    fn generate_border_command(&self, border: &crate::printer::layout_engine::BorderConfig) -> String {
+    fn generate_border_command(&self, border: &crate::printer::layout_engine::BorderConfig) -> Vec<u8> {
         // BOX x_start, y_start, x_end, y_end, line_thickness
         format!(
-            "BOX {},{},{},{},{}\n",
+            "BOX {},{},{},{},{}\r\n",
             border.x,
             border.y,
             border.x + border.width,
             border.y + border.height,
             border.thickness
-        )
+        ).into_bytes()
     }
 }
 
@@ -230,11 +249,12 @@ mod tests {
 
         // 生成TSPL
         let generator = TSPLGenerator::new();
-        let tspl = generator.generate(render_result, 76.0, 130.0).unwrap();
+        let tspl_bytes = generator.generate(render_result, 76.0, 130.0).unwrap();
+        let tspl = String::from_utf8_lossy(&tspl_bytes);
 
-        println!("生成的TSPL指令:\n{}", tspl);
+        println!("生成的TSPL指令长度: {} 字节", tspl_bytes.len());
 
-        // 验证指令内容
+        // 验证指令内容（只检查文本部分）
         assert!(tspl.contains("SIZE 76 mm, 130 mm"));
         assert!(tspl.contains("CLS"));
         assert!(tspl.contains("BITMAP")); // 应该有位图指令
@@ -268,11 +288,12 @@ mod tests {
 
         // 生成TSPL
         let generator = TSPLGenerator::new();
-        let tspl = generator.generate(render_result, 76.0, 130.0).unwrap();
+        let tspl_bytes = generator.generate(render_result, 76.0, 130.0).unwrap();
+        let tspl = String::from_utf8_lossy(&tspl_bytes);
 
-        println!("生成的TSPL指令 (全位图):\n{}", tspl);
+        println!("生成的TSPL指令长度 (全位图): {} 字节", tspl_bytes.len());
 
-        // 验证指令内容
+        // 验证指令内容（只检查文本部分）
         assert!(tspl.contains("SIZE 76 mm, 130 mm"));
         assert!(tspl.contains("CLS"));
         assert!(tspl.contains("BITMAP")); // 应该有位图指令
@@ -293,16 +314,16 @@ mod tests {
             bitmap.put_pixel(4, i, image::Luma([0u8])); // 垂直线
         }
 
-        let cmd = generator.generate_bitmap_command(10, 20, &bitmap).unwrap();
+        let cmd_bytes = generator.generate_bitmap_command(10, 20, &bitmap).unwrap();
+        let cmd = String::from_utf8_lossy(&cmd_bytes);
 
-        println!("位图指令:\n{}", cmd);
+        println!("位图指令长度: {} 字节", cmd_bytes.len());
 
-        // 验证指令格式
-        assert!(cmd.starts_with("BITMAP 10,20,1,8,1,")); // x=10, y=20, width_bytes=1, height=8, mode=1
-        assert!(cmd.contains('\n'));
+        // 验证指令格式（mode=0 OVERWRITE）
+        assert!(cmd.starts_with("BITMAP 10,20,1,8,0,")); // x=10, y=20, width_bytes=1, height=8, mode=0
 
-        // 十六进制数据应该包含在指令中
-        // 每行1字节，8行，每行应该有交叉图案
-        assert!(cmd.len() > 30); // 至少有指令头部+16个十六进制字符
+        // 8x8 位图，每行1字节，共8字节数据 + 指令头部 + \r\n
+        // 指令头部 "BITMAP 10,20,1,8,0," = 19 字节 + 8 字节数据 + 2 字节换行 = 29 字节
+        assert_eq!(cmd_bytes.len(), 19 + 8 + 2);
     }
 }

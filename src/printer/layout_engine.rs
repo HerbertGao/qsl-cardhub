@@ -355,8 +355,19 @@ impl LayoutEngine {
 
         let human_readable = element.human_readable.unwrap_or(false);
 
-        // 估算条形码宽度（简化：每字符12 dots）
-        let estimated_width = element.content.len() as u32 * 12 + quiet_zone_dots * 2;
+        // 估算条形码宽度
+        // Code128 编码规则：
+        // - 起始码: 11 模块
+        // - 每个字符: 11 模块
+        // - 校验码: 11 模块
+        // - 停止码: 13 模块
+        // - 窄条宽度: 2 dots (TSPL BARCODE 命令的 narrow 参数)
+        // 总宽度 = (1 + n + 1 + 停止码) * 11 * narrow + quiet_zone * 2
+        //        ≈ (n + 3) * 11 * 2 + quiet_zone * 2
+        //        = (n + 3) * 22 + quiet_zone * 2
+        let char_count = element.content.len() as u32;
+        let narrow_width = 2; // TSPL BARCODE 命令的窄条宽度参数
+        let estimated_width = (char_count + 3) * 11 * narrow_width + quiet_zone_dots * 2;
 
         log::debug!(
             "条形码元素 {}: \"{}\" -> {}mm高, 估算宽度{}",

@@ -119,11 +119,7 @@
           align="center"
       >
         <template #default="{ row }">
-          <span v-if="row.serial">{{ formatSerial(row.serial) }}</span>
-          <span
-              v-else
-              style="color: #909399"
-          >-</span>
+          <span :style="{ color: row.serial ? undefined : '#909399' }">{{ formatSerial(row.serial) }}</span>
         </template>
       </el-table-column>
       <el-table-column

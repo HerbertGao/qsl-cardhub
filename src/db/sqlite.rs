@@ -314,24 +314,36 @@ fn execute_migration_sql(conn: &Connection, sql: &str, migration_name: &str) -> 
     let statements: Vec<&str> = sql
         .split(';')
         .map(|s| s.trim())
-        .filter(|s| !s.is_empty() && !s.starts_with("--"))
+        .filter(|s| !s.is_empty())
         .collect();
 
     for statement in statements {
-        // 跳过纯注释行
+        // 跳过纯注释语句（所有行都是注释或空行）
         if statement.lines().all(|line| line.trim().is_empty() || line.trim().starts_with("--")) {
             continue;
         }
 
+        // 移除语句开头的注释行，获取实际的 SQL
+        let actual_sql: String = statement
+            .lines()
+            .filter(|line| !line.trim().is_empty() && !line.trim().starts_with("--"))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        // 如果移除注释后为空，跳过
+        if actual_sql.trim().is_empty() {
+            continue;
+        }
+
         // 执行语句
-        let result = conn.execute(statement, []);
+        let result = conn.execute(&actual_sql, []);
 
         // 检查是否是 ALTER TABLE ADD COLUMN 导致的"duplicate column name"错误
         if let Err(rusqlite::Error::SqliteFailure(err, Some(msg))) = &result {
             // SQLite 错误码 1: SQLITE_ERROR (SQL error or missing database)
             // 当列已存在时，错误消息包含 "duplicate column name"
             if err.code == rusqlite::ErrorCode::Unknown && msg.contains("duplicate column name") {
-                if statement.to_uppercase().contains("ALTER TABLE") && statement.to_uppercase().contains("ADD COLUMN") {
+                if actual_sql.to_uppercase().contains("ALTER TABLE") && actual_sql.to_uppercase().contains("ADD COLUMN") {
                     log::debug!("忽略重复列错误: {}", msg);
                     continue;
                 }

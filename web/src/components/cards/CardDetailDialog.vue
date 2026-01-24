@@ -29,7 +29,7 @@
             {{ card.qty }}
           </el-descriptions-item>
           <el-descriptions-item label="序列号">
-            {{ formatSerial(card.serial) }}
+            <span :style="{ color: card.serial ? undefined : '#909399' }">{{ formatSerial(card.serial) }}</span>
           </el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag

@@ -240,7 +240,7 @@ pub fn sf_print_waybill(
         .map_err(|e| format!("锁定打印机后端失败: {}", e))?;
 
     let print_result = system_backend
-        .send_raw(&printer_name, tspl.as_bytes())
+        .send_raw(&printer_name, &tspl)
         .map_err(|e| format!("发送到打印机失败: {}", e))?;
 
     // 记录详细的打印结果

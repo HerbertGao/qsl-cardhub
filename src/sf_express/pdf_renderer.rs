@@ -307,19 +307,21 @@ impl PdfRenderer {
         let mut data = Vec::with_capacity(bytes_per_row * height as usize);
 
         for y in 0..height {
-            let mut row_bytes = vec![0u8; bytes_per_row];
+            // 初始化为 0xFF（全1 = 白色/不打印）
+            // 这样 padding 位也是白色，不会打印出黑线
+            let mut row_bytes = vec![0xFFu8; bytes_per_row];
 
             for x in 0..width {
                 let pixel = image.get_pixel(x, y);
                 let value = pixel.0[0];
 
-                // 灰度值小于阈值为黑色（打印点），设置位为 1
-                // TSPL BITMAP 格式：1 = 打印点（黑色），0 = 空白（白色）
+                // TSPL BITMAP 格式：0 = 打印点（黑色），1 = 空白（白色）
+                // 灰度值小于阈值为黑色（打印点），清除位为 0
                 if value < threshold {
                     let byte_idx = (x / 8) as usize;
                     let bit_idx = 7 - (x % 8); // MSB first
                     if byte_idx < bytes_per_row {
-                        row_bytes[byte_idx] |= 1 << bit_idx;
+                        row_bytes[byte_idx] &= !(1 << bit_idx); // 清除该位
                     }
                 }
             }
@@ -338,36 +340,35 @@ impl PdfRenderer {
     /// - `bitmap_data`: 1bpp 点阵数据
     ///
     /// # 返回
-    /// TSPL 指令字符串
-    pub fn generate_tspl(&self, bitmap_data: &[u8]) -> String {
+    /// TSPL 指令字节数组（包含二进制位图数据）
+    pub fn generate_tspl(&self, bitmap_data: &[u8]) -> Vec<u8> {
         let width_bytes = self.size.bytes_per_row();
         let height = self.size.height_pixels();
 
         log::info!("生成 TSPL 指令: SIZE {} mm x {} mm, BITMAP {}x{}",
             self.size.width_mm, self.size.height_mm, width_bytes, height);
 
-        let mut tspl = String::new();
+        let mut tspl: Vec<u8> = Vec::new();
 
-        // 纸张配置
-        tspl.push_str(&format!("SIZE {} mm, {} mm\n", self.size.width_mm, self.size.height_mm));
-        tspl.push_str("GAP 0 mm, 0 mm\n");
-        tspl.push_str("DIRECTION 1,0\n");
-        tspl.push_str("CLS\n");
+        // 纸张配置（使用 \r\n 作为行尾符，TSPL 标准要求）
+        tspl.extend_from_slice(format!("SIZE {} mm, {} mm\r\n", self.size.width_mm, self.size.height_mm).as_bytes());
+        tspl.extend_from_slice(b"GAP 0 mm, 0 mm\r\n");
+        tspl.extend_from_slice(b"DIRECTION 1,0\r\n");
+        tspl.extend_from_slice(b"CLS\r\n");
 
         // BITMAP 指令
         // 格式: BITMAP x,y,width_bytes,height,mode,data
-        // mode 0 = 覆盖模式（白色背景上打印黑点）
-        tspl.push_str(&format!("BITMAP 0,0,{},{},0,", width_bytes, height));
+        // mode 0 = 覆盖模式
+        tspl.extend_from_slice(format!("BITMAP 0,0,{},{},0,", width_bytes, height).as_bytes());
 
-        // 添加二进制数据（十六进制格式）
-        for byte in bitmap_data {
-            tspl.push_str(&format!("{:02X}", byte));
-        }
+        // 添加二进制位图数据
+        tspl.extend_from_slice(bitmap_data);
 
-        tspl.push('\n');
+        // BITMAP 数据后需要换行以分隔下一条指令
+        tspl.extend_from_slice(b"\r\n");
 
         // 打印指令
-        tspl.push_str("PRINT 1,1\n");
+        tspl.extend_from_slice(b"PRINT 1,1\r\n");
 
         tspl
     }
@@ -379,8 +380,8 @@ impl PdfRenderer {
     /// - `threshold`: 二值化阈值（默认 128）
     ///
     /// # 返回
-    /// TSPL 指令字符串
-    pub fn pdf_to_tspl(&self, pdf_data: &[u8], threshold: Option<u8>) -> Result<String> {
+    /// TSPL 指令字节数组（包含二进制位图数据）
+    pub fn pdf_to_tspl(&self, pdf_data: &[u8], threshold: Option<u8>) -> Result<Vec<u8>> {
         let threshold = threshold.unwrap_or(128);
 
         // 1. 渲染 PDF 为灰度图像
@@ -396,9 +397,9 @@ impl PdfRenderer {
     }
 
     /// 获取 TSPL 原始二进制数据（用于直接发送到打印机）
+    #[deprecated(note = "直接使用 pdf_to_tspl，已返回 Vec<u8>")]
     pub fn pdf_to_tspl_bytes(&self, pdf_data: &[u8], threshold: Option<u8>) -> Result<Vec<u8>> {
-        let tspl = self.pdf_to_tspl(pdf_data, threshold)?;
-        Ok(tspl.into_bytes())
+        self.pdf_to_tspl(pdf_data, threshold)
     }
 }
 
@@ -460,9 +461,10 @@ mod tests {
 
         let data = renderer.binarize(&image, 128);
 
-        // 第一行应该是 0xFF（8 个黑点）
-        assert_eq!(data[0], 0xFF);
-        // 第二行应该是 0x00（8 个白点）
-        assert_eq!(data[1], 0x00);
+        // TSPL: 0 = 打印黑点，1 = 不打印（白色）
+        // 第一行应该是 0x00（8 个黑点，所有位清零）
+        assert_eq!(data[0], 0x00);
+        // 第二行应该是 0xFF（8 个白点，所有位为1）
+        assert_eq!(data[1], 0xFF);
     }
 }

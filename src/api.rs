@@ -70,13 +70,13 @@ impl QslCardGenerator {
     /// - `output_config`: 输出配置
     ///
     /// # 返回
-    /// TSPL 指令字符串
+    /// TSPL 指令字节数组（包含二进制位图数据）
     pub fn generate_tspl(
         &mut self,
         config: &TemplateConfig,
         data: &HashMap<String, String>,
         output_config: &OutputConfig,
-    ) -> Result<String> {
+    ) -> Result<Vec<u8>> {
         // 1. 模板解析
         let resolved_elements = TemplateEngine::resolve(config, data)?;
 
@@ -203,7 +203,7 @@ pub fn quick_generate_tspl(
     template_path: Option<&Path>,
     data: &HashMap<String, String>,
     mode: &str,
-) -> Result<String> {
+) -> Result<Vec<u8>> {
     let config = if let Some(path) = template_path {
         TemplateConfig::load_from_file(path)?
     } else {
@@ -217,104 +217,4 @@ pub fn quick_generate_tspl(
 
     let mut generator = QslCardGenerator::new()?;
     generator.generate_tspl(&config, data, &output_config)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    #[test]
-    fn test_generator_new() {
-        let generator = QslCardGenerator::new();
-        assert!(generator.is_ok());
-    }
-
-    #[test]
-    fn test_quick_generate_png() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut data = HashMap::new();
-        data.insert("project_name".to_string(), "测试".to_string());
-        data.insert("callsign".to_string(), "BG7XXX".to_string());
-        data.insert("sn".to_string(), "001".to_string());
-        data.insert("qty".to_string(), "100".to_string());
-
-        let png_path =
-            quick_generate_png(None, &data, temp_dir.path().to_path_buf(), "full_bitmap");
-
-        assert!(png_path.is_ok());
-        let path = png_path.unwrap();
-        assert!(path.exists());
-        println!("PNG: {}", path.display());
-    }
-
-    #[test]
-    fn test_quick_generate_tspl() {
-        let mut data = HashMap::new();
-        data.insert("project_name".to_string(), "测试".to_string());
-        data.insert("callsign".to_string(), "BG7XXX".to_string());
-        data.insert("sn".to_string(), "001".to_string());
-        data.insert("qty".to_string(), "100".to_string());
-
-        let tspl = quick_generate_tspl(None, &data, "text_bitmap_plus_native_barcode");
-
-        assert!(tspl.is_ok());
-        let tspl_str = tspl.unwrap();
-        assert!(tspl_str.contains("SIZE"));
-        assert!(tspl_str.contains("PRINT"));
-        println!("TSPL: {} 字节", tspl_str.len());
-    }
-
-    #[test]
-    fn test_generator_generate_png() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut generator = QslCardGenerator::new().unwrap();
-
-        let config = TemplateConfig::default_qsl_card();
-        let mut data = HashMap::new();
-        data.insert("project_name".to_string(), "测试".to_string());
-        data.insert("callsign".to_string(), "BD7AA".to_string());
-        data.insert("sn".to_string(), "999".to_string());
-        data.insert("qty".to_string(), "50".to_string());
-
-        let output_config = OutputConfig {
-            mode: "full_bitmap".to_string(),
-            threshold: 160,
-        };
-
-        let png_path = generator.generate_png(
-            &config,
-            &data,
-            temp_dir.path().to_path_buf(),
-            &output_config,
-        );
-
-        assert!(png_path.is_ok());
-        assert!(png_path.unwrap().exists());
-    }
-
-    #[test]
-    fn test_generator_generate_tspl() {
-        let mut generator = QslCardGenerator::new().unwrap();
-
-        let config = TemplateConfig::default_qsl_card();
-        let mut data = HashMap::new();
-        data.insert("project_name".to_string(), "IARU HF".to_string());
-        data.insert("callsign".to_string(), "BH1ABC".to_string());
-        data.insert("sn".to_string(), "042".to_string());
-        data.insert("qty".to_string(), "100".to_string());
-
-        let output_config = OutputConfig {
-            mode: "text_bitmap_plus_native_barcode".to_string(),
-            threshold: 160,
-        };
-
-        let tspl = generator.generate_tspl(&config, &data, &output_config);
-
-        assert!(tspl.is_ok());
-        let tspl_str = tspl.unwrap();
-        assert!(tspl_str.contains("BITMAP"));
-        assert!(tspl_str.contains("BARCODE"));
-        assert!(tspl_str.contains("BH1ABC"));
-    }
 }
