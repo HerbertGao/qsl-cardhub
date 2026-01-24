@@ -113,10 +113,10 @@
         align="center"
       />
       <el-table-column
-          prop="serial"
-          label="序列号"
-          width="100"
-          align="center"
+        prop="serial"
+        label="序列号"
+        width="100"
+        align="center"
       >
         <template #default="{ row }">
           <span :style="{ color: row.serial ? undefined : '#909399' }">{{ formatSerial(row.serial) }}</span>
@@ -323,7 +323,7 @@ const handlePrintLabel = async (card: CardWithProject): Promise<void> => {
 
     const serialStr = formatSerial(card.serial)
     await invoke('print_qsl', {
-      printerName: printerName,
+      printerName,
       request: {
         template_path: null,
         data: {

@@ -22,6 +22,22 @@ export interface CardInputFormData {
   continuous: boolean
 }
 
+// 卡片输入对话框确认数据
+export interface CardInputConfirmData {
+  projectId: string
+  callsign: string
+  qty: number
+  serial: number | null
+  continuousMode: boolean
+  printAfterSave: boolean
+  printerName: string | null
+}
+
+// 卡片输入对话框组件实例
+export interface CardInputDialogInstance {
+  resetForContinuous: () => Promise<void>
+}
+
 // 卡片分发对话框
 export interface DistributeDialogProps {
   visible: boolean
@@ -29,6 +45,14 @@ export interface DistributeDialogProps {
 }
 
 export interface DistributeFormData {
+  id: string
+  method: string
+  address: string | null
+  remarks: string | null
+}
+
+// 分发对话框确认数据
+export interface DistributeConfirmData {
   id: string
   method: string
   address: string | null
@@ -44,6 +68,13 @@ export interface ReturnDialogProps {
 export interface ReturnFormData {
   id: string
   reason: string
+  remarks: string | null
+}
+
+// 退卡对话框确认数据
+export interface ReturnConfirmData {
+  id: string
+  method: string
   remarks: string | null
 }
 

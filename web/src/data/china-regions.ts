@@ -71,9 +71,7 @@ export function getCities(provinceCode: string): RegionData[] {
   }
 
   const cities = Object.entries(regionMap)
-    .filter(([code]) => {
-      return code.startsWith(provincePrefix) && isCity(code)
-    })
+    .filter(([code]) => code.startsWith(provincePrefix) && isCity(code))
     .map(([code, name]) => ({ code, name }))
     .sort((a, b) => a.code.localeCompare(b.code))
 
@@ -93,9 +91,7 @@ export function getDistricts(cityCode: string): RegionData[] {
   if (directCities.includes(provincePrefix)) {
     // 直辖市的区县直接从省级编码开始查找
     const districts = Object.entries(regionMap)
-      .filter(([code]) => {
-        return code.startsWith(provincePrefix) && isDistrict(code)
-      })
+      .filter(([code]) => code.startsWith(provincePrefix) && isDistrict(code))
       .map(([code, name]) => ({ code, name }))
       .sort((a, b) => a.code.localeCompare(b.code))
 
@@ -104,9 +100,7 @@ export function getDistricts(cityCode: string): RegionData[] {
   }
 
   const districts = Object.entries(regionMap)
-    .filter(([code]) => {
-      return code.startsWith(cityPrefix) && isDistrict(code)
-    })
+    .filter(([code]) => code.startsWith(cityPrefix) && isDistrict(code))
     .map(([code, name]) => ({ code, name }))
     .sort((a, b) => a.code.localeCompare(b.code))
 

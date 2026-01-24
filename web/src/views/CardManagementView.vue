@@ -110,6 +110,12 @@ import { onMounted, ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { ProjectWithStats, CardWithProject, PagedCards } from '@/types/models'
+import type {
+  CardInputConfirmData,
+  CardInputDialogInstance,
+  DistributeConfirmData,
+  ReturnConfirmData
+} from '@/types/components'
 import ProjectList from '@/components/projects/ProjectList.vue'
 import ProjectDialog from '@/components/projects/ProjectDialog.vue'
 import CardListPlaceholder from '@/components/cards/CardListPlaceholder.vue'
@@ -148,7 +154,7 @@ const cardSearchKeyword = ref<string>('')
 const cardStatusFilter = ref<string>('')
 
 // 卡片弹窗状态
-const cardInputDialogRef = ref<any>(null)
+const cardInputDialogRef = ref<CardInputDialogInstance | null>(null)
 const cardInputDialogVisible = ref<boolean>(false)
 const distributeDialogVisible = ref<boolean>(false)
 const returnDialogVisible = ref<boolean>(false)
@@ -323,7 +329,7 @@ const handlePageChange = ({ page, pageSize }: { page: number; pageSize: number }
   loadCards()
 }
 
-const handleCardInputConfirm = async (data: any): Promise<void> => {
+const handleCardInputConfirm = async (data: CardInputConfirmData): Promise<void> => {
   try {
     // 获取项目名称（用于打印）
     const project = projects.value.find(p => p.id === data.projectId)
@@ -379,7 +385,7 @@ const handleCardInputConfirm = async (data: any): Promise<void> => {
   }
 }
 
-const handleDistributeConfirm = async (data: any): Promise<void> => {
+const handleDistributeConfirm = async (data: DistributeConfirmData): Promise<void> => {
   try {
     await invoke('distribute_card_cmd', {
       id: data.id,
@@ -396,7 +402,7 @@ const handleDistributeConfirm = async (data: any): Promise<void> => {
   }
 }
 
-const handleReturnConfirm = async (data: any): Promise<void> => {
+const handleReturnConfirm = async (data: ReturnConfirmData): Promise<void> => {
   try {
     await invoke('return_card_cmd', {
       id: data.id,

@@ -3,7 +3,10 @@
     <h1>数据管理</h1>
 
     <!-- 数据导出 -->
-    <el-card shadow="hover" style="margin-bottom: 20px">
+    <el-card
+      shadow="hover"
+      style="margin-bottom: 20px"
+    >
       <template #header>
         <div class="card-header">
           <span>数据导出</span>
@@ -29,7 +32,10 @@
     </el-card>
 
     <!-- 数据导入 -->
-    <el-card shadow="hover" style="margin-bottom: 20px">
+    <el-card
+      shadow="hover"
+      style="margin-bottom: 20px"
+    >
       <template #header>
         <div class="card-header">
           <span>数据导入</span>
@@ -66,21 +72,36 @@
       <template #header>
         <div class="card-header">
           <span>云端同步</span>
-          <el-tag v-if="syncConfig?.last_sync_at" type="success" size="small">
+          <el-tag
+            v-if="syncConfig?.last_sync_at"
+            type="success"
+            size="small"
+          >
             上次同步: {{ formatDateTime(syncConfig.last_sync_at) }}
           </el-tag>
         </div>
       </template>
-      <el-form label-width="100px" :model="syncForm">
+      <el-form
+        label-width="100px"
+        :model="syncForm"
+      >
         <el-form-item label="同步说明">
           <div class="description-text">
             将本地数据全量同步到您自建的云端 API。请参考
-            <el-link type="primary" @click="showApiSpec">API 规范文档</el-link>
+            <el-link
+              type="primary"
+              @click="showApiSpec"
+            >
+              API 规范文档
+            </el-link>
             部署接收服务。
           </div>
         </el-form-item>
 
-        <el-form-item label="API 地址" required>
+        <el-form-item
+          label="API 地址"
+          required
+        >
           <el-input
             v-model="syncForm.api_url"
             placeholder="https://your-api.example.com/api"
@@ -88,7 +109,10 @@
           />
         </el-form-item>
 
-        <el-form-item label="API Key" required>
+        <el-form-item
+          label="API Key"
+          required
+        >
           <el-input
             v-model="syncForm.api_key"
             type="password"
@@ -96,7 +120,10 @@
             show-password
             style="max-width: 400px"
           />
-          <div v-if="syncConfig?.has_api_key && !syncForm.api_key" class="form-hint">
+          <div
+            v-if="syncConfig?.has_api_key && !syncForm.api_key"
+            class="form-hint"
+          >
             已保存 API Key（留空则保持不变）
           </div>
         </el-form-item>
@@ -107,7 +134,9 @@
             disabled
             style="max-width: 400px"
           />
-          <div class="form-hint">自动生成的客户端标识，用于云端识别</div>
+          <div class="form-hint">
+            自动生成的客户端标识，用于云端识别
+          </div>
         </el-form-item>
 
         <el-form-item>
@@ -156,7 +185,10 @@
       width="500px"
     >
       <div v-if="importPreview">
-        <el-descriptions :column="1" border>
+        <el-descriptions
+          :column="1"
+          border
+        >
           <el-descriptions-item label="文件格式版本">
             {{ importPreview.version }}
           </el-descriptions-item>
@@ -173,7 +205,11 @@
 
         <el-divider />
 
-        <el-descriptions title="数据统计" :column="2" border>
+        <el-descriptions
+          title="数据统计"
+          :column="2"
+          border
+        >
           <el-descriptions-item label="项目">
             {{ importPreview.stats.projects }} 个
           </el-descriptions-item>
@@ -190,7 +226,11 @@
 
         <el-divider />
 
-        <el-descriptions title="版本兼容性" :column="1" border>
+        <el-descriptions
+          title="版本兼容性"
+          :column="1"
+          border
+        >
           <el-descriptions-item label="文件版本">
             {{ importPreview.db_version_display }}
           </el-descriptions-item>
@@ -198,10 +238,16 @@
             {{ importPreview.local_db_version_display }}
           </el-descriptions-item>
           <el-descriptions-item label="状态">
-            <el-tag v-if="importPreview.can_import" type="success">
+            <el-tag
+              v-if="importPreview.can_import"
+              type="success"
+            >
               可以导入
             </el-tag>
-            <el-tag v-else type="danger">
+            <el-tag
+              v-else
+              type="danger"
+            >
               无法导入
             </el-tag>
           </el-descriptions-item>
@@ -227,7 +273,9 @@
       </div>
 
       <template #footer>
-        <el-button @click="importPreviewVisible = false">取消</el-button>
+        <el-button @click="importPreviewVisible = false">
+          取消
+        </el-button>
         <el-button
           type="primary"
           :disabled="!importPreview?.can_import"
@@ -312,7 +360,9 @@ Content-Type: application/json
       </div>
 
       <template #footer>
-        <el-button @click="apiSpecVisible = false">关闭</el-button>
+        <el-button @click="apiSpecVisible = false">
+          关闭
+        </el-button>
       </template>
     </el-dialog>
   </div>

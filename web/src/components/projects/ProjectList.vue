@@ -110,7 +110,7 @@ interface Emits {
   (e: 'delete', project: ProjectWithStats): void
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   projects: () => [],
   selectedProjectId: null,
   loading: false

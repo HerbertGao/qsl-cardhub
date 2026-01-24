@@ -228,11 +228,9 @@ const handleFetch = async (): Promise<void> => {
   fetchedData.value = null
 
   try {
-    const result = await withLoading(async () => {
-      return await invoke<FetchWaybillResponse>('sf_fetch_waybill', {
+    const result = await withLoading(async () => await invoke<FetchWaybillResponse>('sf_fetch_waybill', {
         waybillNo: form.waybillNo
-      })
-    }, '正在获取面单...')
+      }), '正在获取面单...')
 
     fetchedData.value = result
     status.message = '面单获取成功，请确认预览后点击打印'
@@ -259,12 +257,10 @@ const handlePrint = async (): Promise<void> => {
   printing.value = true
 
   try {
-    const result = await withLoading(async () => {
-      return await invoke<string>('sf_print_waybill', {
+    const result = await withLoading(async () => await invoke<string>('sf_print_waybill', {
         pdfData: fetchedData.value!.pdf_data,
         printerName: form.printerName
-      })
-    }, '正在打印面单...')
+      }), '正在打印面单...')
 
     status.message = result
     status.type = 'success'

@@ -279,14 +279,21 @@
             {{ getFilterResultLabel(queryResult.filter_result) }}
           </el-descriptions-item>
           <el-descriptions-item label="查询状态">
-            <el-tag type="success" size="small">已查询</el-tag>
+            <el-tag
+              type="success"
+              size="small"
+            >
+              已查询
+            </el-tag>
           </el-descriptions-item>
         </el-descriptions>
         <div
           v-else-if="queryLoading"
           style="text-align: center; padding: 10px; color: #909399"
         >
-          <el-icon class="is-loading"><Loading /></el-icon>
+          <el-icon class="is-loading">
+            <Loading />
+          </el-icon>
           正在查询...
         </div>
         <div
@@ -591,11 +598,9 @@ async function handleConfirmOrder(order: SFOrderWithCard): Promise<void> {
       }
     )
 
-    const result = await withLoading(async () => {
-      return await invoke<{ order: SFOrderWithCard; api_response: { success: boolean; waybill_no?: string; error_msg?: string } }>('sf_confirm_order', {
+    const result = await withLoading(async () => await invoke<{ order: SFOrderWithCard; api_response: { success: boolean; waybill_no?: string; error_msg?: string } }>('sf_confirm_order', {
         orderId: order.order_id
-      })
-    }, '正在确认订单...')
+      }), '正在确认订单...')
 
     if (result.api_response.success) {
       ElMessage.success(`订单确认成功，运单号: ${result.api_response.waybill_no}`)

@@ -193,12 +193,10 @@ const handleSaveAndLogin = async (): Promise<void> => {
   loginStatus.message = ''
 
   try {
-    const result = await withLoading(async () => {
-      return await invoke<string>('qrz_save_and_login', {
+    const result = await withLoading(async () => await invoke<string>('qrz_save_and_login', {
         username: form.username,
         password: form.password
-      })
-    }, '正在登录...')
+      }), '正在登录...')
 
     hasSavedCredentials.value = true
     isLoggedIn.value = true
@@ -256,11 +254,9 @@ const handleTestConnection = async (): Promise<void> => {
 
   try {
     // 使用固定测试呼号 BY1CRA
-    const result = await withLoading(async () => {
-      return await invoke<unknown>('qrz_query_callsign', {
+    const result = await withLoading(async () => await invoke<unknown>('qrz_query_callsign', {
         callsign: 'BY1CRA'
-      })
-    }, '正在测试连接...')
+      }), '正在测试连接...')
 
     if (result) {
       ElMessage.success('连接测试成功，可以正常查询地址信息')

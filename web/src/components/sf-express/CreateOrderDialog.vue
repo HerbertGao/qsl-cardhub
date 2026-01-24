@@ -352,8 +352,7 @@ async function handleSubmit(): Promise<void> {
   submitting.value = true
 
   try {
-    const result = await withLoading(async () => {
-      return await invoke<CreateOrderResponse>('sf_create_order', {
+    const result = await withLoading(async () => await invoke<CreateOrderResponse>('sf_create_order', {
         params: {
           sender_id: sender.value!.id,
           recipient: {
@@ -369,8 +368,7 @@ async function handleSubmit(): Promise<void> {
           pay_method: payMethod.value,
           card_id: props.cardId || null
         }
-      })
-    }, '正在创建订单...')
+      }), '正在创建订单...')
 
     orderResult.value = result
 
@@ -395,11 +393,9 @@ async function handleConfirmOrder(): Promise<void> {
   confirming.value = true
 
   try {
-    const result = await withLoading(async () => {
-      return await invoke<{ order_id: string; waybill_no_list: string[]; local_order: SFOrder }>('sf_confirm_order', {
+    const result = await withLoading(async () => await invoke<{ order_id: string; waybill_no_list: string[]; local_order: SFOrder }>('sf_confirm_order', {
         orderId: orderResult.value!.order_id
-      })
-    }, '正在确认订单...')
+      }), '正在确认订单...')
 
     const waybillNo = result.waybill_no_list[0]
     ElMessage.success(`订单确认成功，运单号: ${waybillNo}`)

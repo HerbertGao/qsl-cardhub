@@ -428,9 +428,7 @@ const querying = ref<boolean>(false)
 const addressCache = ref<AddressEntry[]>([])
 
 // 收件地址（用于提交）- 使用最新的地址
-const recipientAddress = computed<string>(() => {
-  return addressCache.value.length > 0 ? (addressCache.value[0].chinese_address || '') : ''
-})
+const recipientAddress = computed<string>(() => addressCache.value.length > 0 ? (addressCache.value[0].chinese_address || '') : '')
 
 // 表单验证规则
 const rules: FormRules<DistributeFormData> = {
