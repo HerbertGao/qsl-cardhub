@@ -454,13 +454,14 @@ const handleSubmit = async (): Promise<void> => {
 }
 
 // 重置表单（连续录入模式使用）
-const resetForContinuous = (): void => {
+const resetForContinuous = async (): Promise<void> => {
   form.value.callsign = ''
   form.value.qty = 1
 
   // 序列号自动递增（无论是否打印）
+  // 必须等待加载完成，避免竞态条件导致序列号重复
   if (form.value.projectId) {
-    loadMaxSerial(form.value.projectId)
+    await loadMaxSerial(form.value.projectId)
   }
 
   nextTick(() => {
