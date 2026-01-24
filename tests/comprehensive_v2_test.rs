@@ -99,9 +99,10 @@ fn test_comprehensive_qsl_card_generation() {
 
     // 步骤 6: 生成 TSPL 指令（混合模式）
     println!("\n📄 步骤 6: 生成TSPL指令（混合模式）");
-    let tspl_mixed = generator
+    let tspl_mixed_bytes = generator
         .generate_tspl(&config, &data, &mixed_mode_config)
         .expect("生成TSPL失败");
+    let tspl_mixed = String::from_utf8_lossy(&tspl_mixed_bytes);
 
     assert!(tspl_mixed.contains("SIZE"), "TSPL应包含SIZE指令");
     assert!(tspl_mixed.contains("BITMAP"), "TSPL应包含BITMAP指令");
@@ -109,10 +110,10 @@ fn test_comprehensive_qsl_card_generation() {
     assert!(tspl_mixed.contains("BG7XXX"), "TSPL应包含呼号");
 
     let tspl_path_mixed = output_dir.join("mixed_mode.tspl");
-    std::fs::write(&tspl_path_mixed, &tspl_mixed).expect("写入TSPL文件失败");
+    std::fs::write(&tspl_path_mixed, &tspl_mixed_bytes).expect("写入TSPL文件失败");
 
     println!("  ✓ TSPL文件: {}", tspl_path_mixed.display());
-    println!("  ✓ TSPL大小: {} KB", tspl_mixed.len() / 1024);
+    println!("  ✓ TSPL大小: {} KB", tspl_mixed_bytes.len() / 1024);
     println!("  ✓ BITMAP指令数: {}", tspl_mixed.matches("BITMAP").count());
     println!(
         "  ✓ BARCODE指令数: {}",
@@ -121,9 +122,10 @@ fn test_comprehensive_qsl_card_generation() {
 
     // 步骤 7: 生成 TSPL 指令（全位图模式）
     println!("\n📄 步骤 7: 生成TSPL指令（全位图模式）");
-    let tspl_full = generator
+    let tspl_full_bytes = generator
         .generate_tspl(&config, &data, &full_bitmap_config)
         .expect("生成TSPL失败");
+    let tspl_full = String::from_utf8_lossy(&tspl_full_bytes);
 
     assert!(tspl_full.contains("SIZE"), "TSPL应包含SIZE指令");
     assert!(tspl_full.contains("BITMAP"), "TSPL应包含BITMAP指令");
@@ -133,10 +135,10 @@ fn test_comprehensive_qsl_card_generation() {
     );
 
     let tspl_path_full = output_dir.join("full_bitmap.tspl");
-    std::fs::write(&tspl_path_full, &tspl_full).expect("写入TSPL文件失败");
+    std::fs::write(&tspl_path_full, &tspl_full_bytes).expect("写入TSPL文件失败");
 
     println!("  ✓ TSPL文件: {}", tspl_path_full.display());
-    println!("  ✓ TSPL大小: {} KB", tspl_full.len() / 1024);
+    println!("  ✓ TSPL大小: {} KB", tspl_full_bytes.len() / 1024);
     println!("  ✓ BITMAP指令数: {}", tspl_full.matches("BITMAP").count());
 
     // 步骤 8: 便捷API测试

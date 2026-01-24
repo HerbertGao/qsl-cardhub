@@ -293,6 +293,20 @@ pub async fn print_qsl(
 
         log::debug!("TSPL指令长度: {} 字节", tspl.len());
 
+        // 在调试模式下保存 TSPL 到文件
+        #[cfg(debug_assertions)]
+        {
+            let debug_path = std::path::Path::new("output/debug_tspl.txt");
+            if let Some(parent) = debug_path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            if let Err(e) = std::fs::write(debug_path, &tspl) {
+                log::warn!("无法保存调试TSPL文件: {}", e);
+            } else {
+                log::info!("调试: TSPL已保存到 {}", debug_path.display());
+            }
+        }
+
         // 发送到打印机
         let system_backend = state
             .system_backend
@@ -300,7 +314,7 @@ pub async fn print_qsl(
             .map_err(|e| format!("锁定系统打印机后端失败: {}", e))?;
 
         let print_result = system_backend
-            .send_raw(&printer_name, tspl.as_bytes())
+            .send_raw(&printer_name, &tspl)
             .map_err(|e| format!("发送到打印机失败: {}", e))?;
 
         // 记录详细的打印结果
@@ -369,7 +383,8 @@ pub async fn generate_tspl(
 
     log::info!("✅ TSPL指令生成成功: {} 字节", tspl.len());
 
-    Ok(tspl)
+    // 转换为字符串用于调试显示（包含二进制数据，使用 lossy 转换）
+    Ok(String::from_utf8_lossy(&tspl).into_owned())
 }
 
 /// 加载模板配置

@@ -63,24 +63,65 @@
       height="calc(100% - 120px)"
     >
       <el-table-column
-        type="index"
-        label="序号"
-        width="60"
-        align="center"
-        :index="indexMethod"
-      />
-      <el-table-column
-        prop="callsign"
         label="呼号"
-        width="120"
+        width="180"
         align="center"
-      />
+        fixed="left"
+      >
+        <template #default="{ row }">
+          <div class="callsign-cell">
+            <span class="callsign-text">{{ row.callsign }}</span>
+            <div class="callsign-actions">
+              <el-tooltip
+                content="查看详情"
+                placement="top"
+              >
+                <el-button
+                  type="primary"
+                  link
+                  size="small"
+                  @click="$emit('view', row)"
+                >
+                  <el-icon>
+                    <Search />
+                  </el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip
+                content="复制呼号"
+                placement="top"
+              >
+                <el-button
+                  type="info"
+                  link
+                  size="small"
+                  @click="handleCopyCallsign(row.callsign)"
+                >
+                  <el-icon>
+                    <CopyDocument />
+                  </el-icon>
+                </el-button>
+              </el-tooltip>
+            </div>
+          </div>
+        </template>
+      </el-table-column>
       <el-table-column
         prop="qty"
         label="数量"
         width="80"
         align="center"
       />
+      <el-table-column
+        prop="serial"
+        label="序列号"
+        width="100"
+        align="center"
+      >
+        <template #default="{ row }">
+          <span :style="{ color: row.serial ? undefined : '#909399' }">{{ formatSerial(row.serial) }}</span>
+        </template>
+      </el-table-column>
       <el-table-column
         label="最终状态"
         width="100"
@@ -126,9 +167,9 @@
               type="primary"
               link
               size="small"
-              @click="$emit('view', row)"
+              @click="$emit('distribute', row)"
             >
-              查看
+              分发
             </el-button>
             <el-dropdown
               trigger="click"
@@ -146,23 +187,23 @@
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="distribute">
+                  <el-dropdown-item command="print-label">
                     <el-icon>
-                      <Promotion />
+                      <Printer />
                     </el-icon>
-                    分发
+                    打印标签
+                  </el-dropdown-item>
+                  <el-dropdown-item command="print-waybill">
+                    <el-icon>
+                      <Printer />
+                    </el-icon>
+                    打印顺丰面单
                   </el-dropdown-item>
                   <el-dropdown-item command="return">
                     <el-icon>
                       <RefreshLeft />
                     </el-icon>
                     退回
-                  </el-dropdown-item>
-                  <el-dropdown-item command="print-waybill">
-                    <el-icon>
-                      <Printer />
-                    </el-icon>
-                    打印面单
                   </el-dropdown-item>
                   <el-dropdown-item
                     command="delete"
@@ -198,7 +239,10 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import type { CardWithProject, CardStatus } from '@/types/models'
+import { invoke } from '@tauri-apps/api/core'
+import { ElMessage } from 'element-plus'
+import type { CardWithProject, CardStatus, SinglePrinterConfig } from '@/types/models'
+import { formatSerial } from '@/utils/format'
 
 interface Props {
   cards: CardWithProject[]
@@ -255,14 +299,59 @@ const handleFilterChange = (): void => {
   emit('filter', statusFilter.value)
 }
 
+// 复制呼号
+const handleCopyCallsign = async (callsign: string): Promise<void> => {
+  try {
+    await navigator.clipboard.writeText(callsign)
+    ElMessage.success('呼号已复制到剪贴板')
+  } catch (error) {
+    ElMessage.error('复制失败: ' + error)
+  }
+}
+
+// 打印标签
+const handlePrintLabel = async (card: CardWithProject): Promise<void> => {
+  try {
+    // 先获取打印机配置
+    const config = await invoke<SinglePrinterConfig>('get_printer_config')
+    const printerName = config.printer.name
+
+    if (!printerName) {
+      ElMessage.warning('请先在「打印配置」中配置打印机')
+      return
+    }
+
+    const serialStr = formatSerial(card.serial)
+    await invoke('print_qsl', {
+      printerName,
+      request: {
+        template_path: null,
+        data: {
+          project_name: card.project_name || '',
+          callsign: card.callsign,
+          sn: serialStr,
+          qty: String(card.qty)
+        },
+        output_config: {
+          mode: 'text_bitmap_plus_native_barcode',
+          threshold: 160
+        }
+      }
+    })
+    ElMessage.success(`打印标签成功: ${card.callsign}`)
+  } catch (error) {
+    ElMessage.error('打印失败: ' + error)
+  }
+}
+
 // 行操作命令处理
 const handleRowCommand = (command: string, row: CardWithProject): void => {
-  if (command === 'distribute') {
-    emit('distribute', row)
-  } else if (command === 'return') {
-    emit('return', row)
+  if (command === 'print-label') {
+    handlePrintLabel(row)
   } else if (command === 'print-waybill') {
     emit('print-waybill', row)
+  } else if (command === 'return') {
+    emit('return', row)
   } else if (command === 'delete') {
     emit('delete', row)
   }
@@ -276,11 +365,6 @@ const handleSizeChange = (size: number): void => {
 // 页码变化
 const handleCurrentChange = (page: number): void => {
   emit('page-change', { page, pageSize: pageSize.value })
-}
-
-// 序号计算
-const indexMethod = (index: number): number => {
-  return (currentPage.value - 1) * pageSize.value + index + 1
 }
 
 // 获取状态标签类型
@@ -376,5 +460,28 @@ watch(() => props.pageSize, (val: number): void => {
   align-items: center;
   justify-content: center;
   gap: 4px;
+}
+
+.callsign-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.callsign-text {
+  font-weight: 500;
+}
+
+.callsign-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.callsign-cell:hover .callsign-actions {
+  opacity: 1;
 }
 </style>

@@ -110,6 +110,12 @@ import { onMounted, ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { ProjectWithStats, CardWithProject, PagedCards } from '@/types/models'
+import type {
+  CardInputConfirmData,
+  CardInputDialogInstance,
+  DistributeConfirmData,
+  ReturnConfirmData
+} from '@/types/components'
 import ProjectList from '@/components/projects/ProjectList.vue'
 import ProjectDialog from '@/components/projects/ProjectDialog.vue'
 import CardListPlaceholder from '@/components/cards/CardListPlaceholder.vue'
@@ -119,6 +125,7 @@ import DistributeDialog from '@/components/cards/DistributeDialog.vue'
 import ReturnDialog from '@/components/cards/ReturnDialog.vue'
 import CardDetailDialog from '@/components/cards/CardDetailDialog.vue'
 import WaybillPrintDialog from '@/components/cards/WaybillPrintDialog.vue'
+import { formatSerial } from '@/utils/format'
 
 // ==================== 侧边栏状态 ====================
 const sidebarCollapsed = ref<boolean>(false)
@@ -147,7 +154,7 @@ const cardSearchKeyword = ref<string>('')
 const cardStatusFilter = ref<string>('')
 
 // 卡片弹窗状态
-const cardInputDialogRef = ref<any>(null)
+const cardInputDialogRef = ref<CardInputDialogInstance | null>(null)
 const cardInputDialogVisible = ref<boolean>(false)
 const distributeDialogVisible = ref<boolean>(false)
 const returnDialogVisible = ref<boolean>(false)
@@ -322,18 +329,51 @@ const handlePageChange = ({ page, pageSize }: { page: number; pageSize: number }
   loadCards()
 }
 
-const handleCardInputConfirm = async (data: any): Promise<void> => {
+const handleCardInputConfirm = async (data: CardInputConfirmData): Promise<void> => {
   try {
+    // 获取项目名称（用于打印）
+    const project = projects.value.find(p => p.id === data.projectId)
+    const projectName = project?.name || ''
+
+    // 创建卡片（serial 直接传数字）
     await invoke('create_card_cmd', {
       projectId: data.projectId,
       callsign: data.callsign,
-      qty: data.qty
+      qty: data.qty,
+      serial: data.serial || null
     })
-    ElMessage.success(`录入成功: ${data.callsign} x ${data.qty}`)
+
+    // 如果需要打印
+    if (data.printAfterSave && data.printerName) {
+      try {
+        const serialStr = formatSerial(data.serial)
+        await invoke('print_qsl', {
+          printerName: data.printerName,
+          request: {
+            template_path: null,
+            data: {
+              project_name: projectName,
+              callsign: data.callsign,
+              sn: serialStr,
+              qty: String(data.qty)
+            },
+            output_config: {
+              mode: 'text_bitmap_plus_native_barcode',
+              threshold: 160
+            }
+          }
+        })
+        ElMessage.success(`录入并打印成功: ${data.callsign} x ${data.qty}`)
+      } catch (printError) {
+        ElMessage.warning(`录入成功，但打印失败: ${printError}`)
+      }
+    } else {
+      ElMessage.success(`录入成功: ${data.callsign} x ${data.qty}`)
+    }
 
     if (data.continuousMode) {
-      // 连续录入模式：重置表单
-      cardInputDialogRef.value?.resetForContinuous()
+      // 连续录入模式：重置表单，等待序列号加载完成避免竞态条件
+      await cardInputDialogRef.value?.resetForContinuous()
     } else {
       cardInputDialogVisible.value = false
     }
@@ -345,7 +385,7 @@ const handleCardInputConfirm = async (data: any): Promise<void> => {
   }
 }
 
-const handleDistributeConfirm = async (data: any): Promise<void> => {
+const handleDistributeConfirm = async (data: DistributeConfirmData): Promise<void> => {
   try {
     await invoke('distribute_card_cmd', {
       id: data.id,
@@ -362,7 +402,7 @@ const handleDistributeConfirm = async (data: any): Promise<void> => {
   }
 }
 
-const handleReturnConfirm = async (data: any): Promise<void> => {
+const handleReturnConfirm = async (data: ReturnConfirmData): Promise<void> => {
   try {
     await invoke('return_card_cmd', {
       id: data.id,

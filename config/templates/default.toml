@@ -36,7 +36,7 @@ max_height_mm = 10.0
 id = "subtitle"
 type = "text"
 source = "input"
-key = "task_name"
+key = "project_name"
 max_height_mm = 10.0
 
 [[elements]]

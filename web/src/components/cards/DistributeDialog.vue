@@ -30,6 +30,9 @@
             <el-descriptions-item label="数量">
               {{ card.qty }}
             </el-descriptions-item>
+            <el-descriptions-item label="序列号">
+              <span :style="{ color: card.serial ? undefined : '#909399' }">{{ formatSerial(card.serial) }}</span>
+            </el-descriptions-item>
             <el-descriptions-item label="状态">
               <el-tag
                 :type="getStatusType(card.status)"
@@ -365,6 +368,7 @@ import WaybillPrintDialog from '@/components/cards/WaybillPrintDialog.vue'
 import CreateOrderDialog from '@/components/sf-express/CreateOrderDialog.vue'
 import IconSfExpress from '~icons/custom/sf-express'
 import { useLoading } from '@/composables/useLoading'
+import { formatSerial } from '@/utils/format'
 
 const { withLoading } = useLoading()
 
@@ -424,9 +428,7 @@ const querying = ref<boolean>(false)
 const addressCache = ref<AddressEntry[]>([])
 
 // 收件地址（用于提交）- 使用最新的地址
-const recipientAddress = computed<string>(() => {
-  return addressCache.value.length > 0 ? (addressCache.value[0].chinese_address || '') : ''
-})
+const recipientAddress = computed<string>(() => addressCache.value.length > 0 ? (addressCache.value[0].chinese_address || '') : '')
 
 // 表单验证规则
 const rules: FormRules<DistributeFormData> = {

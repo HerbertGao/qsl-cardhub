@@ -443,7 +443,7 @@ mod tests {
     fn test_render_mixed_mode() {
         let config = TemplateConfig::default_qsl_card();
         let mut data = HashMap::new();
-        data.insert("task_name".to_string(), "测试".to_string());
+        data.insert("project_name".to_string(), "测试".to_string());
         data.insert("callsign".to_string(), "BG7XXX".to_string());
         data.insert("sn".to_string(), "001".to_string());
         data.insert("qty".to_string(), "100".to_string());
@@ -486,7 +486,7 @@ mod tests {
     fn test_render_full_bitmap_mode() {
         let config = TemplateConfig::default_qsl_card();
         let mut data = HashMap::new();
-        data.insert("task_name".to_string(), "测试".to_string());
+        data.insert("project_name".to_string(), "测试".to_string());
         data.insert("callsign".to_string(), "BG7XXX".to_string());
         data.insert("sn".to_string(), "001".to_string());
         data.insert("qty".to_string(), "100".to_string());

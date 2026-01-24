@@ -27,6 +27,9 @@
         <el-descriptions-item label="数量">
           {{ card.qty }}
         </el-descriptions-item>
+        <el-descriptions-item label="序列号">
+          <span :style="{ color: card.serial ? undefined : '#909399' }">{{ formatSerial(card.serial) }}</span>
+        </el-descriptions-item>
         <el-descriptions-item label="状态">
           <el-tag
             :type="getStatusType(card.status)"
@@ -139,6 +142,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import type { CardWithProject, CardStatus } from '@/types/models'
+import { formatSerial } from '@/utils/format'
 
 interface Props {
   visible: boolean

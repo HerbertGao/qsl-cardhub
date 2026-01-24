@@ -218,7 +218,7 @@ mod tests {
 
         // 需要提供所有input和computed元素所需的数据
         let mut data = HashMap::new();
-        data.insert("task_name".to_string(), "测试".to_string());
+        data.insert("project_name".to_string(), "测试".to_string());
         data.insert("callsign".to_string(), "BG7XXX".to_string());
         data.insert("sn".to_string(), "001".to_string());
         data.insert("qty".to_string(), "100".to_string());
@@ -236,7 +236,7 @@ mod tests {
     fn test_resolve_input_element() {
         let config = TemplateConfig::default_qsl_card();
         let mut data = HashMap::new();
-        data.insert("task_name".to_string(), "测试任务".to_string());
+        data.insert("project_name".to_string(), "测试任务".to_string());
         data.insert("callsign".to_string(), "BG7XXX".to_string());
         data.insert("sn".to_string(), "001".to_string());
         data.insert("qty".to_string(), "100".to_string());
@@ -258,7 +258,7 @@ mod tests {
     fn test_resolve_computed_element() {
         let config = TemplateConfig::default_qsl_card();
         let mut data = HashMap::new();
-        data.insert("task_name".to_string(), "测试".to_string());
+        data.insert("project_name".to_string(), "测试".to_string());
         data.insert("callsign".to_string(), "BG7XXX".to_string());
         data.insert("sn".to_string(), "001".to_string());
         data.insert("qty".to_string(), "100".to_string());
@@ -295,7 +295,7 @@ mod tests {
         // 使用 {:#} 格式化来显示完整错误链
         let error_msg = format!("{:#}", result.unwrap_err());
         assert!(
-            error_msg.contains("task_name") || error_msg.contains("缺少键"),
+            error_msg.contains("project_name") || error_msg.contains("缺少键"),
             "错误信息应包含缺失的键名，实际错误: {}",
             error_msg
         );
@@ -345,7 +345,7 @@ mod tests {
 
         let config = TemplateConfig::default_qsl_card();
         let mut data = HashMap::new();
-        data.insert("task_name".to_string(), "测试任务".to_string());
+        data.insert("project_name".to_string(), "测试任务".to_string());
         data.insert("callsign".to_string(), "BG7XXX".to_string());
         data.insert("sn".to_string(), "001".to_string());
         data.insert("qty".to_string(), "100".to_string());

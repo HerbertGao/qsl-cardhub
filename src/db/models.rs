@@ -206,6 +206,9 @@ pub struct Card {
     pub callsign: String,
     /// 数量
     pub qty: i32,
+    /// 序列号（数字，前端显示时格式化为三位数如 "001"）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub serial: Option<i32>,
     /// 状态
     pub status: CardStatus,
     /// 元数据（分发/退卡信息）
@@ -219,7 +222,7 @@ pub struct Card {
 
 impl Card {
     /// 创建新卡片
-    pub fn new(project_id: String, callsign: String, qty: i32) -> Self {
+    pub fn new(project_id: String, callsign: String, qty: i32, serial: Option<i32>) -> Self {
         let now = format_datetime(&now_china());
         Self {
             id: uuid::Uuid::new_v4().to_string(),
@@ -227,6 +230,7 @@ impl Card {
             creator_id: None,
             callsign: callsign.to_uppercase(),
             qty,
+            serial,
             status: CardStatus::Pending,
             metadata: None,
             created_at: now.clone(),
@@ -353,6 +357,9 @@ pub struct CardWithProject {
     pub callsign: String,
     /// 数量
     pub qty: i32,
+    /// 序列号（数字，前端显示时格式化为三位数如 "001"）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub serial: Option<i32>,
     /// 状态
     pub status: CardStatus,
     /// 元数据

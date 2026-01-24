@@ -315,9 +315,7 @@ const senderRules: FormRules = {
 }
 
 // 是否已配置
-const hasConfig = computed<boolean>(() => {
-  return form.partnerId !== '' || hasProdCheckword.value || hasSandboxCheckword.value
-})
+const hasConfig = computed<boolean>(() => form.partnerId !== '' || hasProdCheckword.value || hasSandboxCheckword.value)
 
 // 当前状态类型
 const currentStatusType = computed<'success' | 'warning' | 'info'>(() => {

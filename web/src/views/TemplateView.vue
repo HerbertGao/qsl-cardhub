@@ -4,7 +4,7 @@
     style="height: calc(100vh - 60px); display: flex; flex-direction: column"
   >
     <h1 style="margin-bottom: 20px">
-      模板设置
+      标签模板配置
     </h1>
 
     <el-row
@@ -447,7 +447,7 @@ interface SaveStatus {
 interface PreviewRequest {
   template_path: string | null
   data: {
-    task_name: string
+    project_name: string
     callsign: string
     sn: string
     qty: string
@@ -533,7 +533,7 @@ const handleRefreshPreview = async (): Promise<void> => {
       request: {
         template_path: null, // 使用默认模板
         data: {
-          task_name: '预览测试',
+          project_name: '预览测试',
           callsign: 'BG7XXX',
           sn: '001',
           qty: '100'

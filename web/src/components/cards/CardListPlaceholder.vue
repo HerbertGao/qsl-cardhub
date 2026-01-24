@@ -33,7 +33,7 @@ import {computed} from 'vue'
 const props = defineProps({
   message: {
     type: String,
-    default: '卡片列表功能将在 Phase 2 实现'
+    default: ''
   },
   projectName: {
     type: String,

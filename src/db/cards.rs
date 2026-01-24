@@ -32,7 +32,7 @@ fn validate_qty(qty: i32) -> Result<(), AppError> {
 }
 
 /// 创建卡片
-pub fn create_card(project_id: String, callsign: String, qty: i32) -> Result<Card, AppError> {
+pub fn create_card(project_id: String, callsign: String, qty: i32, serial: Option<i32>) -> Result<Card, AppError> {
     // 验证参数
     let callsign = callsign.trim().to_uppercase();
     validate_callsign(&callsign)?;
@@ -57,12 +57,12 @@ pub fn create_card(project_id: String, callsign: String, qty: i32) -> Result<Car
     }
 
     // 创建卡片
-    let card = Card::new(project_id, callsign, qty);
+    let card = Card::new(project_id, callsign, qty, serial);
 
     conn.execute(
         r#"
-        INSERT INTO cards (id, project_id, creator_id, callsign, qty, status, metadata, created_at, updated_at)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+        INSERT INTO cards (id, project_id, creator_id, callsign, qty, serial, status, metadata, created_at, updated_at)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
         "#,
         rusqlite::params![
             &card.id,
@@ -70,6 +70,7 @@ pub fn create_card(project_id: String, callsign: String, qty: i32) -> Result<Car
             &card.creator_id,
             &card.callsign,
             &card.qty,
+            &card.serial,
             card.status.as_str(),
             Option::<String>::None,
             &card.created_at,
@@ -147,6 +148,7 @@ pub fn list_cards(filter: CardFilter, pagination: Pagination) -> Result<PagedCar
             p.name as project_name,
             c.callsign,
             c.qty,
+            c.serial,
             c.status,
             c.metadata,
             c.created_at,
@@ -173,8 +175,8 @@ pub fn list_cards(filter: CardFilter, pagination: Pagination) -> Result<PagedCar
 
     let items = stmt
         .query_map(params_ref.as_slice(), |row| {
-            let status_str: String = row.get(5)?;
-            let metadata_str: Option<String> = row.get(6)?;
+            let status_str: String = row.get(6)?;
+            let metadata_str: Option<String> = row.get(7)?;
 
             Ok(CardWithProject {
                 id: row.get(0)?,
@@ -182,10 +184,11 @@ pub fn list_cards(filter: CardFilter, pagination: Pagination) -> Result<PagedCar
                 project_name: row.get(2)?,
                 callsign: row.get(3)?,
                 qty: row.get(4)?,
+                serial: row.get(5)?,
                 status: CardStatus::from_str(&status_str).unwrap_or(CardStatus::Pending),
                 metadata: metadata_str.and_then(|s| serde_json::from_str(&s).ok()),
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
             })
         })
         .map_err(|e| AppError::Other(format!("查询卡片列表失败: {}", e)))?
@@ -207,13 +210,13 @@ pub fn get_card(id: &str) -> Result<Option<Card>, AppError> {
 
     let result = conn.query_row(
         r#"
-        SELECT id, project_id, creator_id, callsign, qty, status, metadata, created_at, updated_at
+        SELECT id, project_id, creator_id, callsign, qty, serial, status, metadata, created_at, updated_at
         FROM cards WHERE id = ?1
         "#,
         [id],
         |row| {
-            let status_str: String = row.get(5)?;
-            let metadata_str: Option<String> = row.get(6)?;
+            let status_str: String = row.get(6)?;
+            let metadata_str: Option<String> = row.get(7)?;
 
             Ok(Card {
                 id: row.get(0)?,
@@ -221,10 +224,11 @@ pub fn get_card(id: &str) -> Result<Option<Card>, AppError> {
                 creator_id: row.get(2)?,
                 callsign: row.get(3)?,
                 qty: row.get(4)?,
+                serial: row.get(5)?,
                 status: CardStatus::from_str(&status_str).unwrap_or(CardStatus::Pending),
                 metadata: metadata_str.and_then(|s| serde_json::from_str(&s).ok()),
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
             })
         },
     );
@@ -337,6 +341,30 @@ pub fn delete_card(id: &str) -> Result<(), AppError> {
 
     log::info!("✅ 删除卡片成功: {}", id);
     Ok(())
+}
+
+/// 获取项目的最大序列号
+/// 返回该项目中最大的数字序列号，如果没有记录则返回 None
+pub fn get_max_serial_by_project(project_id: &str) -> Result<Option<u32>, AppError> {
+    let conn = get_connection()?;
+
+    // 查询该项目下所有卡片的最大序列号
+    let result: Result<Option<i32>, _> = conn.query_row(
+        r#"
+        SELECT MAX(serial) FROM cards
+        WHERE project_id = ?1
+          AND serial IS NOT NULL
+        "#,
+        [project_id],
+        |row| row.get(0),
+    );
+
+    match result {
+        Ok(Some(serial)) => Ok(Some(serial as u32)),
+        Ok(None) => Ok(None),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(AppError::Other(format!("查询最大序列号失败: {}", e))),
+    }
 }
 
 /// 保存地址到卡片

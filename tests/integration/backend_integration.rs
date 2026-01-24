@@ -117,7 +117,10 @@ fn test_tspl_generator_mixed_mode() {
 
     // TSPL 生成
     let generator = TSPLGenerator::new();
-    let tspl = generator.generate(render_result, 76.0, 130.0).unwrap();
+    let tspl_bytes = generator.generate(render_result, 76.0, 130.0).unwrap();
+
+    // 将 Vec<u8> 转换为字符串用于文本检查（使用 lossy 因为包含二进制位图数据）
+    let tspl = String::from_utf8_lossy(&tspl_bytes);
 
     // 验证 TSPL 内容
     assert!(tspl.contains("SIZE 76 mm, 130 mm"), "应该包含纸张尺寸");
@@ -135,7 +138,7 @@ fn test_tspl_generator_mixed_mode() {
     println!("✓ TSPL指令生成成功");
     println!("  - 位图指令: {} 个", bitmap_count);
     println!("  - 条码指令: {} 个", barcode_count);
-    println!("  - 总长度: {} 字节", tspl.len());
+    println!("  - 总长度: {} 字节", tspl_bytes.len());
 
     // 验证指令数量
     assert!(bitmap_count >= 5, "应该有至少5个位图指令（5个文本元素）");
@@ -168,7 +171,10 @@ fn test_tspl_generator_full_bitmap() {
     let render_result = pipeline.render(layout_result, &output_config).unwrap();
 
     let generator = TSPLGenerator::new();
-    let tspl = generator.generate(render_result, 76.0, 130.0).unwrap();
+    let tspl_bytes = generator.generate(render_result, 76.0, 130.0).unwrap();
+
+    // 将 Vec<u8> 转换为字符串用于文本检查（使用 lossy 因为包含二进制位图数据）
+    let tspl = String::from_utf8_lossy(&tspl_bytes);
 
     // 验证 TSPL 内容
     assert!(tspl.contains("SIZE 76 mm, 130 mm"));
@@ -185,7 +191,7 @@ fn test_tspl_generator_full_bitmap() {
 
     println!("✓ TSPL指令生成成功");
     println!("  - 位图指令: {} 个", bitmap_count);
-    println!("  - 总长度: {} 字节", tspl.len());
+    println!("  - 总长度: {} 字节", tspl_bytes.len());
 
     println!("✅ TSPL生成器全位图模式测试通过");
     println!("=====================================\n");
@@ -227,11 +233,12 @@ fn test_backend_with_config_file() {
 
     // 测试 TSPL 生成
     let generator = TSPLGenerator::new();
-    let tspl = generator.generate(render_result, 76.0, 130.0).unwrap();
+    let tspl_bytes = generator.generate(render_result, 76.0, 130.0).unwrap();
+    let tspl = String::from_utf8_lossy(&tspl_bytes);
 
     assert!(tspl.contains("BITMAP"));
     assert!(tspl.contains("BARCODE"));
-    println!("✓ TSPL生成: {} 字节", tspl.len());
+    println!("✓ TSPL生成: {} 字节", tspl_bytes.len());
 
     println!("✅ 配置文件集成测试通过");
     println!("=====================================\n");

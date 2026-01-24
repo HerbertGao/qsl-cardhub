@@ -117,3 +117,47 @@ pub fn is_keyring_available() -> bool {
         matches!(*storage, StorageStrategy::Keyring(_))
     }
 }
+
+/// 所有已知的凭据键
+pub const ALL_CREDENTIAL_KEYS: &[&str] = &[
+    // QRZ.cn
+    "qsl-cardhub:qrz:username",
+    "qsl-cardhub:qrz:password",
+    "qsl-cardhub:qrz:session",
+    // QRZ.com
+    "qsl-cardhub:qrz.com:username",
+    "qsl-cardhub:qrz.com:password",
+    "qsl-cardhub:qrz.com:session",
+    // 顺丰速运
+    "qsl-cardhub:sf:partner_id",
+    "qsl-cardhub:sf:checkword_prod",
+    "qsl-cardhub:sf:checkword_sandbox",
+    "qsl-cardhub:sf:environment",
+    // 云同步
+    "qsl-cardhub:sync:api_key",
+];
+
+/// 清除所有已知的凭据
+/// 用于恢复出厂设置功能
+pub fn clear_all_credentials() -> Result<()> {
+    log::info!("[凭据] 开始清除所有凭据...");
+    let mut errors = Vec::new();
+
+    for key in ALL_CREDENTIAL_KEYS {
+        if let Err(e) = delete_credential(key) {
+            log::warn!("[凭据] 删除失败: key={}, error={}", key, e);
+            errors.push(format!("{}: {}", key, e));
+        } else {
+            log::info!("[凭据] 已删除: key={}", key);
+        }
+    }
+
+    if errors.is_empty() {
+        log::info!("[凭据] 所有凭据已清除");
+        Ok(())
+    } else {
+        // 即使有部分失败，也返回成功，因为我们希望继续重置流程
+        log::warn!("[凭据] 部分凭据清除失败: {:?}", errors);
+        Ok(())
+    }
+}
