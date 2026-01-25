@@ -180,9 +180,21 @@ impl TSPLGenerator {
         for line in content.split("\r\n") {
             if line.starts_with("BITMAP ") {
                 // 解析 BITMAP 指令: BITMAP x,y,width_bytes,height,mode,<binary_data>
-                if let Some(comma_pos) = line.find(",0,") {
-                    // 提取 BITMAP 头部（到 mode 参数为止）
-                    let header = &line[..comma_pos + 3];
+                // 找到第5个逗号的位置（mode参数之后）
+                let mut comma_count = 0;
+                let mut comma_pos = None;
+                for (i, c) in line.char_indices() {
+                    if c == ',' {
+                        comma_count += 1;
+                        if comma_count == 5 {
+                            comma_pos = Some(i + 1);
+                            break;
+                        }
+                    }
+                }
+                if let Some(pos) = comma_pos {
+                    // 提取 BITMAP 头部（到 mode 参数之后的逗号为止）
+                    let header = &line[..pos];
                     // 计算二进制数据长度
                     let binary_len = line.len() - header.len();
                     readable_content.push_str(&format!("{}<binary: {} bytes>\n", header, binary_len));
