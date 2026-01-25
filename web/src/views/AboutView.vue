@@ -3,7 +3,7 @@
     <div class="about-layout">
       <!-- 左侧：应用信息 -->
       <div class="about-main">
-        <h1>关于 qsl-cardhub</h1>
+        <h1>关于 QSL 分卡助手</h1>
 
         <el-card
           style="margin-top: 30px"
@@ -14,7 +14,7 @@
             border
           >
             <el-descriptions-item label="应用名称">
-              qsl-cardhub
+              QSL 分卡助手
             </el-descriptions-item>
             <el-descriptions-item label="版本">
               <div style="display: flex; align-items: center; gap: 12px">
@@ -43,7 +43,7 @@
               Rust + Tauri 2 + Vue 3 + Element Plus
             </el-descriptions-item>
             <el-descriptions-item label="平台支持">
-              Windows / macOS / Linux
+              Windows / macOS
             </el-descriptions-item>
             <el-descriptions-item label="版权">
               © 2026 Herbert Software
@@ -172,18 +172,24 @@
             </p>
             <div class="qrcode-container">
               <div class="qrcode-item">
-                <img
+                <el-image
                   :src="alipayQR"
-                  alt="支付宝"
+                  :preview-src-list="[alipayQR, wechatQR]"
+                  :initial-index="0"
+                  fit="contain"
                   class="qrcode-image"
-                >
+                  preview-teleported
+                />
               </div>
               <div class="qrcode-item">
-                <img
+                <el-image
                   :src="wechatQR"
-                  alt="微信"
+                  :preview-src-list="[alipayQR, wechatQR]"
+                  :initial-index="1"
+                  fit="contain"
                   class="qrcode-image"
-                >
+                  preview-teleported
+                />
               </div>
             </div>
           </div>
@@ -426,19 +432,20 @@ async function handleOpenReleasePage(): Promise<void> {
 async function handleFactoryReset(): Promise<void> {
   try {
     await ElMessageBox.confirm(
-      '此操作将删除以下数据，且无法恢复：\n\n' +
-      '• 所有项目和卡片数据\n' +
-      '• 打印机配置\n' +
-      '• QRZ.cn / QRZ.com 登录凭据\n' +
-      '• 顺丰速运配置\n' +
-      '• 云同步配置\n\n' +
-      '默认打印模板将被保留。\n\n' +
+      '此操作将删除以下数据，且无法恢复：<br><br>' +
+      '• 所有项目和卡片数据<br>' +
+      '• 打印机配置<br>' +
+      '• QRZ.cn / QRZ.com 登录凭据<br>' +
+      '• 顺丰速运配置<br>' +
+      '• 云同步配置<br><br>' +
+      '默认打印模板将被保留。<br><br>' +
       '确定要继续吗？',
       '抹掉所有内容和设置',
       {
         confirmButtonText: '确认重置',
         cancelButtonText: '取消',
         type: 'warning',
+        dangerouslyUseHTMLString: true,
       }
     )
 

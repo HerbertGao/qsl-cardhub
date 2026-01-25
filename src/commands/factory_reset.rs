@@ -90,7 +90,7 @@ fn get_config_dir() -> Result<PathBuf, String> {
 /// - 所有钥匙串凭据
 ///
 /// 保留：
-/// - 默认模板 (templates/default.toml)
+/// - 呼号模板 (templates/callsign.toml)
 #[tauri::command]
 pub async fn factory_reset() -> Result<(), String> {
     log::info!("开始执行恢复出厂设置...");

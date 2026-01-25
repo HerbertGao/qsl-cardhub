@@ -15,7 +15,7 @@ fn test_comprehensive_qsl_card_generation() {
 
     // 步骤 1: 加载模板配置
     println!("📋 步骤 1: 加载模板配置");
-    let config_path = Path::new("../config/templates/default.toml");
+    let config_path = Path::new("../config/templates/callsign.toml");
     assert!(
         config_path.exists(),
         "配置文件不存在: {}",

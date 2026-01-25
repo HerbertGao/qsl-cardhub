@@ -156,9 +156,8 @@ const loginStatus = reactive<LoginStatus>({
 // 加载已保存的凭据
 const loadCredentials = async (): Promise<void> => {
   try {
-    // 检查钥匙串是否可用
-    const keyringAvailable = await invoke<boolean>('check_keyring_available')
-    storageInfo.value = keyringAvailable ? '系统钥匙串' : '本地加密文件'
+    // 存储方式固定为本地加密文件
+    storageInfo.value = '本地加密文件'
 
     // 尝试加载凭据
     const credentials = await invoke<{username: string | null, password: string | null}>('qrz_com_load_credentials')

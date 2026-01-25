@@ -7,9 +7,9 @@
     <el-header style="background: #409EFF; padding: 0">
       <div style="display: flex; align-items: center; height: 100%; padding: 0 30px">
         <h2 style="margin: 0; flex: 1; color: white">
-          qsl-cardhub
+          QSL 分卡助手
         </h2>
-        <span style="font-size: 14px; opacity: 0.9; color: white">业余无线电卡片打印系统</span>
+        <span style="font-size: 14px; opacity: 0.9; color: white">业余无线电卡片管理系统</span>
       </div>
     </el-header>
 
@@ -170,8 +170,12 @@ import {
 import { logger } from '@/utils/logger'
 import IconSfExpress from '~icons/custom/sf-express'
 import GlobalLoading from '@/components/common/GlobalLoading.vue'
+import { useNavigationWatcher } from '@/stores/navigationStore'
 
 const activeMenu = ref<string>('cards')
+
+// 监听导航事件
+useNavigationWatcher(activeMenu)
 
 // 更新检查定时器
 let updateCheckTimer: ReturnType<typeof setInterval> | null = null

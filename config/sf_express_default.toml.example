@@ -1,0 +1,15 @@
+# 顺丰速运默认预配置参数模板
+# 复制此文件为 sf_express_default.toml 并填入实际参数
+# 注意：sf_express_default.toml 已被 .gitignore 忽略，不会提交到 Git
+
+# 是否启用默认参数（设为 true 表示允许用户使用默认参数）
+enabled = false
+
+# 顾客编码（partnerID）
+partner_id = ""
+
+# 沙箱环境校验码
+checkword_sandbox = ""
+
+# 生产环境校验码
+checkword_prod = ""

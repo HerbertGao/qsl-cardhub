@@ -61,6 +61,12 @@
           <el-descriptions-item label="处理方式">
             {{ card.metadata.distribution.method }}
           </el-descriptions-item>
+          <el-descriptions-item
+            v-if="card.metadata.distribution.method === '代领' && card.metadata.distribution.proxy_callsign"
+            label="代领人"
+          >
+            {{ card.metadata.distribution.proxy_callsign }}
+          </el-descriptions-item>
           <el-descriptions-item label="分发时间">
             {{ formatDateTime(card.metadata.distribution.distributed_at) }}
           </el-descriptions-item>

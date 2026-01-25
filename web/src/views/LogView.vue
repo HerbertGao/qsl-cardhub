@@ -1,5 +1,5 @@
 <template>
-  <div class="page-content">
+  <div class="page-content log-page">
     <div class="header-section">
       <h1>日志查看</h1>
       <div class="header-actions">
@@ -45,7 +45,10 @@
             <el-radio-button value="">
               全部
             </el-radio-button>
-            <el-radio-button value="debug">
+            <el-radio-button
+              v-if="showDebug"
+              value="debug"
+            >
               DEBUG
             </el-radio-button>
             <el-radio-button value="info">
@@ -97,6 +100,14 @@
             @change="toggleAutoRefresh"
           />
         </div>
+
+        <div class="filter-item">
+          <el-switch
+            v-model="showDebug"
+            active-text="显示DEBUG日志"
+            @change="handleShowDebugChange"
+          />
+        </div>
       </div>
 
       <div
@@ -116,13 +127,16 @@
     </el-card>
 
     <!-- 日志表格 -->
-    <el-card style="margin-top: 20px">
+    <el-card
+      class="log-table-card"
+      style="margin-top: 20px"
+    >
       <el-table
         v-loading="loading"
         :data="logs"
         stripe
         style="width: 100%"
-        :max-height="600"
+        height="100%"
       >
         <el-table-column
           prop="timestamp"
@@ -185,6 +199,9 @@ import { invoke } from '@tauri-apps/api/core'
 import { save } from '@tauri-apps/plugin-dialog'
 import type { LogEntry } from '@/types/models'
 
+// localStorage 键
+const SHOW_DEBUG_KEY = 'log_show_debug'
+
 // 响应式状态
 const logs = ref<LogEntry[]>([])
 const loading = ref<boolean>(false)
@@ -192,6 +209,8 @@ const selectedLevel = ref<string>('')
 const logLimit = ref<number>(100)
 const autoRefresh = ref<boolean>(false)
 const logFilePath = ref<string>('')
+// 是否显示 DEBUG 日志，默认关闭，从 localStorage 读取
+const showDebug = ref<boolean>(localStorage.getItem(SHOW_DEBUG_KEY) === 'true')
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
 // 获取日志
@@ -201,12 +220,33 @@ const refreshLogs = async (): Promise<void> => {
     const level = selectedLevel.value || null
     const limit = logLimit.value
 
-    logs.value = await invoke<LogEntry[]>('get_logs', { level, limit })
+    let fetchedLogs = await invoke<LogEntry[]>('get_logs', { level, limit })
+
+    // 如果未开启 DEBUG 日志显示，且未指定特定级别，过滤掉 DEBUG 日志
+    if (!showDebug.value && !level) {
+      fetchedLogs = fetchedLogs.filter(log => log.level.toLowerCase() !== 'debug')
+    }
+
+    logs.value = fetchedLogs
   } catch (error) {
     ElMessage.error(`获取日志失败: ${error}`)
   } finally {
     loading.value = false
   }
+}
+
+// 处理 DEBUG 日志开关变化
+const handleShowDebugChange = (): void => {
+  // 保存到 localStorage
+  localStorage.setItem(SHOW_DEBUG_KEY, showDebug.value.toString())
+
+  // 如果当前选择的是 DEBUG 级别，但关闭了 DEBUG 显示，重置为全部
+  if (!showDebug.value && selectedLevel.value === 'debug') {
+    selectedLevel.value = ''
+  }
+
+  // 刷新日志
+  refreshLogs()
 }
 
 // 清空日志
@@ -330,14 +370,18 @@ onUnmounted((): void => {
 </script>
 
 <style scoped>
-.page-content {
-  padding: 20px;
+.log-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
 }
 
 .header-section {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .header-section h1 {
@@ -374,8 +418,25 @@ onUnmounted((): void => {
   border-top: 1px solid #ebeef5;
 }
 
+.log-table-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.log-table-card :deep(.el-card__body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 10px;
+}
+
 .log-stats {
-  margin-top: 15px;
+  margin-top: 10px;
   text-align: right;
+  flex-shrink: 0;
 }
 </style>

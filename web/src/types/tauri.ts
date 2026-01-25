@@ -53,6 +53,7 @@ export interface DistributeCardParams {
   method: string
   address?: string | null
   remarks?: string | null
+  proxy_callsign?: string | null
 }
 
 export interface ReturnCardParams {

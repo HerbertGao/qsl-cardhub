@@ -115,7 +115,100 @@ impl TSPLGenerator {
         // 打印命令
         tspl.extend_from_slice(b"PRINT 1\r\n");
 
+        // 输出 DEBUG 日志，显示生成的 TSPL 指令内容
+        log::debug!("TSPL指令生成完成，总长度: {} 字节", tspl.len());
+        self.log_tspl_content(&tspl);
+
         Ok(tspl)
+    }
+
+    /// 从灰度图像直接生成 TSPL 指令
+    ///
+    /// 用于打印机后端的 print_image 方法，直接从图像生成完整的 TSPL 打印指令
+    ///
+    /// # 参数
+    /// - `image`: 灰度图像
+    /// - `paper_width_mm`: 纸张宽度(mm)
+    /// - `paper_height_mm`: 纸张高度(mm)
+    ///
+    /// # 返回
+    /// TSPL 指令字节数组（包含二进制位图数据）
+    pub fn generate_from_image(
+        &self,
+        image: &GrayImage,
+        paper_width_mm: f32,
+        paper_height_mm: f32,
+    ) -> Result<Vec<u8>> {
+        log::info!(
+            "从图像生成 TSPL 指令: 图像 {}x{}, 纸张 {}x{} mm",
+            image.width(),
+            image.height(),
+            paper_width_mm,
+            paper_height_mm
+        );
+
+        let mut tspl: Vec<u8> = Vec::new();
+
+        // 纸张配置
+        tspl.extend_from_slice(
+            format!("SIZE {} mm, {} mm\r\n", paper_width_mm, paper_height_mm).as_bytes(),
+        );
+        tspl.extend_from_slice(b"GAP 0 mm, 0 mm\r\n");
+        // DIRECTION 1,0: 打印方向旋转 180 度，镜像关闭
+        tspl.extend_from_slice(b"DIRECTION 1,0\r\n");
+        tspl.extend_from_slice(b"CLS\r\n");
+
+        // 生成位图指令
+        tspl.extend_from_slice(&self.generate_bitmap_command(0, 0, image)?);
+
+        // 打印命令
+        tspl.extend_from_slice(b"PRINT 1\r\n");
+
+        log::debug!("TSPL 指令生成完成，总长度: {} 字节", tspl.len());
+        self.log_tspl_content(&tspl);
+
+        Ok(tspl)
+    }
+
+    /// 将 TSPL 指令内容输出到 DEBUG 日志
+    /// 由于 TSPL 指令包含二进制数据（BITMAP），需要特殊处理
+    fn log_tspl_content(&self, tspl: &[u8]) {
+        let content = String::from_utf8_lossy(tspl);
+        let mut readable_content = String::new();
+
+        // 按行处理，对 BITMAP 指令中的二进制数据进行摘要显示
+        for line in content.split("\r\n") {
+            if line.starts_with("BITMAP ") {
+                // 解析 BITMAP 指令: BITMAP x,y,width_bytes,height,mode,<binary_data>
+                // 找到第5个逗号的位置（mode参数之后）
+                let mut comma_count = 0;
+                let mut comma_pos = None;
+                for (i, c) in line.char_indices() {
+                    if c == ',' {
+                        comma_count += 1;
+                        if comma_count == 5 {
+                            comma_pos = Some(i + 1);
+                            break;
+                        }
+                    }
+                }
+                if let Some(pos) = comma_pos {
+                    // 提取 BITMAP 头部（到 mode 参数之后的逗号为止）
+                    let header = &line[..pos];
+                    // 计算二进制数据长度
+                    let binary_len = line.len() - header.len();
+                    readable_content.push_str(&format!("{}<binary: {} bytes>\n", header, binary_len));
+                } else {
+                    readable_content.push_str(line);
+                    readable_content.push('\n');
+                }
+            } else if !line.is_empty() {
+                readable_content.push_str(line);
+                readable_content.push('\n');
+            }
+        }
+
+        log::debug!("TSPL指令内容:\n{}", readable_content.trim_end());
     }
 
     /// 生成 BITMAP 指令

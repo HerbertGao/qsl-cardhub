@@ -3,6 +3,7 @@
 // 提供跨平台打印机接口的统一抽象
 
 use anyhow::Result;
+use image::GrayImage;
 
 #[cfg(target_os = "windows")]
 pub mod windows;
@@ -19,6 +20,7 @@ pub use windows::WindowsBackend;
 pub use cups::CupsBackend;
 
 pub use pdf::PdfBackend;
+pub use pdf::PDF_TEST_PRINTER_NAME;
 
 // 重新导出 trait（用于测试）
 pub use self::PrinterBackend as PrinterBackendTrait;
@@ -66,6 +68,27 @@ impl PrintResult {
     }
 }
 
+/// 图像打印配置
+#[derive(Debug, Clone)]
+pub struct ImagePrintConfig {
+    /// 纸张宽度（毫米）
+    pub width_mm: f32,
+    /// 纸张高度（毫米）
+    pub height_mm: f32,
+    /// 打印机 DPI
+    pub dpi: u32,
+}
+
+impl Default for ImagePrintConfig {
+    fn default() -> Self {
+        Self {
+            width_mm: 76.0,
+            height_mm: 130.0,
+            dpi: 203,
+        }
+    }
+}
+
 /// 打印机后端 trait
 ///
 /// 所有平台的打印机后端必须实现此 trait
@@ -79,6 +102,15 @@ pub trait PrinterBackend: Send + Sync {
     /// 打印机名称列表
     fn list_printers(&self) -> Result<Vec<String>>;
 
+    /// 检查此后端是否拥有指定的打印机
+    ///
+    /// # 参数
+    /// - `printer_name`: 打印机名称
+    ///
+    /// # 返回
+    /// 如果此后端管理该打印机，返回 true
+    fn owns_printer(&self, printer_name: &str) -> bool;
+
     /// 发送原始数据到打印机
     ///
     /// # 参数
@@ -88,4 +120,24 @@ pub trait PrinterBackend: Send + Sync {
     /// # 返回
     /// PrintResult 包含打印结果的详细信息
     fn send_raw(&self, printer_name: &str, data: &[u8]) -> Result<PrintResult>;
+
+    /// 打印灰度图像
+    ///
+    /// 每个后端以自己的方式处理图像打印：
+    /// - 系统后端：转换为 TSPL 并发送到打印机
+    /// - PDF 后端：保存为 PNG 文件
+    ///
+    /// # 参数
+    /// - `printer_name`: 打印机名称
+    /// - `image`: 灰度图像
+    /// - `config`: 打印配置
+    ///
+    /// # 返回
+    /// PrintResult 包含打印结果的详细信息
+    fn print_image(
+        &self,
+        printer_name: &str,
+        image: &GrayImage,
+        config: &ImagePrintConfig,
+    ) -> Result<PrintResult>;
 }

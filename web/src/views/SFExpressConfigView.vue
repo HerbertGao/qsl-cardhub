@@ -1,239 +1,319 @@
 <template>
-  <div class="page-content">
+  <div class="sf-config-page">
     <h1>顺丰速运配置</h1>
 
-    <el-collapse
-      v-model="activePanel"
-      accordion
+    <el-tabs
+      v-model="activeTab"
+      tab-position="left"
+      class="sf-config-tabs"
     >
       <!-- API 配置面板 -->
-      <el-collapse-item
-        title="API 凭据配置"
+      <el-tab-pane
+        label="API 凭据配置"
         name="api"
       >
-        <div style="margin-bottom: 20px">
-          <p style="color: #909399; font-size: 14px; margin: 0">
-            配置顺丰速运 API 凭据，用于打印运单面单。凭据将加密保存到系统钥匙串或本地加密文件。
-          </p>
+        <div class="tab-content">
+          <div style="margin-bottom: 20px">
+            <p style="color: #909399; font-size: 14px; margin: 0">
+              配置顺丰速运 API 凭据，用于打印运单面单。凭据将加密保存到本地加密文件。
+            </p>
+          </div>
+
+          <el-form
+            :model="form"
+            label-width="120px"
+            style="max-width: 600px"
+          >
+            <!-- 参数来源选择 -->
+            <el-form-item label="参数来源">
+              <el-radio-group
+                v-model="configMode"
+                @change="handleConfigModeChange"
+              >
+                <el-radio
+                  value="default"
+                  :disabled="!defaultApiConfig?.enabled"
+                >
+                  使用默认参数
+                </el-radio>
+                <el-radio value="custom">
+                  使用自定义参数（推荐）
+                </el-radio>
+              </el-radio-group>
+            </el-form-item>
+
+            <!-- 默认参数模式提示 -->
+            <el-form-item v-if="configMode === 'default'">
+              <el-alert
+                type="info"
+                :closable="false"
+                show-icon
+              >
+                <template #title>
+                  默认参数为公共资源，可能随时调整。如需更稳定的服务，建议申请专属凭据。
+                </template>
+              </el-alert>
+            </el-form-item>
+
+            <!-- 自定义参数模式提示 -->
+            <el-form-item v-if="configMode === 'custom'">
+              <el-alert
+                type="info"
+                :closable="false"
+              >
+                <template #title>
+                  <span>前往 </span>
+                  <a
+                    href="https://open.sf-express.com/"
+                    target="_blank"
+                    style="color: #409eff"
+                  >顺丰开放平台</a>
+                  <span> 申请您自己的 API 凭据</span>
+                </template>
+              </el-alert>
+            </el-form-item>
+
+            <el-form-item label="环境">
+              <el-radio-group v-model="form.environment">
+                <el-radio value="sandbox">
+                  沙箱环境
+                </el-radio>
+                <el-radio value="production">
+                  生产环境
+                </el-radio>
+              </el-radio-group>
+            </el-form-item>
+
+            <el-form-item label="顾客编码">
+              <el-input
+                v-model="form.partnerId"
+                :placeholder="configMode === 'default' ? '使用默认参数' : '请输入顺丰顾客编码（partnerID）'"
+                :disabled="configMode === 'default'"
+                clearable
+              />
+            </el-form-item>
+
+            <el-form-item label="模板编码">
+              <el-input
+                v-model="form.templateCode"
+                disabled
+              />
+              <div style="font-size: 12px; color: #909399; margin-top: 4px">
+                固定使用 76mm × 130mm 标准模板
+              </div>
+            </el-form-item>
+
+            <el-divider v-if="configMode === 'custom'" />
+
+            <!-- 沙箱环境校验码（仅自定义模式显示） -->
+            <el-form-item
+              v-if="configMode === 'custom' && form.environment === 'sandbox'"
+              label="沙箱校验码"
+            >
+              <el-input
+                v-model="form.checkwordSandbox"
+                type="password"
+                placeholder="请输入沙箱环境校验码"
+                show-password
+                clearable
+              />
+              <div
+                v-if="hasSandboxCheckword"
+                style="font-size: 12px; color: #67c23a; margin-top: 4px"
+              >
+                <el-icon><CircleCheckFilled /></el-icon>
+                已保存
+              </div>
+            </el-form-item>
+
+            <!-- 生产环境校验码（仅自定义模式显示） -->
+            <el-form-item
+              v-if="configMode === 'custom' && form.environment === 'production'"
+              label="生产校验码"
+            >
+              <el-input
+                v-model="form.checkwordProd"
+                type="password"
+                placeholder="请输入生产环境校验码"
+                show-password
+                clearable
+              />
+              <div
+                v-if="hasProdCheckword"
+                style="font-size: 12px; color: #67c23a; margin-top: 4px"
+              >
+                <el-icon><CircleCheckFilled /></el-icon>
+                已保存
+              </div>
+            </el-form-item>
+
+            <!-- 默认模式下显示校验码状态 -->
+            <el-form-item
+              v-if="configMode === 'default'"
+              label="校验码状态"
+            >
+              <el-tag
+                v-if="form.environment === 'sandbox' && defaultApiConfig?.has_sandbox_checkword"
+                type="success"
+              >
+                沙箱校验码已配置
+              </el-tag>
+              <el-tag
+                v-else-if="form.environment === 'production' && defaultApiConfig?.has_prod_checkword"
+                type="success"
+              >
+                生产校验码已配置
+              </el-tag>
+              <el-tag
+                v-else
+                type="danger"
+              >
+                当前环境校验码未配置
+              </el-tag>
+            </el-form-item>
+
+            <el-form-item>
+              <el-alert
+                v-if="storageInfo"
+                type="info"
+                :closable="false"
+                style="margin-bottom: 15px"
+              >
+                <template #title>
+                  <div style="font-size: 13px">
+                    存储方式：{{ storageInfo }}
+                  </div>
+                </template>
+              </el-alert>
+            </el-form-item>
+
+            <el-form-item>
+              <el-button
+                type="primary"
+                :loading="saving"
+                :disabled="configMode === 'custom' && !form.partnerId"
+                @click="handleSave"
+              >
+                <el-icon v-if="!saving">
+                  <Check />
+                </el-icon>
+                保存配置
+              </el-button>
+
+              <el-button
+                type="danger"
+                plain
+                :disabled="!hasConfig"
+                @click="handleClear"
+              >
+                <el-icon>
+                  <Delete />
+                </el-icon>
+                清除凭据
+              </el-button>
+            </el-form-item>
+
+            <el-form-item label="当前状态">
+              <el-tag :type="currentStatusType">
+                {{ currentStatusText }}
+              </el-tag>
+            </el-form-item>
+          </el-form>
         </div>
-
-        <el-form
-          :model="form"
-          label-width="120px"
-          style="max-width: 600px"
-        >
-          <el-form-item label="环境">
-            <el-radio-group v-model="form.environment">
-              <el-radio value="sandbox">
-                沙箱环境
-              </el-radio>
-              <el-radio value="production">
-                生产环境
-              </el-radio>
-            </el-radio-group>
-          </el-form-item>
-
-          <el-form-item label="顾客编码">
-            <el-input
-              v-model="form.partnerId"
-              placeholder="请输入顺丰顾客编码（partnerID）"
-              clearable
-            />
-          </el-form-item>
-
-          <el-form-item label="模板编码">
-            <el-input
-              v-model="form.templateCode"
-              disabled
-            />
-            <div style="font-size: 12px; color: #909399; margin-top: 4px">
-              固定使用 76mm × 130mm 标准模板
-            </div>
-          </el-form-item>
-
-          <el-divider />
-
-          <!-- 沙箱环境校验码 -->
-          <el-form-item
-            v-if="form.environment === 'sandbox'"
-            label="沙箱校验码"
-          >
-            <el-input
-              v-model="form.checkwordSandbox"
-              type="password"
-              placeholder="请输入沙箱环境校验码"
-              show-password
-              clearable
-            />
-            <div
-              v-if="hasSandboxCheckword"
-              style="font-size: 12px; color: #67c23a; margin-top: 4px"
-            >
-              <el-icon><CircleCheckFilled /></el-icon>
-              已保存
-            </div>
-          </el-form-item>
-
-          <!-- 生产环境校验码 -->
-          <el-form-item
-            v-if="form.environment === 'production'"
-            label="生产校验码"
-          >
-            <el-input
-              v-model="form.checkwordProd"
-              type="password"
-              placeholder="请输入生产环境校验码"
-              show-password
-              clearable
-            />
-            <div
-              v-if="hasProdCheckword"
-              style="font-size: 12px; color: #67c23a; margin-top: 4px"
-            >
-              <el-icon><CircleCheckFilled /></el-icon>
-              已保存
-            </div>
-          </el-form-item>
-
-          <el-form-item>
-            <el-alert
-              v-if="storageInfo"
-              type="info"
-              :closable="false"
-              style="margin-bottom: 15px"
-            >
-              <template #title>
-                <div style="font-size: 13px">
-                  存储方式：{{ storageInfo }}
-                </div>
-              </template>
-            </el-alert>
-          </el-form-item>
-
-          <el-form-item>
-            <el-button
-              type="primary"
-              :loading="saving"
-              :disabled="!form.partnerId"
-              @click="handleSave"
-            >
-              <el-icon v-if="!saving">
-                <Check />
-              </el-icon>
-              保存配置
-            </el-button>
-
-            <el-button
-              type="danger"
-              plain
-              :disabled="!hasConfig"
-              @click="handleClear"
-            >
-              <el-icon>
-                <Delete />
-              </el-icon>
-              清除凭据
-            </el-button>
-          </el-form-item>
-
-          <el-form-item label="当前状态">
-            <el-tag :type="currentStatusType">
-              {{ currentStatusText }}
-            </el-tag>
-          </el-form-item>
-        </el-form>
-      </el-collapse-item>
+      </el-tab-pane>
 
       <!-- 寄件人配置面板 -->
-      <el-collapse-item
-        title="寄件人信息"
+      <el-tab-pane
+        label="寄件人信息"
         name="sender"
       >
-        <div style="margin-bottom: 20px">
-          <p style="color: #909399; font-size: 14px; margin: 0">
-            配置默认寄件人信息，创建顺丰订单时将使用此信息。
-          </p>
-        </div>
+        <div class="tab-content">
+          <div style="margin-bottom: 20px">
+            <p style="color: #909399; font-size: 14px; margin: 0">
+              配置默认寄件人信息，创建顺丰订单时将使用此信息。
+            </p>
+          </div>
 
-        <el-form
-          ref="senderFormRef"
-          :model="senderForm"
-          :rules="senderRules"
-          label-width="120px"
-          style="max-width: 600px"
-        >
-          <el-form-item
-            label="寄件人姓名"
-            prop="name"
+          <el-form
+            ref="senderFormRef"
+            :model="senderForm"
+            :rules="senderRules"
+            label-width="120px"
+            style="max-width: 600px"
           >
-            <el-input
-              v-model="senderForm.name"
-              placeholder="请输入寄件人姓名"
-              clearable
-            />
-          </el-form-item>
-
-          <el-form-item
-            label="手机号"
-            prop="phone"
-          >
-            <el-input
-              v-model="senderForm.phone"
-              placeholder="请输入手机号码"
-              clearable
-              maxlength="11"
-            />
-          </el-form-item>
-
-          <el-form-item
-            label="固定电话"
-            prop="mobile"
-          >
-            <el-input
-              v-model="senderForm.mobile"
-              placeholder="选填，格式如 010-12345678"
-              clearable
-            />
-          </el-form-item>
-
-          <el-form-item
-            label="所在地区"
-            prop="province"
-          >
-            <AddressSelector
-              v-model:province="senderForm.province"
-              v-model:city="senderForm.city"
-              v-model:district="senderForm.district"
-            />
-          </el-form-item>
-
-          <el-form-item
-            label="详细地址"
-            prop="address"
-          >
-            <el-input
-              v-model="senderForm.address"
-              type="textarea"
-              :rows="2"
-              placeholder="请输入详细地址（街道、门牌号等）"
-            />
-          </el-form-item>
-
-          <el-form-item>
-            <el-button
-              type="primary"
-              :loading="savingSender"
-              @click="handleSaveSender"
+            <el-form-item
+              label="寄件人姓名"
+              prop="name"
             >
-              <el-icon v-if="!savingSender">
-                <Check />
-              </el-icon>
-              保存寄件人
-            </el-button>
-          </el-form-item>
-        </el-form>
-      </el-collapse-item>
-    </el-collapse>
+              <el-input
+                v-model="senderForm.name"
+                placeholder="请输入寄件人姓名"
+                clearable
+              />
+            </el-form-item>
+
+            <el-form-item
+              label="手机号"
+              prop="phone"
+            >
+              <el-input
+                v-model="senderForm.phone"
+                placeholder="请输入手机号码"
+                clearable
+                maxlength="11"
+              />
+            </el-form-item>
+
+            <el-form-item
+              label="固定电话"
+              prop="mobile"
+            >
+              <el-input
+                v-model="senderForm.mobile"
+                placeholder="选填，格式如 010-12345678"
+                clearable
+              />
+            </el-form-item>
+
+            <el-form-item
+              label="所在地区"
+              prop="province"
+            >
+              <AddressSelector
+                v-model:province="senderForm.province"
+                v-model:city="senderForm.city"
+                v-model:district="senderForm.district"
+              />
+            </el-form-item>
+
+            <el-form-item
+              label="详细地址"
+              prop="address"
+            >
+              <el-input
+                v-model="senderForm.address"
+                type="textarea"
+                :rows="2"
+                placeholder="请输入详细地址（街道、门牌号等）"
+              />
+            </el-form-item>
+
+            <el-form-item>
+              <el-button
+                type="primary"
+                :loading="savingSender"
+                @click="handleSaveSender"
+              >
+                <el-icon v-if="!savingSender">
+                  <Check />
+                </el-icon>
+                保存寄件人
+              </el-button>
+            </el-form-item>
+          </el-form>
+        </div>
+      </el-tab-pane>
+    </el-tabs>
   </div>
 </template>
 
@@ -248,8 +328,8 @@ import { useLoading } from '@/composables/useLoading'
 
 const { withLoading } = useLoading()
 
-// 折叠面板激活项（默认不展开）
-const activePanel = ref('')
+// Tab 激活项
+const activeTab = ref('api')
 
 interface SFConfigResponse {
   environment: string
@@ -279,6 +359,17 @@ const saving = ref<boolean>(false)
 const storageInfo = ref<string>('')
 const hasProdCheckword = ref<boolean>(false)
 const hasSandboxCheckword = ref<boolean>(false)
+
+// 默认参数配置
+interface DefaultApiConfig {
+  enabled: boolean
+  partner_id_masked: string
+  has_sandbox_checkword: boolean
+  has_prod_checkword: boolean
+}
+
+const defaultApiConfig = ref<DefaultApiConfig | null>(null)
+const configMode = ref<'default' | 'custom'>('custom')
 
 // 寄件人表单
 const senderFormRef = ref<FormInstance | null>(null)
@@ -340,11 +431,10 @@ const currentStatusText = computed<string>(() => {
 })
 
 // 加载配置
-const loadConfig = async (): Promise<void> => {
+const loadConfig = async (setDefaultTab = false): Promise<void> => {
   try {
-    // 检查钥匙串是否可用
-    const keyringAvailable = await invoke<boolean>('check_keyring_available')
-    storageInfo.value = keyringAvailable ? '系统钥匙串' : '本地加密文件'
+    // 存储方式固定为本地加密文件
+    storageInfo.value = '本地加密文件'
 
     // 加载配置
     const config = await invoke<SFConfigResponse>('sf_load_config')
@@ -356,43 +446,87 @@ const loadConfig = async (): Promise<void> => {
     form.templateCode = config.template_code
     hasProdCheckword.value = config.has_prod_checkword
     hasSandboxCheckword.value = config.has_sandbox_checkword
+
+    // 仅在初始加载时根据 API 配置状态设置默认选中的 Tab
+    if (setDefaultTab) {
+      if (!config.partner_id) {
+        activeTab.value = 'api'
+      } else {
+        activeTab.value = 'sender'
+      }
+    }
   } catch (error) {
     console.error('加载配置失败:', error)
     ElMessage.error(`加载配置失败: ${error}`)
   }
 }
 
+// 加载默认 API 配置
+const loadDefaultApiConfig = async (): Promise<void> => {
+  try {
+    defaultApiConfig.value = await invoke<DefaultApiConfig>('sf_get_default_api_config')
+    console.log('默认 API 配置:', defaultApiConfig.value)
+  } catch (error) {
+    console.error('加载默认 API 配置失败:', error)
+    defaultApiConfig.value = null
+  }
+}
+
+// 切换配置模式
+const handleConfigModeChange = async (mode: 'default' | 'custom'): Promise<void> => {
+  configMode.value = mode
+
+  if (mode === 'default' && defaultApiConfig.value?.enabled) {
+    // 使用默认参数时，显示脱敏的顾客编码
+    form.partnerId = defaultApiConfig.value.partner_id_masked
+  } else if (mode === 'custom') {
+    // 切换到自定义模式时，如果当前显示的是脱敏的编码，清空
+    if (form.partnerId.includes('***')) {
+      form.partnerId = ''
+    }
+  }
+}
+
 // 保存配置
 const handleSave = async (): Promise<void> => {
-  if (!form.partnerId) {
-    ElMessage.warning('请输入顾客编码')
-    return
-  }
-
   saving.value = true
 
   try {
     await withLoading(async () => {
-      console.log('保存顺丰配置:', {
-        environment: form.environment,
-        partnerId: form.partnerId,
-        hasCheckwordProd: !!form.checkwordProd,
-        hasCheckwordSandbox: !!form.checkwordSandbox
-      })
+      if (configMode.value === 'default') {
+        // 使用默认参数
+        console.log('应用默认 API 配置')
+        await invoke('sf_apply_default_api_config', {
+          environment: form.environment
+        })
+      } else {
+        // 使用自定义参数
+        if (!form.partnerId) {
+          ElMessage.warning('请输入顾客编码')
+          return
+        }
 
-      await invoke('sf_save_config', {
-        environment: form.environment,
-        partnerId: form.partnerId,
-        checkwordProd: form.checkwordProd || null,
-        checkwordSandbox: form.checkwordSandbox || null
-      })
+        console.log('保存顺丰配置:', {
+          environment: form.environment,
+          partnerId: form.partnerId,
+          hasCheckwordProd: !!form.checkwordProd,
+          hasCheckwordSandbox: !!form.checkwordSandbox
+        })
 
-      // 清空校验码输入框
-      if (form.checkwordProd) {
-        form.checkwordProd = ''
-      }
-      if (form.checkwordSandbox) {
-        form.checkwordSandbox = ''
+        await invoke('sf_save_config', {
+          environment: form.environment,
+          partnerId: form.partnerId,
+          checkwordProd: form.checkwordProd || null,
+          checkwordSandbox: form.checkwordSandbox || null
+        })
+
+        // 清空校验码输入框
+        if (form.checkwordProd) {
+          form.checkwordProd = ''
+        }
+        if (form.checkwordSandbox) {
+          form.checkwordSandbox = ''
+        }
       }
 
       ElMessage.success('配置已保存')
@@ -513,23 +647,51 @@ const handleSaveSender = async (): Promise<void> => {
   }
 }
 
-onMounted(() => {
-  loadConfig()
+onMounted(async () => {
+  await loadDefaultApiConfig()
+  await loadConfig(true)
   loadDefaultSender()
+
+  // 如果默认参数可用且用户未配置自定义参数，默认选中"使用默认参数"
+  if (defaultApiConfig.value?.enabled && !form.partnerId) {
+    configMode.value = 'default'
+    form.partnerId = defaultApiConfig.value.partner_id_masked
+  }
 })
 </script>
 
 <style scoped>
-.page-content h1 {
+.sf-config-page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.sf-config-page h1 {
   margin-bottom: 20px;
+  flex-shrink: 0;
 }
 
-:deep(.el-collapse-item__header) {
-  font-size: 16px;
-  font-weight: 500;
+.sf-config-tabs {
+  flex: 1;
+  min-height: 0;
 }
 
-:deep(.el-collapse-item__content) {
-  padding: 20px;
+.tab-content {
+  padding: 0 20px;
+}
+
+:deep(.el-tabs__header.is-left) {
+  margin-right: 20px;
+}
+
+:deep(.el-tabs__item) {
+  height: 50px;
+  line-height: 50px;
+  font-size: 14px;
+}
+
+:deep(.el-tabs__nav-wrap.is-left::after) {
+  width: 1px;
 }
 </style>

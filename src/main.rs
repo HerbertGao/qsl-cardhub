@@ -19,13 +19,14 @@ mod utils;
 use commands::{
     cards::{
         create_card_cmd, delete_card_cmd, distribute_card_cmd, get_card_cmd, get_max_serial_cmd,
-        list_cards_cmd, return_card_cmd, save_card_address_cmd,
+        get_project_callsigns_cmd, list_cards_cmd, return_card_cmd, save_card_address_cmd,
+        save_pending_waybill_cmd,
     },
     data_transfer::{export_data, import_data, preview_import_data},
     factory_reset::factory_reset,
     logger::{clear_logs, export_logs, get_log_file_path, get_logs, log_from_frontend},
     platform::get_platform_info,
-    printer::{PrinterState, generate_tspl, get_printers, get_template_config, load_template, preview_qsl, print_qsl, save_template, save_template_config},
+    printer::{PrinterState, generate_tspl, get_address_template_config, get_printers, get_template_config, load_template, preview_address, preview_qsl, print_address, print_qsl, save_address_template_config, save_template, save_template_config},
     profile::{
         ProfileState, create_profile, delete_profile, export_profile, get_default_profile_id,
         get_default_template_name, get_printer_config, get_profile, get_profiles, import_profile,
@@ -49,6 +50,7 @@ use commands::{
     },
     sf_express::{
         sf_clear_config, sf_fetch_waybill, sf_load_config, sf_print_waybill, sf_save_config,
+        sf_get_default_api_config, sf_apply_default_api_config,
         // 寄件人管理
         sf_create_sender, sf_update_sender, sf_delete_sender, sf_list_senders,
         sf_get_default_sender, sf_set_default_sender,
@@ -136,12 +138,16 @@ fn main() {
             // 打印机管理
             get_printers,
             preview_qsl,
+            preview_address,
             print_qsl,
+            print_address,
             generate_tspl,
             load_template,
             save_template,
             get_template_config,
             save_template_config,
+            get_address_template_config,
+            save_address_template_config,
             // 日志管理
             get_logs,
             clear_logs,
@@ -159,10 +165,12 @@ fn main() {
             list_cards_cmd,
             get_card_cmd,
             get_max_serial_cmd,
+            get_project_callsigns_cmd,
             distribute_card_cmd,
             return_card_cmd,
             delete_card_cmd,
             save_card_address_cmd,
+            save_pending_waybill_cmd,
             // 安全凭据管理
             save_credentials,
             load_credentials,
@@ -188,6 +196,8 @@ fn main() {
             sf_save_config,
             sf_load_config,
             sf_clear_config,
+            sf_get_default_api_config,
+            sf_apply_default_api_config,
             sf_fetch_waybill,
             sf_print_waybill,
             // 顺丰寄件人管理
@@ -309,18 +319,18 @@ fn init_user_config(app: &tauri::App, config_dir: &PathBuf) -> Result<(), String
         .resource_dir()
         .map_err(|e| format!("无法获取资源目录: {}", e))?;
 
-    // 复制默认模板文件（如果不存在）
-    let default_template_src = resource_path.join("config/templates/default.toml");
-    let default_template_dst = templates_dir.join("default.toml");
+    // 复制呼号模板文件（如果不存在）
+    let callsign_template_src = resource_path.join("config/templates/callsign.toml");
+    let callsign_template_dst = templates_dir.join("callsign.toml");
 
-    if !default_template_dst.exists() {
-        if default_template_src.exists() {
-            fs::copy(&default_template_src, &default_template_dst)
-                .map_err(|e| format!("无法复制默认模板: {}", e))?;
-            println!("✅ 已复制默认模板到: {}", default_template_dst.display());
+    if !callsign_template_dst.exists() {
+        if callsign_template_src.exists() {
+            fs::copy(&callsign_template_src, &callsign_template_dst)
+                .map_err(|e| format!("无法复制呼号模板: {}", e))?;
+            println!("✅ 已复制呼号模板到: {}", callsign_template_dst.display());
         } else {
-            // 如果资源文件也不存在，创建一个基本的默认模板
-            println!("⚠️  资源目录中未找到默认模板，创建基础模板");
+            // 如果资源文件也不存在，创建一个基本的呼号模板
+            println!("⚠️  资源目录中未找到呼号模板，创建基础模板");
             let basic_template = r#"[metadata]
 template_version = "2.0"
 name = "76mm × 130mm 标准模板"
@@ -366,11 +376,39 @@ max_height_mm = 28.0
 mode = "text_bitmap_plus_native_barcode"
 threshold = 160
 "#;
-            let mut file = fs::File::create(&default_template_dst)
-                .map_err(|e| format!("无法创建默认模板文件: {}", e))?;
+            let mut file = fs::File::create(&callsign_template_dst)
+                .map_err(|e| format!("无法创建呼号模板文件: {}", e))?;
             file.write_all(basic_template.as_bytes())
-                .map_err(|e| format!("无法写入默认模板文件: {}", e))?;
-            println!("✅ 已创建基础默认模板: {}", default_template_dst.display());
+                .map_err(|e| format!("无法写入呼号模板文件: {}", e))?;
+            println!("✅ 已创建基础呼号模板: {}", callsign_template_dst.display());
+        }
+    }
+
+    // 复制地址模板文件（如果不存在）
+    let address_template_src = resource_path.join("config/templates/address.toml");
+    let address_template_dst = templates_dir.join("address.toml");
+
+    if !address_template_dst.exists() {
+        if address_template_src.exists() {
+            fs::copy(&address_template_src, &address_template_dst)
+                .map_err(|e| format!("无法复制地址模板: {}", e))?;
+            println!("✅ 已复制地址模板到: {}", address_template_dst.display());
+        } else {
+            println!("⚠️  资源目录中未找到地址模板，跳过");
+        }
+    }
+
+    // 复制顺丰默认配置文件（如果不存在）
+    let sf_config_src = resource_path.join("config/sf_express_default.toml");
+    let sf_config_dst = config_dir.join("sf_express_default.toml");
+
+    if !sf_config_dst.exists() {
+        if sf_config_src.exists() {
+            fs::copy(&sf_config_src, &sf_config_dst)
+                .map_err(|e| format!("无法复制顺丰默认配置: {}", e))?;
+            println!("✅ 已复制顺丰默认配置到: {}", sf_config_dst.display());
+        } else {
+            println!("ℹ️  未找到顺丰默认配置，跳过（此为可选功能）");
         }
     }
 

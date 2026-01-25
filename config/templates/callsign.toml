@@ -13,6 +13,7 @@ margin_top_mm = 4.0
 margin_bottom_mm = 4.0
 border = true
 border_thickness_mm = 0.3
+duplicate_print = false
 
 [layout]
 align_h = "center"
@@ -50,6 +51,7 @@ max_height_mm = 28.0
 id = "barcode"
 type = "barcode"
 source = "computed"
+key = "barcode"
 format = "{callsign}"
 barcode_type = "code128"
 height_mm = 18.0

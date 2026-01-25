@@ -136,6 +136,9 @@ pub struct DistributionInfo {
     /// 备注
     #[serde(skip_serializing_if = "Option::is_none")]
     pub remarks: Option<String>,
+    /// 代领人呼号（代领方式时使用）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proxy_callsign: Option<String>,
     /// 分发时间
     pub distributed_at: String,
 }
@@ -190,6 +193,9 @@ pub struct CardMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(alias = "address_history")]
     pub address_cache: Option<Vec<AddressEntry>>,
+    /// 待处理运单号（顺丰下单后暂存，确认分发后会移到 distribution.remarks）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pending_waybill_no: Option<String>,
 }
 
 /// 卡片

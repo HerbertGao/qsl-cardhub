@@ -3,10 +3,19 @@
 // 使用 Windows Win32 API 实现 RAW 打印
 
 #[cfg(target_os = "windows")]
-use super::{PrinterBackend, PrintResult};
+use super::{ImagePrintConfig, PrinterBackend, PrintResult};
+
+#[cfg(target_os = "windows")]
+use super::pdf::PDF_TEST_PRINTER_NAME;
+
+#[cfg(target_os = "windows")]
+use crate::printer::tspl::TSPLGenerator;
 
 #[cfg(target_os = "windows")]
 use anyhow::{Context, Result};
+
+#[cfg(target_os = "windows")]
+use image::GrayImage;
 
 #[cfg(target_os = "windows")]
 use windows::core::PWSTR;
@@ -126,6 +135,11 @@ impl PrinterBackend for WindowsBackend {
         }
     }
 
+    fn owns_printer(&self, printer_name: &str) -> bool {
+        // Windows 后端拥有所有非 PDF 测试打印机
+        printer_name != PDF_TEST_PRINTER_NAME
+    }
+
     fn send_raw(&self, printer_name: &str, data: &[u8]) -> Result<PrintResult> {
         log::info!(
             "🖨️ 开始打印: 打印机={}, 数据大小={}字节",
@@ -220,6 +234,30 @@ impl PrinterBackend for WindowsBackend {
 
             Ok(result)
         }
+    }
+
+    fn print_image(
+        &self,
+        printer_name: &str,
+        image: &GrayImage,
+        config: &ImagePrintConfig,
+    ) -> Result<PrintResult> {
+        if !self.owns_printer(printer_name) {
+            anyhow::bail!("Windows 后端不支持打印机: {}", printer_name);
+        }
+
+        log::info!("Windows 后端：将图像转换为 TSPL 并打印");
+
+        // 使用 TSPL 生成器将图像转换为 TSPL 指令
+        let tspl_generator = TSPLGenerator::new();
+        let tspl = tspl_generator
+            .generate_from_image(image, config.width_mm, config.height_mm)
+            .context("生成 TSPL 指令失败")?;
+
+        log::info!("TSPL 指令生成成功，长度: {} 字节", tspl.len());
+
+        // 使用 send_raw 发送到打印机
+        self.send_raw(printer_name, &tspl)
     }
 }
 

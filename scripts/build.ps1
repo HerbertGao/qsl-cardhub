@@ -62,13 +62,13 @@ function Test-Dependencies {
         Print-Error "Node.js 未安装"
     }
 
-    # 检查 npm
-    if (Test-CommandExists "npm") {
-        $npmVersion = npm --version
-        Print-Success "npm: v$npmVersion"
+    # 检查 pnpm
+    if (Test-CommandExists "pnpm") {
+        $pnpmVersion = pnpm --version
+        Print-Success "pnpm: v$pnpmVersion"
     } else {
-        $missingDeps += "npm"
-        Print-Error "npm 未安装"
+        $missingDeps += "pnpm"
+        Print-Error "pnpm 未安装"
     }
 
     # 检查 Rust
@@ -98,7 +98,7 @@ function Test-Dependencies {
         foreach ($dep in $missingDeps) {
             switch ($dep) {
                 "Node.js" { Write-Host "  - Node.js: https://nodejs.org/" }
-                "npm" { Write-Host "  - npm (随 Node.js 一起安装)" }
+                "pnpm" { Write-Host "  - pnpm: https://pnpm.io/" }
                 "Rust" { Write-Host "  - Rust: https://rustup.rs/" }
                 "cargo" { Write-Host "  - cargo (随 Rust 一起安装)" }
             }
@@ -135,11 +135,11 @@ function Build-Frontend {
         # 检查是否需要安装依赖
         if (-not (Test-Path "node_modules")) {
             Print-Info "安装前端依赖..."
-            npm install
+            pnpm install
         }
 
         Print-Info "构建前端..."
-        npm run build
+        pnpm run build
 
         if (Test-Path "dist") {
             Print-Success "前端构建完成"

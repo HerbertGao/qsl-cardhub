@@ -14,7 +14,7 @@ fn test_end_to_end_mixed_mode() {
     println!("\n========== 端到端测试: 混合模式 ==========");
 
     // 1. 加载配置
-    let config_path = Path::new("../../config/templates/default.toml");
+    let config_path = Path::new("../../config/templates/callsign.toml");
     let config = TemplateConfig::load_from_file(config_path).expect("加载配置失败");
 
     println!("✓ 加载配置: {}", config.metadata.name);
@@ -113,7 +113,7 @@ fn test_end_to_end_full_bitmap() {
     println!("\n========== 端到端测试: 全位图模式 ==========");
 
     // 1. 加载配置并修改为全位图模式
-    let config_path = Path::new("../../config/templates/default.toml");
+    let config_path = Path::new("../../config/templates/callsign.toml");
     let mut config = TemplateConfig::load_from_file(config_path).expect("加载配置失败");
 
     println!("✓ 加载配置: {}", config.metadata.name);

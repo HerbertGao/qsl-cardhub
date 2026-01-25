@@ -80,6 +80,7 @@
       v-model:visible="distributeDialogVisible"
       :card="operatingCard"
       @confirm="handleDistributeConfirm"
+      @refresh="loadCards"
     />
 
     <!-- 退卡弹窗 -->
@@ -391,7 +392,8 @@ const handleDistributeConfirm = async (data: DistributeConfirmData): Promise<voi
       id: data.id,
       method: data.method,
       address: data.address,
-      remarks: data.remarks
+      remarks: data.remarks,
+      proxyCallsign: data.proxy_callsign || null
     })
     ElMessage.success('分发成功')
 
@@ -432,8 +434,15 @@ watch(selectedProjectId, (newId: string | null): void => {
 })
 
 // 组件挂载时加载数据
-onMounted(() => {
-  loadProjects()
+onMounted(async () => {
+  await loadProjects()
+
+  // 如果有项目，自动选中第一个；否则打开新建弹窗
+  if (projects.value.length > 0) {
+    selectedProjectId.value = projects.value[0].id
+  } else {
+    handleCreateProject()
+  }
 })
 </script>
 

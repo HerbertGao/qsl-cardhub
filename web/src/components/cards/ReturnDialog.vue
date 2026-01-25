@@ -200,10 +200,20 @@ const dialogVisible = computed<boolean>({
 // 监听弹窗打开
 watch(() => props.visible, (newVal: boolean): void => {
   if (newVal) {
-    // 重置表单
-    form.value = {
-      method: 'NOT FOUND',
-      remarks: ''
+    // 检查是否有历史退回信息
+    const returnInfo = props.card?.metadata?.return
+    if (returnInfo && props.card?.status === 'returned') {
+      // 用历史数据填充表单
+      form.value = {
+        method: returnInfo.method || 'NOT FOUND',
+        remarks: returnInfo.remarks || ''
+      }
+    } else {
+      // 重置表单为默认值
+      form.value = {
+        method: 'NOT FOUND',
+        remarks: ''
+      }
     }
 
     // 清除验证状态
