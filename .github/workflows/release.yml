@@ -159,6 +159,7 @@ jobs:
         run: pnpm run build
 
       - name: 生成顺丰速运默认配置
+        shell: bash
         run: |
           cat > config/sf_express_default.toml << TOML
           enabled = true
