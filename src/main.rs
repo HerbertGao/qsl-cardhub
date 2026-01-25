@@ -384,6 +384,34 @@ threshold = 160
         }
     }
 
+    // 复制地址模板文件（如果不存在）
+    let address_template_src = resource_path.join("config/templates/address.toml");
+    let address_template_dst = templates_dir.join("address.toml");
+
+    if !address_template_dst.exists() {
+        if address_template_src.exists() {
+            fs::copy(&address_template_src, &address_template_dst)
+                .map_err(|e| format!("无法复制地址模板: {}", e))?;
+            println!("✅ 已复制地址模板到: {}", address_template_dst.display());
+        } else {
+            println!("⚠️  资源目录中未找到地址模板，跳过");
+        }
+    }
+
+    // 复制顺丰默认配置文件（如果不存在）
+    let sf_config_src = resource_path.join("config/sf_express_default.toml");
+    let sf_config_dst = config_dir.join("sf_express_default.toml");
+
+    if !sf_config_dst.exists() {
+        if sf_config_src.exists() {
+            fs::copy(&sf_config_src, &sf_config_dst)
+                .map_err(|e| format!("无法复制顺丰默认配置: {}", e))?;
+            println!("✅ 已复制顺丰默认配置到: {}", sf_config_dst.display());
+        } else {
+            println!("ℹ️  未找到顺丰默认配置，跳过（此为可选功能）");
+        }
+    }
+
     // config.toml 由 ProfileManager 自动创建，不需要预先复制
     println!("📝 config.toml 将由 ProfileManager 自动创建");
 
