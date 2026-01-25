@@ -49,6 +49,7 @@ export interface DistributeFormData {
   method: string
   address: string | null
   remarks: string | null
+  proxy_callsign?: string | null
 }
 
 // 分发对话框确认数据
@@ -57,6 +58,7 @@ export interface DistributeConfirmData {
   method: string
   address: string | null
   remarks: string | null
+  proxy_callsign?: string | null
 }
 
 // 卡片退卡对话框

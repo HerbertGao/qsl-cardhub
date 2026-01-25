@@ -6,6 +6,7 @@ use super::{PrinterBackend, PrintResult};
 use crate::printer::barcode_renderer::BarcodeRenderer;
 use crate::printer::render_pipeline::{BarcodeElement, RenderResult};
 use anyhow::{Context, Result};
+use chrono::Local;
 use image::{GrayImage, ImageBuffer, Luma, Rgb, RgbImage};
 use std::fs;
 use std::path::PathBuf;
@@ -63,7 +64,7 @@ impl PdfBackend {
         Self::new(temp_dir)
     }
 
-    /// 渲染 RenderResult 并保存为文件
+    /// 渲染 RenderResult 并保存为文件（默认使用 qsl 前缀）
     ///
     /// # 参数
     /// - `result`: 渲染结果
@@ -71,6 +72,18 @@ impl PdfBackend {
     /// # 返回
     /// PNG 文件路径
     pub fn render(&mut self, result: RenderResult) -> Result<PathBuf> {
+        self.render_with_prefix(result, "qsl")
+    }
+
+    /// 渲染 RenderResult 并保存为文件，使用指定前缀
+    ///
+    /// # 参数
+    /// - `result`: 渲染结果
+    /// - `prefix`: 文件名前缀（如 "qsl"、"address"、"waybill"）
+    ///
+    /// # 返回
+    /// PNG 文件路径
+    pub fn render_with_prefix(&mut self, result: RenderResult, prefix: &str) -> Result<PathBuf> {
         log::info!("PDF后端开始渲染");
 
         // 根据渲染模式生成画布
@@ -94,8 +107,8 @@ impl PdfBackend {
         let rgb_canvas = self.gray_to_rgb(&canvas);
 
         // 生成文件名
-        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
-        let filename = format!("qsl_{}.png", timestamp);
+        let timestamp = Local::now().format("%Y%m%d_%H%M%S");
+        let filename = format!("{}_{}.png", prefix, timestamp);
         let png_path = self.output_dir.join(&filename);
 
         log::info!("📝 准备保存PNG文件");
@@ -320,6 +333,9 @@ mod tests {
     }
 }
 
+/// PDF 测试打印机名称常量
+pub const PDF_TEST_PRINTER_NAME: &str = "PDF 测试打印机";
+
 /// PrinterBackend trait 实现
 impl PrinterBackend for PdfBackend {
     fn name(&self) -> &str {
@@ -327,11 +343,47 @@ impl PrinterBackend for PdfBackend {
     }
 
     fn list_printers(&self) -> Result<Vec<String>> {
-        Ok(vec!["PDF 测试打印机".to_string()])
+        Ok(vec![PDF_TEST_PRINTER_NAME.to_string()])
+    }
+
+    fn owns_printer(&self, printer_name: &str) -> bool {
+        printer_name == PDF_TEST_PRINTER_NAME
     }
 
     fn send_raw(&self, _printer_name: &str, _data: &[u8]) -> Result<PrintResult> {
-        // PDF 后端不支持发送原始数据
-        anyhow::bail!("PDF 后端不支持打印，仅用于预览")
+        // PDF 后端不支持发送原始 TSPL 数据
+        anyhow::bail!("PDF 后端不支持发送原始数据，请使用 print_image 方法")
+    }
+
+    fn print_image(
+        &self,
+        printer_name: &str,
+        image: &GrayImage,
+        _config: &super::ImagePrintConfig,
+    ) -> Result<PrintResult> {
+        if !self.owns_printer(printer_name) {
+            anyhow::bail!("PDF 后端不支持打印机: {}", printer_name);
+        }
+
+        log::info!("PDF 后端：保存图像为 PNG 文件");
+
+        // 转换为 RGB 图像
+        let rgb_image = self.gray_to_rgb(image);
+
+        // 生成文件名
+        let timestamp = Local::now().format("%Y%m%d_%H%M%S");
+        let filename = format!("print_{}.png", timestamp);
+        let png_path = self.output_dir.join(&filename);
+
+        log::info!("保存到: {}", png_path.display());
+
+        // 保存 PNG
+        rgb_image
+            .save(&png_path)
+            .with_context(|| format!("保存 PNG 到 {} 失败", png_path.display()))?;
+
+        log::info!("✅ 图像已保存到: {}", png_path.display());
+
+        Ok(PrintResult::success(format!("已保存到 {}", png_path.display())))
     }
 }

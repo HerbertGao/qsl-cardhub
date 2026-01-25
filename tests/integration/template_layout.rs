@@ -13,7 +13,7 @@ fn test_complete_template_to_layout_flow() {
     println!("\n========== 模板到布局完整流程测试 ==========");
 
     // 1. 加载v2配置文件
-    let config_path = Path::new("../../config/templates/default.toml");
+    let config_path = Path::new("../../config/templates/callsign.toml");
     let config = TemplateConfig::load_from_file(config_path).expect("加载配置文件失败");
 
     println!("✓ 加载配置: {}", config.metadata.name);

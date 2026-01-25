@@ -174,8 +174,8 @@ impl ProfileManager {
 
     /// 获取默认模板的显示名称
     pub fn get_default_template_name(&self) -> String {
-        self.load_template_display_name("default.toml")
-            .unwrap_or_else(|| "默认模板".to_string())
+        self.load_template_display_name("callsign.toml")
+            .unwrap_or_else(|| "呼号模板".to_string())
     }
 
     // ========== 单配置模式方法 ==========

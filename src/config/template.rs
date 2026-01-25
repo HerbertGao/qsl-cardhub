@@ -64,6 +64,9 @@ pub struct PageConfig {
     /// 边框线宽(mm)
     #[serde(default = "default_border_thickness")]
     pub border_thickness_mm: f32,
+    /// 是否双份打印（上下各打印一份）
+    #[serde(default)]
+    pub duplicate_print: bool,
 }
 
 fn default_border_thickness() -> f32 {
@@ -193,6 +196,7 @@ impl TemplateConfig {
                 margin_bottom_mm: 3.0,
                 border: true,
                 border_thickness_mm: 0.3,
+                duplicate_print: false,
             },
             layout: LayoutConfig {
                 align_h: "center".to_string(),
@@ -436,6 +440,7 @@ mod tests {
                 margin_bottom_mm: 3.0,
                 border: true,
                 border_thickness_mm: 0.3,
+                duplicate_print: false,
             },
             layout: LayoutConfig {
                 align_h: "center".to_string(),
@@ -501,6 +506,7 @@ mod tests {
                 margin_bottom_mm: 3.0,
                 border: false,
                 border_thickness_mm: 0.3,
+                duplicate_print: false,
             },
             layout: LayoutConfig {
                 align_h: "center".to_string(),
@@ -596,7 +602,7 @@ mod tests {
 
     #[test]
     fn test_load_qsl_card_toml() {
-        let config_path = Path::new("../../config/templates/default.toml");
+        let config_path = Path::new("../../config/templates/callsign.toml");
         let config = TemplateConfig::load_from_file(config_path)
             .expect("应该成功加载v2配置");
 

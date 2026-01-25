@@ -170,8 +170,12 @@ import {
 import { logger } from '@/utils/logger'
 import IconSfExpress from '~icons/custom/sf-express'
 import GlobalLoading from '@/components/common/GlobalLoading.vue'
+import { useNavigationWatcher } from '@/stores/navigationStore'
 
 const activeMenu = ref<string>('cards')
+
+// 监听导航事件
+useNavigationWatcher(activeMenu)
 
 // 更新检查定时器
 let updateCheckTimer: ReturnType<typeof setInterval> | null = null

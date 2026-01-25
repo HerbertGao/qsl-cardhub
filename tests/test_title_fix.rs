@@ -19,7 +19,7 @@ fn test_title_not_overlapping_border() {
     data.insert("sn".to_string(), "001".to_string());
     data.insert("qty".to_string(), "500".to_string());
 
-    let config_path = Path::new("../config/templates/default.toml");
+    let config_path = Path::new("../config/templates/callsign.toml");
     let png_path = quick_generate_png(Some(config_path), &data, output_dir.clone(), "full_bitmap")
         .expect("生成PNG失败");
 

@@ -80,6 +80,7 @@
       v-model:visible="distributeDialogVisible"
       :card="operatingCard"
       @confirm="handleDistributeConfirm"
+      @refresh="loadCards"
     />
 
     <!-- 退卡弹窗 -->
@@ -391,7 +392,8 @@ const handleDistributeConfirm = async (data: DistributeConfirmData): Promise<voi
       id: data.id,
       method: data.method,
       address: data.address,
-      remarks: data.remarks
+      remarks: data.remarks,
+      proxyCallsign: data.proxy_callsign || null
     })
     ElMessage.success('分发成功')
 

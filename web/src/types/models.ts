@@ -6,6 +6,7 @@ export interface DistributionInfo {
   method: string
   address?: string | null
   remarks?: string | null
+  proxy_callsign?: string | null
   distributed_at: string
 }
 
@@ -32,6 +33,7 @@ export interface CardMetadata {
   distribution?: DistributionInfo | null
   return?: ReturnInfo | null
   address_cache?: AddressEntry[]
+  pending_waybill_no?: string | null
 }
 
 // 卡片数据模型
@@ -161,6 +163,7 @@ export interface TemplatePageConfig {
   margin_bottom_mm: number
   border: boolean
   border_thickness_mm?: number
+  duplicate_print?: boolean
 }
 
 // 模板布局配置
@@ -281,12 +284,26 @@ export interface CreateOrderParams {
   card_id?: string | null
 }
 
+// 联系人展示信息
+export interface ContactDisplayInfo {
+  name: string
+  phone: string
+  full_address: string
+}
+
 // 创建订单响应
 export interface CreateOrderResponse {
   order_id: string
   waybill_no_list: string[]
   filter_result?: number | null
   local_order: SFOrder
+  sender_info: ContactDisplayInfo
+  recipient_info: ContactDisplayInfo
+  cargo_name: string
+  pay_method: number
+  express_type_id: number
+  origin_code?: string | null
+  dest_code?: string | null
 }
 
 // 确认订单响应

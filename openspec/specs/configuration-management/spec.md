@@ -29,9 +29,9 @@ TBD - created by archiving change config-management-improvements. Update Purpose
 ### 需求：模板路径配置
 配置文件必须存储实际的模板文件路径，而非描述性名称。
 
-#### 场景：新建配置使用默认模板
+#### 场景：新建配置使用呼号模板
 - **当** 用户创建新配置
-- **那么** 系统必须设置 `template.path` 为 `"default.toml"`
+- **那么** 系统必须设置 `template.path` 为 `"callsign.toml"`
 - **并且** 该路径是相对于 `config/templates/` 目录的相对路径
 
 #### 场景：加载配置并解析模板路径
@@ -42,7 +42,7 @@ TBD - created by archiving change config-management-improvements. Update Purpose
 
 #### 场景：模板文件不存在时的回退
 - **当** 配置指定的模板文件路径不存在
-- **那么** 系统必须回退到 `config/templates/default.toml`
+- **那么** 系统必须回退到 `config/templates/callsign.toml`
 - **并且** 记录警告日志，说明原路径和回退路径
 
 ### 需求：移除纸张规格字段
@@ -133,6 +133,6 @@ arch = "arm64"
 name = "Deli DL-888C"
 
 [template]
-path = "default.toml"
+path = "callsign.toml"
 ```
 

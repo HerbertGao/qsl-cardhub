@@ -61,9 +61,20 @@ pub async fn distribute_card_cmd(
     method: String,
     address: Option<String>,
     remarks: Option<String>,
+    proxy_callsign: Option<String>,
 ) -> Result<Card, String> {
     tokio::task::spawn_blocking(move || {
-        db::distribute_card(&id, method, address, remarks).map_err(|e| e.to_string())
+        db::distribute_card(&id, method, address, remarks, proxy_callsign).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// 获取项目下的所有呼号（去重）
+#[tauri::command]
+pub async fn get_project_callsigns_cmd(project_id: String) -> Result<Vec<String>, String> {
+    tokio::task::spawn_blocking(move || {
+        db::get_project_callsigns(&project_id).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -96,6 +107,19 @@ pub async fn delete_card_cmd(id: String) -> Result<(), String> {
 pub async fn get_max_serial_cmd(project_id: String) -> Result<Option<u32>, String> {
     tokio::task::spawn_blocking(move || {
         db::get_max_serial_by_project(&project_id).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// 保存待处理运单号（不改变卡片状态）
+#[tauri::command]
+pub async fn save_pending_waybill_cmd(
+    card_id: String,
+    waybill_no: String,
+) -> Result<Card, String> {
+    tokio::task::spawn_blocking(move || {
+        db::save_pending_waybill(&card_id, waybill_no).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?

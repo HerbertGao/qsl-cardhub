@@ -1,0 +1,52 @@
+[metadata]
+template_version = "2.0"
+name = "76mm × 130mm 地址模板"
+description = "地址标签模板，76mm × 130mm，上下两份打印，用于邮寄地址"
+
+[page]
+dpi = 203
+width_mm = 76.0
+height_mm = 130.0
+margin_left_mm = 3.0
+margin_right_mm = 3.0
+margin_top_mm = 3.0
+margin_bottom_mm = 3.0
+border = false
+border_thickness_mm = 0.2
+duplicate_print = true
+
+[layout]
+align_h = "center"
+align_v = "center"
+gap_mm = 5.0
+line_gap_mm = 5.0
+
+[fonts]
+cn_bold = "SourceHanSansSC-Bold.otf"
+en_bold = "LiberationSans-Bold.ttf"
+fallback_bold = "SourceHanSansSC-Bold.otf"
+
+[[elements]]
+id = "callsign"
+type = "text"
+source = "input"
+key = "callsign"
+max_height_mm = 6.0
+
+[[elements]]
+id = "name"
+type = "text"
+source = "input"
+key = "name"
+max_height_mm = 10.0
+
+[[elements]]
+id = "address"
+type = "text"
+source = "input"
+key = "address"
+max_height_mm = 20.0
+
+[output]
+mode = "full_bitmap"
+threshold = 160

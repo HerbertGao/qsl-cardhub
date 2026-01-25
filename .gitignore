@@ -67,6 +67,7 @@ config/config.toml
 config/printer.toml
 config/profiles/*.toml
 !config/profiles/example.toml
+config/sf_express_default.toml
 
 # Tauri
 src-tauri/target/

@@ -202,7 +202,7 @@ fn test_backend_with_config_file() {
     println!("\n========== 后端集成测试: 使用配置文件 ==========");
 
     // 从配置文件加载
-    let config_path = Path::new("../../config/templates/default.toml");
+    let config_path = Path::new("../../config/templates/callsign.toml");
     let config = TemplateConfig::load_from_file(config_path).expect("加载配置文件失败");
 
     let mut data = HashMap::new();

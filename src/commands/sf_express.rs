@@ -15,12 +15,13 @@ use crate::sf_express::{
     ContactInfo, CargoDetail, WaybillNoInfo, SenderInfo, SFOrder, SFOrderWithCard, OrderStatus,
 };
 use crate::db;
+use crate::printer::backend::ImagePrintConfig;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use uuid::Uuid;
+use std::path::PathBuf;
 
 use crate::commands::printer::PrinterState;
-use crate::printer::backend::PrinterBackendTrait;
 
 /// 顺丰配置响应
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,6 +142,142 @@ pub fn sf_clear_config() -> Result<(), String> {
     Ok(())
 }
 
+/// 默认 API 配置响应
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SFDefaultApiConfig {
+    /// 是否启用默认参数
+    pub enabled: bool,
+    /// 顾客编码（脱敏显示，只显示前3位和后3位）
+    pub partner_id_masked: String,
+    /// 是否有沙箱校验码
+    pub has_sandbox_checkword: bool,
+    /// 是否有生产校验码
+    pub has_prod_checkword: bool,
+}
+
+/// 默认 API 配置文件结构
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SFDefaultApiConfigFile {
+    enabled: bool,
+    partner_id: String,
+    checkword_sandbox: String,
+    checkword_prod: String,
+}
+
+/// 获取默认 API 配置路径
+fn get_default_api_config_path() -> PathBuf {
+    // 配置文件路径：{exe_dir}/config/sf_express_default.toml
+    let exe_path = std::env::current_exe().unwrap_or_default();
+    let exe_dir = exe_path.parent().unwrap_or(std::path::Path::new("."));
+
+    // 优先查找与可执行文件同级的 config 目录
+    let config_path = exe_dir.join("config").join("sf_express_default.toml");
+    if config_path.exists() {
+        return config_path;
+    }
+
+    // 其次查找项目根目录的 config 目录（开发模式）
+    let project_config_path = PathBuf::from("config/sf_express_default.toml");
+    if project_config_path.exists() {
+        return project_config_path;
+    }
+
+    // 返回默认路径（即使不存在）
+    config_path
+}
+
+/// 获取默认 API 配置（用于前端展示）
+#[tauri::command]
+pub fn sf_get_default_api_config() -> Result<SFDefaultApiConfig, String> {
+    log::info!("获取默认 API 配置");
+
+    let config_path = get_default_api_config_path();
+    log::debug!("默认配置文件路径: {:?}", config_path);
+
+    if !config_path.exists() {
+        log::info!("默认配置文件不存在，返回禁用状态");
+        return Ok(SFDefaultApiConfig {
+            enabled: false,
+            partner_id_masked: String::new(),
+            has_sandbox_checkword: false,
+            has_prod_checkword: false,
+        });
+    }
+
+    let content = std::fs::read_to_string(&config_path)
+        .map_err(|e| format!("读取配置文件失败: {}", e))?;
+
+    let config: SFDefaultApiConfigFile = toml::from_str(&content)
+        .map_err(|e| format!("解析配置文件失败: {}", e))?;
+
+    // 脱敏处理顾客编码
+    let partner_id_masked = if config.partner_id.len() >= 6 {
+        let start = &config.partner_id[..3];
+        let end = &config.partner_id[config.partner_id.len() - 3..];
+        format!("{}***{}", start, end)
+    } else if !config.partner_id.is_empty() {
+        "***".to_string()
+    } else {
+        String::new()
+    };
+
+    let result = SFDefaultApiConfig {
+        enabled: config.enabled && !config.partner_id.is_empty(),
+        partner_id_masked,
+        has_sandbox_checkword: !config.checkword_sandbox.is_empty(),
+        has_prod_checkword: !config.checkword_prod.is_empty(),
+    };
+
+    log::info!("默认配置加载成功: enabled={}, has_sandbox={}, has_prod={}",
+        result.enabled, result.has_sandbox_checkword, result.has_prod_checkword);
+
+    Ok(result)
+}
+
+/// 使用默认 API 配置保存到凭据存储
+#[tauri::command]
+pub fn sf_apply_default_api_config(environment: String) -> Result<(), String> {
+    log::info!("应用默认 API 配置: environment={}", environment);
+
+    let config_path = get_default_api_config_path();
+
+    if !config_path.exists() {
+        return Err("默认配置文件不存在".to_string());
+    }
+
+    let content = std::fs::read_to_string(&config_path)
+        .map_err(|e| format!("读取配置文件失败: {}", e))?;
+
+    let config: SFDefaultApiConfigFile = toml::from_str(&content)
+        .map_err(|e| format!("解析配置文件失败: {}", e))?;
+
+    if !config.enabled || config.partner_id.is_empty() {
+        return Err("默认配置未启用或参数无效".to_string());
+    }
+
+    // 保存环境配置
+    save_credential(credential_keys::ENVIRONMENT, &environment)
+        .map_err(|e| format!("保存环境配置失败: {}", e))?;
+
+    // 保存顾客编码
+    save_credential(credential_keys::PARTNER_ID, &config.partner_id)
+        .map_err(|e| format!("保存顾客编码失败: {}", e))?;
+
+    // 根据环境保存对应的校验码
+    if environment == "production" && !config.checkword_prod.is_empty() {
+        save_credential(credential_keys::CHECKWORD_PROD, &config.checkword_prod)
+            .map_err(|e| format!("保存生产校验码失败: {}", e))?;
+    }
+
+    if environment == "sandbox" && !config.checkword_sandbox.is_empty() {
+        save_credential(credential_keys::CHECKWORD_SANDBOX, &config.checkword_sandbox)
+            .map_err(|e| format!("保存沙箱校验码失败: {}", e))?;
+    }
+
+    log::info!("默认 API 配置应用成功");
+    Ok(())
+}
+
 /// 获取面单（步骤1）
 ///
 /// 调用顺丰 API 获取 PDF 并返回预览图像和 PDF 数据。
@@ -210,7 +347,7 @@ pub fn sf_fetch_waybill(waybill_no: String) -> Result<FetchWaybillResponse, Stri
 
 /// 打印面单（步骤2）
 ///
-/// 接收已获取的 PDF 数据（Base64 编码），转换为 TSPL 并发送到打印机。
+/// 接收已获取的 PDF 数据（Base64 编码），渲染为图像并通过统一的打印接口发送。
 /// 需要先调用 sf_fetch_waybill 获取 PDF 数据。
 #[tauri::command]
 pub fn sf_print_waybill(
@@ -226,39 +363,22 @@ pub fn sf_print_waybill(
 
     log::info!("PDF 数据解码成功，大小: {} 字节", pdf_bytes.len());
 
-    // 渲染 PDF 为 TSPL
+    // 渲染 PDF 为灰度图像
     let renderer = PdfRenderer::new();
-    let tspl = renderer.pdf_to_tspl(&pdf_bytes, Some(128))
-        .map_err(|e| format!("渲染面单失败: {}", e))?;
+    let gray_image = renderer.render_pdf_to_grayscale(&pdf_bytes)
+        .map_err(|e| format!("渲染面单图像失败: {}", e))?;
 
-    log::info!("TSPL 指令生成成功，长度: {} 字节", tspl.len());
+    log::info!("面单渲染完成，图像尺寸: {}x{}", gray_image.width(), gray_image.height());
 
-    // 发送到打印机
-    let system_backend = printer_state
-        .system_backend
-        .lock()
-        .map_err(|e| format!("锁定打印机后端失败: {}", e))?;
-
-    let print_result = system_backend
-        .send_raw(&printer_name, &tspl)
-        .map_err(|e| format!("发送到打印机失败: {}", e))?;
-
-    // 记录详细的打印结果
-    if let Some(job_id) = &print_result.job_id {
-        log::info!("✅ 面单已发送到打印机: {}, 作业ID: {}", printer_name, job_id);
-    } else {
-        log::info!("✅ 面单已发送到打印机: {}", printer_name);
-    }
-    if let Some(details) = &print_result.details {
-        log::debug!("打印详情: {}", details);
-    }
-
-    let result_msg = if let Some(job_id) = print_result.job_id {
-        format!("面单已发送到打印机 {} (作业ID: {})", printer_name, job_id)
-    } else {
-        format!("面单已发送到打印机 {}", printer_name)
+    // 配置打印参数（顺丰面单规格：76mm x 130mm）
+    let config = ImagePrintConfig {
+        width_mm: 76.0,
+        height_mm: 130.0,
+        dpi: 203,
     };
-    Ok(result_msg)
+
+    // 使用统一的打印接口
+    printer_state.print_image_to_printer(&printer_name, &gray_image, &config)
 }
 
 // ==================== 寄件人管理命令 ====================
@@ -359,6 +479,17 @@ pub struct RecipientInfoParams {
     pub address: String,
 }
 
+/// 联系人展示信息（用于前端确认页面）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContactDisplayInfo {
+    /// 姓名
+    pub name: String,
+    /// 电话
+    pub phone: String,
+    /// 完整地址（省市区+详细地址）
+    pub full_address: String,
+}
+
 /// 下单响应
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateOrderResponse {
@@ -366,10 +497,24 @@ pub struct CreateOrderResponse {
     pub order_id: String,
     /// 运单号列表
     pub waybill_no_list: Vec<String>,
-    /// 筛单结果
+    /// 筛单结果：1=人工确认, 2=可收派, 3=不可收派
     pub filter_result: Option<i32>,
     /// 本地订单记录
     pub local_order: SFOrder,
+    /// 寄件人展示信息
+    pub sender_info: ContactDisplayInfo,
+    /// 收件人展示信息
+    pub recipient_info: ContactDisplayInfo,
+    /// 托寄物名称
+    pub cargo_name: String,
+    /// 付款方式：1=寄方付, 2=收方付, 3=第三方付
+    pub pay_method: i32,
+    /// 快件产品类别：2=顺丰标快
+    pub express_type_id: i32,
+    /// 原寄地区域代码
+    pub origin_code: Option<String>,
+    /// 目的地区域代码
+    pub dest_code: Option<String>,
 }
 
 /// 辅助函数：获取 API 客户端
@@ -477,7 +622,7 @@ pub fn sf_create_order(params: CreateOrderParams) -> Result<CreateOrderResponse,
         order_id.clone(),
         params.card_id,
         params.pay_method,
-        Some(cargo_name),
+        Some(cargo_name.clone()),
         sender_json,
         recipient_json,
     ).map_err(|e| format!("保存订单失败: {}", e))?;
@@ -491,11 +636,40 @@ pub fn sf_create_order(params: CreateOrderParams) -> Result<CreateOrderResponse,
 
     log::info!("订单创建成功: order_id={}, waybill_nos={:?}", order_id, waybill_no_list);
 
+    // 构建展示信息
+    let sender_info = ContactDisplayInfo {
+        name: sender.name.clone(),
+        phone: sender.phone.clone(),
+        full_address: format!(
+            "{}{}{}{}",
+            sender.province, sender.city, sender.district, sender.address
+        ),
+    };
+
+    let recipient_info = ContactDisplayInfo {
+        name: params.recipient.name.clone(),
+        phone: params.recipient.phone.clone(),
+        full_address: format!(
+            "{}{}{}{}",
+            params.recipient.province,
+            params.recipient.city,
+            params.recipient.district,
+            params.recipient.address
+        ),
+    };
+
     Ok(CreateOrderResponse {
         order_id: response.order_id,
         waybill_no_list,
         filter_result: response.filter_result,
         local_order,
+        sender_info,
+        recipient_info,
+        cargo_name,
+        pay_method: params.pay_method.unwrap_or(1),
+        express_type_id: 2, // 顺丰标快
+        origin_code: response.origin_code,
+        dest_code: response.dest_code,
     })
 }
 

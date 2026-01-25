@@ -104,6 +104,33 @@
               </el-radio-group>
             </el-form-item>
 
+            <!-- 代领人选择器（代领方式时显示） -->
+            <el-form-item
+              v-if="form.method === '代领'"
+              label="代领人"
+              prop="proxyCallsign"
+            >
+              <el-select
+                v-model="form.proxyCallsign"
+                filterable
+                allow-create
+                clearable
+                placeholder="选择或输入代领人呼号"
+                style="width: 100%"
+                :loading="loadingCallsigns"
+              >
+                <el-option
+                  v-for="callsign in projectCallsigns"
+                  :key="callsign"
+                  :label="callsign"
+                  :value="callsign"
+                />
+              </el-select>
+              <div style="font-size: 12px; color: #909399; margin-top: 4px">
+                支持筛选或输入不在列表中的呼号
+              </div>
+            </el-form-item>
+
             <!-- 顺丰下单按钮（快递方式时显示） -->
             <el-form-item v-if="form.method === '快递'">
               <el-button
@@ -255,7 +282,7 @@
                     @click="handleCopyAddress(addr.chinese_address)"
                   >
                     <el-icon><CopyDocument /></el-icon>
-                    复制中文地址
+                    复制中文
                   </el-button>
                   <el-button
                     v-if="addr.english_address"
@@ -265,7 +292,17 @@
                     @click="handleCopyAddress(addr.english_address)"
                   >
                     <el-icon><CopyDocument /></el-icon>
-                    复制英文地址
+                    复制英文
+                  </el-button>
+                  <el-button
+                    type="success"
+                    size="small"
+                    link
+                    :loading="printing"
+                    @click="handlePrintAddress(addr)"
+                  >
+                    <el-icon><Printer /></el-icon>
+                    打印
                   </el-button>
                 </template>
                 <!-- QRZ.com 复制按钮：只显示单个复制按钮 -->
@@ -280,6 +317,16 @@
                     <el-icon><CopyDocument /></el-icon>
                     复制地址
                   </el-button>
+                  <el-button
+                    type="success"
+                    size="small"
+                    link
+                    :loading="printing"
+                    @click="handlePrintAddress(addr)"
+                  >
+                    <el-icon><Printer /></el-icon>
+                    打印
+                  </el-button>
                 </template>
                 <!-- QRZ卡片查询 复制按钮：复制完整地址信息 -->
                 <template v-else-if="addr.source === 'QRZ卡片查询'">
@@ -292,6 +339,16 @@
                   >
                     <el-icon><CopyDocument /></el-icon>
                     复制地址
+                  </el-button>
+                  <el-button
+                    type="success"
+                    size="small"
+                    link
+                    :loading="printing"
+                    @click="handlePrintAddress(addr)"
+                  >
+                    <el-icon><Printer /></el-icon>
+                    打印
                   </el-button>
                 </template>
               </div>
@@ -354,6 +411,16 @@
       :card-id="card?.id"
       :default-recipient="defaultRecipient"
       @success="handleSFOrderSuccess"
+      @go-config="handleGoConfig"
+      @order-created="handleOrderCreated"
+    />
+
+    <!-- 顺丰订单确认弹窗 -->
+    <ConfirmOrderDialog
+      v-model:visible="confirmOrderDialogVisible"
+      :order-data="pendingOrderData"
+      @success="handleSFOrderSuccess"
+      @cancel="handleConfirmCancel"
     />
   </el-dialog>
 </template>
@@ -363,12 +430,14 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import type { CardWithProject, CardStatus, AddressEntry, SFOrder, RecipientInfo } from '@/types/models'
+import type { CardWithProject, CardStatus, AddressEntry, SFOrder, RecipientInfo, CreateOrderResponse } from '@/types/models'
 import WaybillPrintDialog from '@/components/cards/WaybillPrintDialog.vue'
 import CreateOrderDialog from '@/components/sf-express/CreateOrderDialog.vue'
+import ConfirmOrderDialog from '@/components/sf-express/ConfirmOrderDialog.vue'
 import IconSfExpress from '~icons/custom/sf-express'
 import { useLoading } from '@/composables/useLoading'
 import { formatSerial } from '@/utils/format'
+import { navigateTo } from '@/stores/navigationStore'
 
 const { withLoading } = useLoading()
 
@@ -380,6 +449,7 @@ interface Props {
 interface DistributeFormData {
   method: string
   remarks: string
+  proxyCallsign: string
 }
 
 interface ConfirmData {
@@ -387,6 +457,7 @@ interface ConfirmData {
   method: string
   address: string | null
   remarks: string | null
+  proxy_callsign: string | null
 }
 
 interface Emits {
@@ -408,8 +479,13 @@ const formRef = ref<FormInstance | null>(null)
 // 表单数据
 const form = ref<DistributeFormData>({
   method: '快递',
-  remarks: ''
+  remarks: '',
+  proxyCallsign: ''
 })
+
+// 项目呼号列表
+const projectCallsigns = ref<string[]>([])
+const loadingCallsigns = ref<boolean>(false)
 
 // 提交状态
 const submitting = ref<boolean>(false)
@@ -421,8 +497,15 @@ const waybillPrintDialogVisible = ref<boolean>(false)
 const sfOrderDialogVisible = ref<boolean>(false)
 const defaultRecipient = ref<Partial<RecipientInfo> | null>(null)
 
+// 顺丰订单确认弹窗
+const confirmOrderDialogVisible = ref<boolean>(false)
+const pendingOrderData = ref<CreateOrderResponse | null>(null)
+
 // 地址查询状态
 const querying = ref<boolean>(false)
+
+// 打印状态
+const printing = ref<boolean>(false)
 
 // 地址缓存列表
 const addressCache = ref<AddressEntry[]>([])
@@ -488,6 +571,23 @@ const loadAddressCache = (): void => {
 
   if (props.card && props.card.metadata && props.card.metadata.address_cache) {
     addressCache.value = props.card.metadata.address_cache
+  }
+}
+
+// 加载项目呼号列表
+const loadProjectCallsigns = async (): Promise<void> => {
+  if (!props.card?.project_id) return
+
+  loadingCallsigns.value = true
+  try {
+    projectCallsigns.value = await invoke<string[]>('get_project_callsigns_cmd', {
+      projectId: props.card.project_id
+    })
+  } catch (error) {
+    console.error('加载项目呼号列表失败:', error)
+    projectCallsigns.value = []
+  } finally {
+    loadingCallsigns.value = false
   }
 }
 
@@ -699,6 +799,50 @@ const handleCopyAddress = async (address: string): Promise<void> => {
   }
 }
 
+// 打印地址标签
+const handlePrintAddress = async (addr: AddressEntry): Promise<void> => {
+  if (!props.card) {
+    ElMessage.warning('无效的卡片信息')
+    return
+  }
+
+  // 确定使用哪个地址（优先使用中文地址）
+  const address = addr.chinese_address || addr.english_address || ''
+  if (!address) {
+    ElMessage.warning('没有可用的地址信息')
+    return
+  }
+
+  printing.value = true
+  try {
+    // 获取打印机配置
+    const printerConfig = await invoke<{ printer: { name: string } }>('get_printer_config')
+    const printerName = printerConfig.printer.name
+
+    if (!printerName) {
+      ElMessage.warning('请先在配置页面设置打印机')
+      return
+    }
+
+    // 调用打印地址命令
+    await invoke('print_address', {
+      printerName,
+      request: {
+        name: addr.name || null,
+        callsign: props.card.callsign,
+        address
+      }
+    })
+
+    ElMessage.success('地址标签已发送到打印机')
+  } catch (error) {
+    ElMessage.error(`打印失败: ${error}`)
+    console.error('打印地址标签失败:', error)
+  } finally {
+    printing.value = false
+  }
+}
+
 // 双向绑定 visible
 const dialogVisible = computed<boolean>({
   get: (): boolean => props.visible,
@@ -708,14 +852,31 @@ const dialogVisible = computed<boolean>({
 // 监听弹窗打开
 watch(() => props.visible, (newVal: boolean): void => {
   if (newVal) {
-    // 重置表单
-    form.value = {
-      method: '快递',
-      remarks: ''
+    // 检查是否有历史分发信息
+    const distribution = props.card?.metadata?.distribution
+    const pendingWaybillNo = props.card?.metadata?.pending_waybill_no
+
+    if (distribution && props.card?.status === 'distributed') {
+      // 用历史数据填充表单
+      form.value = {
+        method: distribution.method || '快递',
+        remarks: distribution.remarks || '',
+        proxyCallsign: distribution.proxy_callsign || ''
+      }
+    } else {
+      // 重置表单为默认值，但如果有待处理运单号则填入
+      form.value = {
+        method: '快递',
+        remarks: pendingWaybillNo || '',
+        proxyCallsign: ''
+      }
     }
 
     // 加载地址缓存（优先展示缓存）
     loadAddressCache()
+
+    // 加载项目呼号列表（用于代领人选择）
+    loadProjectCallsigns()
 
     // 清除验证状态
     nextTick(() => {
@@ -778,13 +939,61 @@ const handleCreateSFOrder = (): void => {
   sfOrderDialogVisible.value = true
 }
 
-// 顺丰订单创建成功
-const handleSFOrderSuccess = (order: SFOrder): void => {
-  // 将运单号填入备注
-  if (order.waybill_no) {
-    form.value.remarks = order.waybill_no
-    ElMessage.success(`运单号已填入备注：${order.waybill_no}`)
+// 顺丰订单创建成功（下单后打开确认对话框）
+const handleOrderCreated = (response: CreateOrderResponse): void => {
+  pendingOrderData.value = response
+  confirmOrderDialogVisible.value = true
+}
+
+// 静默保存运单号（不改变卡片状态，不关闭弹窗）
+const silentSaveWaybillNo = async (waybillNo: string): Promise<void> => {
+  if (!props.card) return
+
+  try {
+    // 只保存运单号，不改变卡片状态
+    await invoke('save_pending_waybill_cmd', {
+      cardId: props.card.id,
+      waybillNo
+    })
+    // 填入备注框
+    form.value.remarks = waybillNo
+    ElMessage.success(`运单号已保存：${waybillNo}，请点击"确认分发"完成分发`)
+  } catch (error) {
+    ElMessage.error(`保存运单号失败: ${error}`)
   }
+}
+
+// 顺丰订单确认成功
+const handleSFOrderSuccess = async (order: SFOrder): Promise<void> => {
+  // 清空待确认订单数据
+  pendingOrderData.value = null
+
+  // 将运单号填入备注并静默保存（不关闭弹窗）
+  if (order.waybill_no) {
+    await silentSaveWaybillNo(order.waybill_no)
+  }
+}
+
+// 取消确认订单（稍后确认）
+const handleConfirmCancel = async (): Promise<void> => {
+  // 将运单号填入备注并静默保存（即使未确认，运单号也已生成）
+  const waybillNo = pendingOrderData.value?.waybill_no_list[0]
+  pendingOrderData.value = null
+
+  if (waybillNo) {
+    await silentSaveWaybillNo(waybillNo)
+    ElMessage.info('请稍后在顺丰速运界面确认订单')
+  }
+}
+
+// 跳转到顺丰速运配置页面
+const handleGoConfig = (): void => {
+  // 关闭顺丰下单弹窗
+  sfOrderDialogVisible.value = false
+  // 关闭分发弹窗
+  dialogVisible.value = false
+  // 导航到顺丰速运配置页面
+  navigateTo('data-config-sf-express')
 }
 
 // 提交表单
@@ -799,7 +1008,8 @@ const handleSubmit = async (): Promise<void> => {
       id: props.card!.id,
       method: form.value.method,
       address: recipientAddress.value || null,
-      remarks: form.value.remarks.trim() || null
+      remarks: form.value.remarks.trim() || null,
+      proxy_callsign: form.value.method === '代领' && form.value.proxyCallsign ? form.value.proxyCallsign.trim().toUpperCase() : null
     })
   } catch (error) {
     // 验证失败

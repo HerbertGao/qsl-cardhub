@@ -107,8 +107,14 @@ impl LayoutEngine {
             content_top,
             _content_bottom,
             available_width,
-            available_height,
+            mut available_height,
         ) = self.calculate_available_area(&config.page);
+
+        // 如果启用双份打印（地址模板），可用高度减半（只计算上半部分的布局）
+        if config.page.duplicate_print {
+            available_height = available_height / 2;
+            log::debug!("双份打印模式: 可用高度减半为 {} dots", available_height);
+        }
 
         log::debug!(
             "画布尺寸: {}x{} dots, 内容区域: 左{}右{}, 宽{} dots",
@@ -209,6 +215,29 @@ impl LayoutEngine {
         } else {
             None
         };
+
+        // 8. 处理双份打印（如果启用）
+        if config.page.duplicate_print {
+            log::info!("启用双份打印模式，复制元素到下半部分");
+
+            // 计算垂直偏移量（画布高度的一半）
+            let half_height = canvas_height / 2;
+
+            // 复制所有元素到下半部分
+            let duplicated_elements: Vec<LayoutedElement> = layouted_elements
+                .iter()
+                .map(|e| {
+                    let mut cloned = e.clone();
+                    cloned.id = format!("{}_dup", e.id);
+                    cloned.y = e.y + half_height;
+                    cloned
+                })
+                .collect();
+
+            layouted_elements.extend(duplicated_elements);
+
+            log::debug!("双份打印: 元素数量翻倍为 {}", layouted_elements.len());
+        }
 
         log::info!("✅ 布局计算完成，共 {} 个元素", layouted_elements.len());
 
@@ -583,6 +612,7 @@ mod tests {
             margin_bottom_mm: 3.0,
             border: true,
             border_thickness_mm: 0.3,
+            duplicate_print: false,
         };
 
         let (width, height) = engine.calculate_canvas_size(&page_config);
@@ -603,6 +633,7 @@ mod tests {
             margin_bottom_mm: 3.0,
             border: true,
             border_thickness_mm: 0.3,
+            duplicate_print: false,
         };
 
         let (left, _right, top, _bottom, available_width, available_height) =

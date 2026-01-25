@@ -93,11 +93,22 @@
           width="150"
         >
           <template #default="{ row }">
-            <span v-if="row.waybill_no">{{ row.waybill_no }}</span>
-            <span
+            <el-button
+              v-if="row.waybill_no"
+              type="primary"
+              link
+              @click="handleViewDetail(row)"
+            >
+              {{ row.waybill_no }}
+            </el-button>
+            <el-button
               v-else
-              style="color: #909399"
-            >-</span>
+              type="info"
+              link
+              @click="handleViewDetail(row)"
+            >
+              查看详情
+            </el-button>
           </template>
         </el-table-column>
         <el-table-column
@@ -162,9 +173,10 @@
                 type="primary"
                 link
                 size="small"
-                @click="handleViewDetail(row)"
+                :disabled="!row.waybill_no"
+                @click="handlePrintWaybill(row)"
               >
-                详情
+                打印面单
               </el-button>
               <el-dropdown
                 trigger="click"
@@ -195,13 +207,6 @@
                     >
                       <el-icon><CloseBold /></el-icon>
                       取消订单
-                    </el-dropdown-item>
-                    <el-dropdown-item
-                      v-if="row.status === 'confirmed' || row.status === 'printed'"
-                      command="print"
-                    >
-                      <el-icon><Printer /></el-icon>
-                      打印面单
                     </el-dropdown-item>
                     <el-dropdown-item
                       command="delete"

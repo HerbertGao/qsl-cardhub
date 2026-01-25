@@ -253,6 +253,7 @@ pub fn distribute_card(
     method: String,
     address: Option<String>,
     remarks: Option<String>,
+    proxy_callsign: Option<String>,
 ) -> Result<Card, AppError> {
     let conn = get_connection()?;
 
@@ -264,6 +265,7 @@ pub fn distribute_card(
         method,
         address,
         remarks,
+        proxy_callsign,
         distributed_at: format_datetime(&now_china()),
     };
 
@@ -365,6 +367,59 @@ pub fn get_max_serial_by_project(project_id: &str) -> Result<Option<u32>, AppErr
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
         Err(e) => Err(AppError::Other(format!("查询最大序列号失败: {}", e))),
     }
+}
+
+/// 保存待处理运单号（不改变卡片状态）
+///
+/// 用于顺丰下单后暂存运单号，等待用户点击"确认分发"后再正式分发
+pub fn save_pending_waybill(card_id: &str, waybill_no: String) -> Result<Card, AppError> {
+    let conn = get_connection()?;
+
+    // 获取卡片
+    let card = get_card(card_id)?
+        .ok_or_else(|| AppError::ProfileNotFound(format!("卡片不存在: {}", card_id)))?;
+
+    // 更新 metadata 中的 pending_waybill_no
+    let mut metadata = card.metadata.unwrap_or_default();
+    metadata.pending_waybill_no = Some(waybill_no.clone());
+
+    let metadata_json = serde_json::to_string(&metadata)
+        .map_err(|e| AppError::Other(format!("序列化元数据失败: {}", e)))?;
+
+    let updated_at = format_datetime(&now_china());
+
+    // 更新卡片（不改变状态）
+    conn.execute(
+        "UPDATE cards SET metadata = ?1, updated_at = ?2 WHERE id = ?3",
+        rusqlite::params![metadata_json, updated_at, card_id],
+    )
+    .map_err(|e| AppError::Other(format!("更新卡片失败: {}", e)))?;
+
+    log::info!("✅ 保存待处理运单号成功: {} -> {}", card_id, waybill_no);
+    get_card(card_id)?.ok_or_else(|| AppError::Other("更新后无法获取卡片".to_string()))
+}
+
+/// 获取项目下的所有呼号（去重）
+pub fn get_project_callsigns(project_id: &str) -> Result<Vec<String>, AppError> {
+    let conn = get_connection()?;
+
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT DISTINCT callsign FROM cards
+            WHERE project_id = ?1
+            ORDER BY callsign ASC
+            "#,
+        )
+        .map_err(|e| AppError::Other(format!("准备查询语句失败: {}", e)))?;
+
+    let callsigns = stmt
+        .query_map([project_id], |row| row.get(0))
+        .map_err(|e| AppError::Other(format!("查询呼号列表失败: {}", e)))?
+        .collect::<Result<Vec<String>, _>>()
+        .map_err(|e| AppError::Other(format!("读取呼号数据失败: {}", e)))?;
+
+    Ok(callsigns)
 }
 
 /// 保存地址到卡片

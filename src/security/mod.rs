@@ -1,5 +1,4 @@
 pub mod credentials;
-pub mod keyring_storage;
 pub mod encryption;
 
 pub use credentials::{

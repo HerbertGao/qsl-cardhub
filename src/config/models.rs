@@ -135,7 +135,7 @@ impl Profile {
                 name: printer_name,
             },
             template: Template {
-                path: "default.toml".to_string(),
+                path: "callsign.toml".to_string(),
             },
             template_display_name: None,
             created_at: now,

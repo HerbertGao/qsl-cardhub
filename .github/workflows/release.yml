@@ -158,6 +158,15 @@ jobs:
         working-directory: web
         run: pnpm run build
 
+      - name: 生成顺丰速运默认配置
+        run: |
+          cat > config/sf_express_default.toml << TOML
+          enabled = true
+          partner_id = "${{ secrets.SF_PARTNER_ID }}"
+          checkword_sandbox = "${{ secrets.SF_CHECKWORD_SANDBOX }}"
+          checkword_prod = "${{ secrets.SF_CHECKWORD_PROD }}"
+          TOML
+
       - name: 安装 Tauri CLI
         run: cargo install tauri-cli --version "^2.0" --locked --force
 

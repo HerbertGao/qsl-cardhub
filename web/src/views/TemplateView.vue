@@ -7,13 +7,28 @@
       标签模板配置
     </h1>
 
+    <!-- 模板类型选择 -->
+    <div style="margin-bottom: 20px">
+      <el-radio-group
+        v-model="templateType"
+        @change="handleTemplateTypeChange"
+      >
+        <el-radio-button value="callsign">
+          呼号模板
+        </el-radio-button>
+        <el-radio-button value="address">
+          地址模板
+        </el-radio-button>
+      </el-radio-group>
+    </div>
+
     <el-row
       :gutter="20"
       style="flex: 1; min-height: 0; margin-bottom: 20px"
     >
       <!-- 左侧表单 -->
       <el-col
-        :span="14"
+        :span="12"
         style="height: 100%"
       >
         <el-card
@@ -122,6 +137,15 @@
                   />
                   <span style="margin-left: 10px; color: #909399">mm</span>
                 </el-form-item>
+
+                <!-- 双份打印（仅地址模板显示） -->
+                <template v-if="templateType === 'address'">
+                  <el-divider />
+                  <el-form-item label="双份打印">
+                    <el-switch v-model="templateConfig.page.duplicate_print" />
+                    <span style="margin-left: 10px; color: #909399">上下各打印一份</span>
+                  </el-form-item>
+                </template>
               </el-collapse-item>
 
               <!-- 布局配置 -->
@@ -377,7 +401,7 @@
 
       <!-- 右侧预览 -->
       <el-col
-        :span="10"
+        :span="12"
         style="height: 100%"
       >
         <el-card
@@ -403,17 +427,17 @@
 
           <div
             v-loading="previewLoading"
-            style="overflow-y: auto; flex: 1; padding: 10px"
+            style="flex: 1; padding: 10px; display: flex; align-items: center; justify-content: center; overflow: hidden"
           >
             <el-empty
               v-if="!previewImageUrl"
-              description="点击刷新预览按钮生成预览图"
-              :image-size="120"
+              description="加载中..."
+              :image-size="80"
             />
             <img
               v-else
               :src="`data:image/png;base64,${previewImageUrl}`"
-              style="width: 100%; border-radius: 8px; border: 1px solid #e0e0e0"
+              style="max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; border: 1px solid #e0e0e0"
               alt="模板预览"
             >
           </div>
@@ -463,6 +487,7 @@ interface PreviewResponse {
 }
 
 // 响应式数据
+const templateType = ref<'callsign' | 'address'>('callsign')
 const templateConfig = ref<TemplateConfig | null>(null)
 const loading = ref<boolean>(false)
 const previewLoading = ref<boolean>(false)
@@ -484,7 +509,11 @@ const debouncedSave = (): void => {
   // 设置新的定时器
   saveTimeout = setTimeout(async () => {
     try {
-      await invoke('save_template_config', { config: templateConfig.value })
+      // 根据模板类型调用不同的保存命令
+      const saveCommand = templateType.value === 'address'
+        ? 'save_address_template_config'
+        : 'save_template_config'
+      await invoke(saveCommand, { config: templateConfig.value })
       saveStatus.value = { type: 'success', message: '✓ 配置已自动保存' }
 
       // 3秒后清除成功提示
@@ -512,11 +541,21 @@ watch(
 )
 
 // 加载模板配置
-const loadTemplateConfig = async (): Promise<void> => {
+const loadTemplateConfig = async (autoPreview: boolean = false): Promise<void> => {
   loading.value = true
   try {
-    const config = await invoke<TemplateConfig>('get_template_config')
+    // 根据模板类型加载不同的配置
+    const loadCommand = templateType.value === 'address'
+      ? 'get_address_template_config'
+      : 'get_template_config'
+    const config = await invoke<TemplateConfig>(loadCommand)
     templateConfig.value = config
+
+    // 配置加载成功后自动执行预览
+    if (autoPreview) {
+      // 使用 nextTick 确保配置已更新到 DOM
+      await handleRefreshPreview(true)
+    }
   } catch (error) {
     ElMessage.error(`加载模板配置失败: ${error}`)
     console.error('加载模板配置失败:', error)
@@ -525,27 +564,60 @@ const loadTemplateConfig = async (): Promise<void> => {
   }
 }
 
+// 模板类型切换处理
+const handleTemplateTypeChange = (): void => {
+  // 清除预览
+  previewImageUrl.value = ''
+  // 重新加载配置并自动执行预览
+  loadTemplateConfig(true)
+}
+
 // 刷新预览
-const handleRefreshPreview = async (): Promise<void> => {
+// silent 参数：为 true 时不显示成功提示消息（用于自动预览）
+const handleRefreshPreview = async (silent: boolean = false): Promise<void> => {
   previewLoading.value = true
   try {
-    const response = await invoke<PreviewResponse>('preview_qsl', {
-      request: {
-        template_path: null, // 使用默认模板
-        data: {
-          project_name: '预览测试',
-          callsign: 'BG7XXX',
-          sn: '001',
-          qty: '100'
-        },
-        output_config: {
-          mode: 'text_bitmap_plus_native_barcode',
-          threshold: 160
+    let response: PreviewResponse
+
+    if (templateType.value === 'address') {
+      // 地址模板预览
+      response = await invoke<PreviewResponse>('preview_address', {
+        request: {
+          data: {
+            name: '张三',
+            callsign: 'BG7XXX',
+            address: '广东省深圳市南山区科技园路1号'
+          },
+          output_config: {
+            mode: 'text_bitmap_plus_native_barcode',
+            threshold: 160
+          }
         }
-      } as PreviewRequest
-    })
+      })
+    } else {
+      // QSL 模板预览
+      response = await invoke<PreviewResponse>('preview_qsl', {
+        request: {
+          template_path: null,
+          data: {
+            project_name: '预览测试',
+            callsign: 'BG7XXX',
+            sn: '001',
+            qty: '100'
+          },
+          output_config: {
+            mode: 'text_bitmap_plus_native_barcode',
+            threshold: 160
+          }
+        } as PreviewRequest
+      })
+    }
+
     previewImageUrl.value = response.base64_data
-    ElMessage.success('预览生成成功')
+    // 自动预览时不显示成功提示
+    if (!silent) {
+      ElMessage.success('预览生成成功')
+    }
   } catch (error) {
     ElMessage.error(`预览生成失败: ${error}`)
     console.error('预览生成失败:', error)
@@ -554,9 +626,9 @@ const handleRefreshPreview = async (): Promise<void> => {
   }
 }
 
-// 组件挂载时加载配置
+// 组件挂载时加载配置并自动执行预览
 onMounted((): void => {
-  loadTemplateConfig()
+  loadTemplateConfig(true)
 })
 </script>
 

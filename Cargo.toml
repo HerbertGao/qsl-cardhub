@@ -75,7 +75,6 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 include_dir = "0.7"
 
 # 凭据加密存储
-keyring = "3.0"
 aes-gcm = "0.10"
 pbkdf2 = "0.12"
 rand = "0.8"
