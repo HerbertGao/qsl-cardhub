@@ -166,24 +166,33 @@ struct SFDefaultApiConfigFile {
 
 /// 获取默认 API 配置路径
 fn get_default_api_config_path() -> PathBuf {
-    // 配置文件路径：{exe_dir}/config/sf_express_default.toml
-    let exe_path = std::env::current_exe().unwrap_or_default();
-    let exe_dir = exe_path.parent().unwrap_or(std::path::Path::new("."));
-
-    // 优先查找与可执行文件同级的 config 目录
-    let config_path = exe_dir.join("config").join("sf_express_default.toml");
-    if config_path.exists() {
-        return config_path;
+    // 开发模式：使用项目根目录的 config/sf_express_default.toml
+    #[cfg(debug_assertions)]
+    {
+        PathBuf::from("config/sf_express_default.toml")
     }
 
-    // 其次查找项目根目录的 config 目录（开发模式）
-    let project_config_path = PathBuf::from("config/sf_express_default.toml");
-    if project_config_path.exists() {
-        return project_config_path;
-    }
+    // 生产模式：使用系统配置目录
+    #[cfg(not(debug_assertions))]
+    {
+        let home_dir = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
 
-    // 返回默认路径（即使不存在）
-    config_path
+        let config_dir = if cfg!(target_os = "windows") {
+            // Windows: %APPDATA%/qsl-cardhub
+            home_dir.join("AppData").join("Roaming").join("qsl-cardhub")
+        } else if cfg!(target_os = "macos") {
+            // macOS: ~/Library/Application Support/qsl-cardhub
+            home_dir
+                .join("Library")
+                .join("Application Support")
+                .join("qsl-cardhub")
+        } else {
+            // Linux: ~/.config/qsl-cardhub
+            home_dir.join(".config").join("qsl-cardhub")
+        };
+
+        config_dir.join("sf_express_default.toml")
+    }
 }
 
 /// 获取默认 API 配置（用于前端展示）

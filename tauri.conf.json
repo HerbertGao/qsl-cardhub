@@ -48,6 +48,7 @@
     "longDescription": "QSL 分卡助手是一款专为业余无线电爱好者设计的 QSL 卡片管理工具，支持卡片录入、分发、打印标签、集成顺丰等功能。",
     "resources": [
       "config/templates/*",
+      "config/sf_express_default.toml",
       "resources/pdfium/**/*"
     ],
     "windows": {
