@@ -123,6 +123,16 @@ pub fn sf_load_config() -> Result<SFConfigResponse, String> {
     // 动态生成模板编码
     let template_code = if partner_id.is_empty() {
         "fm_76130_standard_{partnerID}".to_string()
+    } else if use_default {
+        // 如果使用默认参数，脱敏模板编码
+        let masked_id = if partner_id.len() >= 6 {
+            let start = &partner_id[..3];
+            let end = &partner_id[partner_id.len() - 3..];
+            format!("{}***{}", start, end)
+        } else {
+            "***".to_string()
+        };
+        format!("fm_76130_standard_{}", masked_id)
     } else {
         format!("fm_76130_standard_{}", partner_id)
     };
