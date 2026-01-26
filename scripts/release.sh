@@ -161,6 +161,7 @@ create_version_commit() {
 
     # 添加版本相关文件
     git add Cargo.toml
+    [ -f "Cargo.lock" ] && git add Cargo.lock
     [ -f "tauri.conf.json" ] && git add tauri.conf.json
     [ -f "web/package.json" ] && git add web/package.json
 

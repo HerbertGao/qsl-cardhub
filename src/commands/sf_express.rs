@@ -36,6 +36,8 @@ pub struct SFConfigResponse {
     pub has_prod_checkword: bool,
     /// 是否已配置沙箱校验码
     pub has_sandbox_checkword: bool,
+    /// 是否使用默认参数
+    pub use_default: bool,
 }
 
 /// 获取面单响应
@@ -66,6 +68,10 @@ pub fn sf_save_config(
     // 保存顾客编码
     save_credential(credential_keys::PARTNER_ID, &partner_id)
         .map_err(|e| format!("保存顾客编码失败: {}", e))?;
+
+    // 标记为使用自定义参数
+    save_credential(credential_keys::USE_DEFAULT, "false")
+        .map_err(|e| format!("保存配置模式失败: {}", e))?;
 
     // 保存生产校验码（如果提供）
     if let Some(checkword) = checkword_prod {
@@ -108,6 +114,12 @@ pub fn sf_load_config() -> Result<SFConfigResponse, String> {
         .map_err(|e| format!("检查沙箱校验码失败: {}", e))?
         .is_some();
 
+    // 加载配置模式
+    let use_default = get_credential(credential_keys::USE_DEFAULT)
+        .map_err(|e| format!("加载配置模式失败: {}", e))?
+        .map(|v| v == "true")
+        .unwrap_or(false);
+
     // 动态生成模板编码
     let template_code = if partner_id.is_empty() {
         "fm_76130_standard_{partnerID}".to_string()
@@ -121,6 +133,7 @@ pub fn sf_load_config() -> Result<SFConfigResponse, String> {
         template_code,
         has_prod_checkword,
         has_sandbox_checkword,
+        use_default,
     };
 
     log::info!("顺丰配置加载成功: {:?}", response);
@@ -137,6 +150,7 @@ pub fn sf_clear_config() -> Result<(), String> {
     let _ = delete_credential(credential_keys::PARTNER_ID);
     let _ = delete_credential(credential_keys::CHECKWORD_PROD);
     let _ = delete_credential(credential_keys::CHECKWORD_SANDBOX);
+    let _ = delete_credential(credential_keys::USE_DEFAULT);
 
     log::info!("顺丰配置已清除");
     Ok(())
@@ -271,6 +285,10 @@ pub fn sf_apply_default_api_config(environment: String) -> Result<(), String> {
     // 保存顾客编码
     save_credential(credential_keys::PARTNER_ID, &config.partner_id)
         .map_err(|e| format!("保存顾客编码失败: {}", e))?;
+
+    // 标记为使用默认参数
+    save_credential(credential_keys::USE_DEFAULT, "true")
+        .map_err(|e| format!("保存配置模式失败: {}", e))?;
 
     // 根据环境保存对应的校验码
     if environment == "production" && !config.checkword_prod.is_empty() {

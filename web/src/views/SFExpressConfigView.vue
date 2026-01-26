@@ -337,6 +337,7 @@ interface SFConfigResponse {
   template_code: string
   has_prod_checkword: boolean
   has_sandbox_checkword: boolean
+  use_default: boolean
 }
 
 interface FormData {
@@ -442,10 +443,28 @@ const loadConfig = async (setDefaultTab = false): Promise<void> => {
     console.log('加载顺丰配置:', config)
 
     form.environment = config.environment
-    form.partnerId = config.partner_id
     form.templateCode = config.template_code
     hasProdCheckword.value = config.has_prod_checkword
     hasSandboxCheckword.value = config.has_sandbox_checkword
+
+    // 根据保存的配置模式恢复状态
+    if (config.use_default && defaultApiConfig.value?.enabled) {
+      // 已保存为使用默认参数
+      configMode.value = 'default'
+      form.partnerId = defaultApiConfig.value.partner_id_masked
+    } else if (config.partner_id) {
+      // 已保存自定义参数
+      configMode.value = 'custom'
+      form.partnerId = config.partner_id
+    } else if (defaultApiConfig.value?.enabled) {
+      // 新用户且默认参数可用，默认选中"使用默认参数"
+      configMode.value = 'default'
+      form.partnerId = defaultApiConfig.value.partner_id_masked
+    } else {
+      // 新用户且无默认参数
+      configMode.value = 'custom'
+      form.partnerId = ''
+    }
 
     // 仅在初始加载时根据 API 配置状态设置默认选中的 Tab
     if (setDefaultTab) {
@@ -651,12 +670,6 @@ onMounted(async () => {
   await loadDefaultApiConfig()
   await loadConfig(true)
   loadDefaultSender()
-
-  // 如果默认参数可用且用户未配置自定义参数，默认选中"使用默认参数"
-  if (defaultApiConfig.value?.enabled && !form.partnerId) {
-    configMode.value = 'default'
-    form.partnerId = defaultApiConfig.value.partner_id_masked
-  }
 })
 </script>
 
