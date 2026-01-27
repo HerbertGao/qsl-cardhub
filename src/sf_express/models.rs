@@ -153,6 +153,8 @@ pub mod credential_keys {
     pub const CHECKWORD_SANDBOX: &str = "qsl-cardhub:sf:checkword_sandbox";
     /// 当前环境
     pub const ENVIRONMENT: &str = "qsl-cardhub:sf:environment";
+    /// 是否使用默认参数
+    pub const USE_DEFAULT: &str = "qsl-cardhub:sf:use_default";
 }
 
 // ==================== 下单相关模型 ====================

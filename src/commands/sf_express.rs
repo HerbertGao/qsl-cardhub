@@ -36,6 +36,8 @@ pub struct SFConfigResponse {
     pub has_prod_checkword: bool,
     /// 是否已配置沙箱校验码
     pub has_sandbox_checkword: bool,
+    /// 是否使用默认参数
+    pub use_default: bool,
 }
 
 /// 获取面单响应
@@ -66,6 +68,10 @@ pub fn sf_save_config(
     // 保存顾客编码
     save_credential(credential_keys::PARTNER_ID, &partner_id)
         .map_err(|e| format!("保存顾客编码失败: {}", e))?;
+
+    // 标记为使用自定义参数
+    save_credential(credential_keys::USE_DEFAULT, "false")
+        .map_err(|e| format!("保存配置模式失败: {}", e))?;
 
     // 保存生产校验码（如果提供）
     if let Some(checkword) = checkword_prod {
@@ -108,9 +114,25 @@ pub fn sf_load_config() -> Result<SFConfigResponse, String> {
         .map_err(|e| format!("检查沙箱校验码失败: {}", e))?
         .is_some();
 
+    // 加载配置模式
+    let use_default = get_credential(credential_keys::USE_DEFAULT)
+        .map_err(|e| format!("加载配置模式失败: {}", e))?
+        .map(|v| v == "true")
+        .unwrap_or(false);
+
     // 动态生成模板编码
     let template_code = if partner_id.is_empty() {
         "fm_76130_standard_{partnerID}".to_string()
+    } else if use_default {
+        // 如果使用默认参数，脱敏模板编码
+        let masked_id = if partner_id.chars().count() >= 6 {
+            let start: String = partner_id.chars().take(3).collect();
+            let end: String = partner_id.chars().skip(partner_id.chars().count() - 3).collect();
+            format!("{}***{}", start, end)
+        } else {
+            "***".to_string()
+        };
+        format!("fm_76130_standard_{}", masked_id)
     } else {
         format!("fm_76130_standard_{}", partner_id)
     };
@@ -121,6 +143,7 @@ pub fn sf_load_config() -> Result<SFConfigResponse, String> {
         template_code,
         has_prod_checkword,
         has_sandbox_checkword,
+        use_default,
     };
 
     log::info!("顺丰配置加载成功: {:?}", response);
@@ -137,6 +160,7 @@ pub fn sf_clear_config() -> Result<(), String> {
     let _ = delete_credential(credential_keys::PARTNER_ID);
     let _ = delete_credential(credential_keys::CHECKWORD_PROD);
     let _ = delete_credential(credential_keys::CHECKWORD_SANDBOX);
+    let _ = delete_credential(credential_keys::USE_DEFAULT);
 
     log::info!("顺丰配置已清除");
     Ok(())
@@ -220,9 +244,9 @@ pub fn sf_get_default_api_config() -> Result<SFDefaultApiConfig, String> {
         .map_err(|e| format!("解析配置文件失败: {}", e))?;
 
     // 脱敏处理顾客编码
-    let partner_id_masked = if config.partner_id.len() >= 6 {
-        let start = &config.partner_id[..3];
-        let end = &config.partner_id[config.partner_id.len() - 3..];
+    let partner_id_masked = if config.partner_id.chars().count() >= 6 {
+        let start: String = config.partner_id.chars().take(3).collect();
+        let end: String = config.partner_id.chars().skip(config.partner_id.chars().count() - 3).collect();
         format!("{}***{}", start, end)
     } else if !config.partner_id.is_empty() {
         "***".to_string()
@@ -271,6 +295,10 @@ pub fn sf_apply_default_api_config(environment: String) -> Result<(), String> {
     // 保存顾客编码
     save_credential(credential_keys::PARTNER_ID, &config.partner_id)
         .map_err(|e| format!("保存顾客编码失败: {}", e))?;
+
+    // 标记为使用默认参数
+    save_credential(credential_keys::USE_DEFAULT, "true")
+        .map_err(|e| format!("保存配置模式失败: {}", e))?;
 
     // 根据环境保存对应的校验码
     if environment == "production" && !config.checkword_prod.is_empty() {
