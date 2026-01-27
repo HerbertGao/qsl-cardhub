@@ -168,7 +168,7 @@
 ### 数据存储
 
 **凭据存储**：
-复用现有的凭据存储机制（系统钥匙串或本地加密文件），存储键名：
+复用现有的凭据存储机制（本地加密文件），存储键名：
 - `qsl-cardhub:sf:partner_id`
 - `qsl-cardhub:sf:checkword_prod`
 - `qsl-cardhub:sf:checkword_sandbox`

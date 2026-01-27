@@ -328,7 +328,7 @@
               {{ selectedOrder.callsign || '-' }}
             </el-descriptions-item>
             <el-descriptions-item label="数量">
-              {{ selectedOrder.qty || '-' }}
+              {{ formatQty(selectedOrder.qty) }}
             </el-descriptions-item>
           </el-descriptions>
         </template>
@@ -434,8 +434,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import type { SFOrderWithCard, SFOrderStatus, ListOrdersResponse } from '@/types/models'
 import WaybillPrintDialog from '@/components/cards/WaybillPrintDialog.vue'
 import { useLoading } from '@/composables/useLoading'
+import { useQtyDisplayMode } from '@/composables/useQtyDisplayMode'
 
 const { withLoading } = useLoading()
+const { formatQty } = useQtyDisplayMode()
 
 // 状态
 const loading = ref(false)

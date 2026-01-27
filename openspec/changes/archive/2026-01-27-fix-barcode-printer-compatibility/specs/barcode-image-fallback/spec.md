@@ -3,7 +3,7 @@
 ## Purpose
 解决部分打印机（如汉印 HPRT N31D）不支持 TSPL `BARCODE` 原生指令的兼容性问题，通过将默认渲染模式改为全位图模式并提供 UI 切换能力。
 
-## 修改需求
+## 新增需求
 
 ### 需求：模板配置读取接口
 默认模板的 `output.mode` 必须从 `text_bitmap_plus_native_barcode` 改为 `full_bitmap`，以确保兼容不支持 TSPL 原生 BARCODE 指令的打印机。

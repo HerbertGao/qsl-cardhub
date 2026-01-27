@@ -28,7 +28,7 @@
               {{ card.callsign }}
             </el-descriptions-item>
             <el-descriptions-item label="数量">
-              {{ card.qty }}
+              {{ formatQty(card.qty) }}
             </el-descriptions-item>
             <el-descriptions-item label="序列号">
               <span :style="{ color: card.serial ? undefined : '#909399' }">{{ formatSerial(card.serial) }}</span>
@@ -295,14 +295,28 @@
                     复制英文
                   </el-button>
                   <el-button
+                    v-if="addr.chinese_address"
                     type="success"
                     size="small"
                     link
-                    :loading="printing"
-                    @click="handlePrintAddress(addr)"
+                    :loading="printing === addr.chinese_address"
+                    :disabled="printing !== null"
+                    @click="handlePrintAddress(addr, addr.chinese_address)"
                   >
                     <el-icon><Printer /></el-icon>
-                    打印
+                    打印中文
+                  </el-button>
+                  <el-button
+                    v-if="addr.english_address"
+                    type="success"
+                    size="small"
+                    link
+                    :loading="printing === addr.english_address"
+                    :disabled="printing !== null"
+                    @click="handlePrintAddress(addr, addr.english_address)"
+                  >
+                    <el-icon><Printer /></el-icon>
+                    打印英文
                   </el-button>
                 </template>
                 <!-- QRZ.com 复制按钮：只显示单个复制按钮 -->
@@ -318,11 +332,13 @@
                     复制地址
                   </el-button>
                   <el-button
+                    v-if="addr.english_address"
                     type="success"
                     size="small"
                     link
-                    :loading="printing"
-                    @click="handlePrintAddress(addr)"
+                    :loading="printing === addr.english_address"
+                    :disabled="printing !== null"
+                    @click="handlePrintAddress(addr, addr.english_address)"
                   >
                     <el-icon><Printer /></el-icon>
                     打印
@@ -341,11 +357,13 @@
                     复制地址
                   </el-button>
                   <el-button
+                    v-if="addr.english_address"
                     type="success"
                     size="small"
                     link
-                    :loading="printing"
-                    @click="handlePrintAddress(addr)"
+                    :loading="printing === addr.english_address"
+                    :disabled="printing !== null"
+                    @click="handlePrintAddress(addr, addr.english_address)"
                   >
                     <el-icon><Printer /></el-icon>
                     打印
@@ -436,10 +454,12 @@ import CreateOrderDialog from '@/components/sf-express/CreateOrderDialog.vue'
 import ConfirmOrderDialog from '@/components/sf-express/ConfirmOrderDialog.vue'
 import IconSfExpress from '~icons/custom/sf-express'
 import { useLoading } from '@/composables/useLoading'
+import { useQtyDisplayMode } from '@/composables/useQtyDisplayMode'
 import { formatSerial } from '@/utils/format'
 import { navigateTo } from '@/stores/navigationStore'
 
 const { withLoading } = useLoading()
+const { formatQty } = useQtyDisplayMode()
 
 interface Props {
   visible: boolean
@@ -505,7 +525,7 @@ const pendingOrderData = ref<CreateOrderResponse | null>(null)
 const querying = ref<boolean>(false)
 
 // 打印状态
-const printing = ref<boolean>(false)
+const printing = ref<string | null>(null)
 
 // 地址缓存列表
 const addressCache = ref<AddressEntry[]>([])
@@ -800,20 +820,18 @@ const handleCopyAddress = async (address: string): Promise<void> => {
 }
 
 // 打印地址标签
-const handlePrintAddress = async (addr: AddressEntry): Promise<void> => {
+const handlePrintAddress = async (addr: AddressEntry, address: string): Promise<void> => {
   if (!props.card) {
     ElMessage.warning('无效的卡片信息')
     return
   }
 
-  // 确定使用哪个地址（优先使用中文地址）
-  const address = addr.chinese_address || addr.english_address || ''
   if (!address) {
     ElMessage.warning('没有可用的地址信息')
     return
   }
 
-  printing.value = true
+  printing.value = address
   try {
     // 获取打印机配置
     const printerConfig = await invoke<{ printer: { name: string } }>('get_printer_config')
@@ -839,7 +857,7 @@ const handlePrintAddress = async (addr: AddressEntry): Promise<void> => {
     ElMessage.error(`打印失败: ${error}`)
     console.error('打印地址标签失败:', error)
   } finally {
-    printing.value = false
+    printing.value = null
   }
 }
 

@@ -107,11 +107,14 @@
         </template>
       </el-table-column>
       <el-table-column
-        prop="qty"
         label="数量"
         width="80"
         align="center"
-      />
+      >
+        <template #default="{ row }">
+          {{ formatQty(row.qty) }}
+        </template>
+      </el-table-column>
       <el-table-column
         prop="serial"
         label="序列号"
@@ -243,6 +246,9 @@ import { invoke } from '@tauri-apps/api/core'
 import { ElMessage } from 'element-plus'
 import type { CardWithProject, CardStatus, SinglePrinterConfig } from '@/types/models'
 import { formatSerial } from '@/utils/format'
+import { useQtyDisplayMode } from '@/composables/useQtyDisplayMode'
+
+const { formatQty } = useQtyDisplayMode()
 
 interface Props {
   cards: CardWithProject[]
@@ -330,7 +336,7 @@ const handlePrintLabel = async (card: CardWithProject): Promise<void> => {
           project_name: card.project_name || '',
           callsign: card.callsign,
           sn: serialStr,
-          qty: String(card.qty)
+          qty: formatQty(card.qty)
         },
         output_config: {
           mode: 'text_bitmap_plus_native_barcode',
