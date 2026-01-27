@@ -125,9 +125,9 @@ pub fn sf_load_config() -> Result<SFConfigResponse, String> {
         "fm_76130_standard_{partnerID}".to_string()
     } else if use_default {
         // 如果使用默认参数，脱敏模板编码
-        let masked_id = if partner_id.len() >= 6 {
-            let start = &partner_id[..3];
-            let end = &partner_id[partner_id.len() - 3..];
+        let masked_id = if partner_id.chars().count() >= 6 {
+            let start: String = partner_id.chars().take(3).collect();
+            let end: String = partner_id.chars().skip(partner_id.chars().count() - 3).collect();
             format!("{}***{}", start, end)
         } else {
             "***".to_string()
@@ -244,9 +244,9 @@ pub fn sf_get_default_api_config() -> Result<SFDefaultApiConfig, String> {
         .map_err(|e| format!("解析配置文件失败: {}", e))?;
 
     // 脱敏处理顾客编码
-    let partner_id_masked = if config.partner_id.len() >= 6 {
-        let start = &config.partner_id[..3];
-        let end = &config.partner_id[config.partner_id.len() - 3..];
+    let partner_id_masked = if config.partner_id.chars().count() >= 6 {
+        let start: String = config.partner_id.chars().take(3).collect();
+        let end: String = config.partner_id.chars().skip(config.partner_id.chars().count() - 3).collect();
         format!("{}***{}", start, end)
     } else if !config.partner_id.is_empty() {
         "***".to_string()
