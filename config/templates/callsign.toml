@@ -73,5 +73,5 @@ format = "QTY: {qty}"
 max_height_mm = 22.0
 
 [output]
-mode = "text_bitmap_plus_native_barcode"
+mode = "full_bitmap"
 threshold = 160

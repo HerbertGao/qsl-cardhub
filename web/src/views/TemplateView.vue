@@ -364,13 +364,27 @@
               <!-- 输出配置 -->
               <el-collapse-item
                 name="output"
-                title="输出配置（只读）"
+                title="输出配置"
               >
                 <el-form-item label="渲染模式">
-                  <el-input
-                    :model-value="templateConfig.output.mode"
-                    disabled
-                  />
+                  <el-select v-model="templateConfig.output.mode">
+                    <el-option
+                      label="全位图模式（推荐）"
+                      value="full_bitmap"
+                    />
+                    <el-option
+                      label="混合模式"
+                      value="text_bitmap_plus_native_barcode"
+                    />
+                  </el-select>
+                  <div style="margin-top: 5px; color: #909399; font-size: 12px; line-height: 1.5">
+                    <template v-if="templateConfig.output.mode === 'full_bitmap'">
+                      所有元素渲染为图片打印，兼容性最好
+                    </template>
+                    <template v-else>
+                      条形码使用打印机原生指令，需要打印机支持 TSPL BARCODE 指令
+                    </template>
+                  </div>
                 </el-form-item>
 
                 <el-form-item label="二值化阈值">
@@ -589,8 +603,8 @@ const handleRefreshPreview = async (silent: boolean = false): Promise<void> => {
             address: '广东省深圳市南山区科技园路1号'
           },
           output_config: {
-            mode: 'text_bitmap_plus_native_barcode',
-            threshold: 160
+            mode: templateConfig.value?.output.mode ?? 'full_bitmap',
+            threshold: templateConfig.value?.output.threshold ?? 160
           }
         }
       })
@@ -606,8 +620,8 @@ const handleRefreshPreview = async (silent: boolean = false): Promise<void> => {
             qty: '100'
           },
           output_config: {
-            mode: 'text_bitmap_plus_native_barcode',
-            threshold: 160
+            mode: templateConfig.value?.output.mode ?? 'full_bitmap',
+            threshold: templateConfig.value?.output.threshold ?? 160
           }
         } as PreviewRequest
       })

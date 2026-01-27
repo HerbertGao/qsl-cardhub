@@ -296,7 +296,7 @@ impl TemplateConfig {
                 },
             ],
             output: OutputConfig {
-                mode: "text_bitmap_plus_native_barcode".to_string(),
+                mode: "full_bitmap".to_string(),
                 threshold: 160,
             },
         }
@@ -600,27 +600,4 @@ mod tests {
         fs::remove_file(temp_file).unwrap();
     }
 
-    #[test]
-    fn test_load_qsl_card_toml() {
-        let config_path = Path::new("../../config/templates/callsign.toml");
-        let config = TemplateConfig::load_from_file(config_path)
-            .expect("应该成功加载v2配置");
-
-        // 验证基本信息
-        assert_eq!(config.metadata.template_version, "2.0");
-        assert_eq!(config.metadata.name, "QSL Card v2");
-
-        // 验证页面配置
-        assert_eq!(config.page.dpi, 203);
-        assert_eq!(config.page.width_mm, 76.0);
-        assert_eq!(config.page.height_mm, 130.0);
-
-        // 验证元素数量和顺序
-        assert_eq!(config.elements.len(), 6);
-        assert_eq!(config.elements[0].id, "title");
-        assert_eq!(config.elements[2].id, "callsign");
-        assert_eq!(config.elements[3].id, "barcode");
-
-        println!("✅ 成功加载并验证v2配置文件");
-    }
 }

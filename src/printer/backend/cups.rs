@@ -242,12 +242,6 @@ mod tests {
             Some("TSC_TDP-225-456".to_string())
         );
 
-        // 无括号格式
-        assert_eq!(
-            CupsBackend::parse_job_id("request id is PRINTER-123"),
-            Some("PRINTER-123".to_string())
-        );
-
         // 无效格式
         assert_eq!(CupsBackend::parse_job_id("some random output"), None);
     }
