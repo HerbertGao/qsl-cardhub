@@ -184,9 +184,14 @@ impl TextRenderer {
         // 1. 测量文本尺寸
         let (width, height) = self.measure_single_line(text, font_size)?;
 
-        if width == 0 || height == 0 {
+        if height == 0 {
             // 返回空图像
             return Ok(ImageBuffer::from_pixel(1, 1, Luma([255u8])));
+        }
+
+        if width == 0 {
+            // 空文本但有行高，返回最小宽度但正确高度的图像
+            return Ok(ImageBuffer::from_pixel(1, height, Luma([255u8])));
         }
 
         // 2. 创建白色画布
