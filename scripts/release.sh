@@ -131,15 +131,26 @@ run_build_check() {
         print_warning "未安装 cargo，跳过 Rust 检查"
     fi
 
-    # 前端类型检查（可选）
+    # 前端代码检查
     if [ -f "web/package.json" ]; then
-        echo "  检查前端代码..."
         cd web
-        if npm run type-check --silent 2>/dev/null; then
+
+        # 运行 lint:fix 自动修复代码风格问题
+        echo "  运行前端 lint:fix..."
+        if pnpm run lint:fix 2>/dev/null; then
+            print_success "前端 lint:fix 完成"
+        else
+            print_warning "前端 lint:fix 失败（非致命）"
+        fi
+
+        # 类型检查
+        echo "  检查前端类型..."
+        if pnpm run type-check --silent 2>/dev/null; then
             print_success "前端类型检查通过"
         else
             print_warning "前端类型检查跳过或失败（非致命）"
         fi
+
         cd "$PROJECT_ROOT"
     fi
 }
@@ -164,6 +175,11 @@ create_version_commit() {
     [ -f "Cargo.lock" ] && git add Cargo.lock
     [ -f "tauri.conf.json" ] && git add tauri.conf.json
     [ -f "web/package.json" ] && git add web/package.json
+
+    # 添加 lint:fix 修复的前端文件
+    if [ -d "web/src" ]; then
+        git add web/src/
+    fi
 
     # 检查是否有更改
     if git diff --cached --quiet; then
