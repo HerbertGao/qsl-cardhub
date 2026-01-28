@@ -253,11 +253,7 @@ jobs:
         if: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID != '' && secrets.ALIYUN_OSS_ACCESS_KEY_SECRET != '' && secrets.ALIYUN_OSS_ENDPOINT != '' && secrets.ALIYUN_OSS_BUCKET_NAME != '' }}
         shell: bash
         run: |
-          if [[ "$RUNNER_OS" == "Linux" ]]; then
-            wget https://gosspublic.alicdn.com/ossutil/1.7.18/ossutil-v1.7.18-linux-amd64.zip
-            unzip ossutil-v1.7.18-linux-amd64.zip
-            sudo mv ossutil-v1.7.18-linux-amd64/ossutil /usr/local/bin/
-          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
             # 根据架构选择正确的 ossutil 版本
             if [[ "${{ matrix.target }}" == "aarch64-apple-darwin" ]]; then
               wget https://gosspublic.alicdn.com/ossutil/1.7.18/ossutil-v1.7.18-mac-arm64.zip
