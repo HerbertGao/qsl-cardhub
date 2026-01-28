@@ -258,9 +258,16 @@ jobs:
             unzip ossutil-v1.7.18-linux-amd64.zip
             sudo mv ossutil-v1.7.18-linux-amd64/ossutil /usr/local/bin/
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
-            wget https://gosspublic.alicdn.com/ossutil/1.7.18/ossutil-v1.7.18-mac-arm64.zip
-            unzip ossutil-v1.7.18-mac-arm64.zip
-            sudo mv ossutil-v1.7.18-mac-arm64/ossutil /usr/local/bin/
+            # 根据架构选择正确的 ossutil 版本
+            if [[ "${{ matrix.target }}" == "aarch64-apple-darwin" ]]; then
+              wget https://gosspublic.alicdn.com/ossutil/1.7.18/ossutil-v1.7.18-mac-arm64.zip
+              unzip ossutil-v1.7.18-mac-arm64.zip
+              sudo mv ossutil-v1.7.18-mac-arm64/ossutil /usr/local/bin/
+            else
+              wget https://gosspublic.alicdn.com/ossutil/1.7.18/ossutil-v1.7.18-mac-amd64.zip
+              unzip ossutil-v1.7.18-mac-amd64.zip
+              sudo mv ossutil-v1.7.18-mac-amd64/ossutil /usr/local/bin/
+            fi
           elif [[ "$RUNNER_OS" == "Windows" ]]; then
             curl -o ossutil.zip https://gosspublic.alicdn.com/ossutil/1.7.18/ossutil-v1.7.18-windows-amd64.zip
             unzip ossutil.zip
@@ -321,15 +328,11 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
           echo "release_date=$RELEASE_DATE" >> $GITHUB_OUTPUT
 
-      - name: 生成 latest.json
+      - name: 获取签名文件
+        id: signatures
         run: |
           VERSION=${{ needs.create-release.outputs.version }}
           REPO=${{ github.repository }}
-          RELEASE_DATE="${{ steps.release_info.outputs.release_date }}"
-          NOTES=$(cat << 'NOTES_EOF'
-          ${{ steps.release_info.outputs.release_body }}
-          NOTES_EOF
-          )
 
           # 获取签名文件内容（带重试机制）
           get_signature() {
@@ -361,14 +364,33 @@ jobs:
             return 1
           }
 
-          # macOS ARM64 签名（.app.tar.gz 用于更新器）
+          # 获取所有平台的签名
           MACOS_ARM64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-macos-arm64.app.tar.gz.sig") || exit 1
-          # macOS x64 签名（.app.tar.gz 用于更新器）
           MACOS_X64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-macos-x64.app.tar.gz.sig") || exit 1
-          # Windows x64 签名
           WINDOWS_X64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-windows-x64-setup.exe.sig") || exit 1
-          # Windows ARM64 签名
           WINDOWS_ARM64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-windows-arm64-setup.exe.sig") || exit 1
+
+          # 保存到输出
+          echo "macos_arm64=$MACOS_ARM64_SIG" >> $GITHUB_OUTPUT
+          echo "macos_x64=$MACOS_X64_SIG" >> $GITHUB_OUTPUT
+          echo "windows_x64=$WINDOWS_X64_SIG" >> $GITHUB_OUTPUT
+          echo "windows_arm64=$WINDOWS_ARM64_SIG" >> $GITHUB_OUTPUT
+
+      - name: 生成 latest.json
+        run: |
+          VERSION=${{ needs.create-release.outputs.version }}
+          REPO=${{ github.repository }}
+          RELEASE_DATE="${{ steps.release_info.outputs.release_date }}"
+          NOTES=$(cat << 'NOTES_EOF'
+          ${{ steps.release_info.outputs.release_body }}
+          NOTES_EOF
+          )
+
+          # 使用已获取的签名
+          MACOS_ARM64_SIG="${{ steps.signatures.outputs.macos_arm64 }}"
+          MACOS_X64_SIG="${{ steps.signatures.outputs.macos_x64 }}"
+          WINDOWS_X64_SIG="${{ steps.signatures.outputs.windows_x64 }}"
+          WINDOWS_ARM64_SIG="${{ steps.signatures.outputs.windows_arm64 }}"
 
           # 生成 latest.json
           cat > latest.json << EOF
@@ -418,40 +440,11 @@ jobs:
           NOTES_EOF
           )
 
-          # 获取签名文件内容（从 GitHub Releases，带重试机制）
-          get_signature() {
-            local sig_url="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/$1"
-            local max_attempts=20
-            local attempt=1
-            local wait_time=5
-            
-            while [ $attempt -le $max_attempts ]; do
-              echo "尝试获取 $1 (第 ${attempt}/${max_attempts} 次)..." >&2
-              local content=$(curl -sL "$sig_url" 2>/dev/null)
-              
-              if [ -n "$content" ] && ! echo "$content" | grep -qi "<!DOCTYPE html>" && ! echo "$content" | grep -qi '"message".*"Not Found"'; then
-                echo "成功获取 $1" >&2
-                echo "$content"
-                return 0
-              fi
-              
-              if [ $attempt -lt $max_attempts ]; then
-                echo "资产尚未可用，等待 ${wait_time} 秒后重试..." >&2
-                sleep $wait_time
-              fi
-              
-              attempt=$((attempt + 1))
-            done
-            
-            echo "错误：在 $max_attempts 次尝试后仍无法获取 $1" >&2
-            return 1
-          }
-
-          # 获取签名（签名与 GitHub 版本相同）
-          MACOS_ARM64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-macos-arm64.app.tar.gz.sig") || exit 1
-          MACOS_X64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-macos-x64.app.tar.gz.sig") || exit 1
-          WINDOWS_X64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-windows-x64-setup.exe.sig") || exit 1
-          WINDOWS_ARM64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-windows-arm64-setup.exe.sig") || exit 1
+          # 使用已获取的签名（签名与 GitHub 版本相同）
+          MACOS_ARM64_SIG="${{ steps.signatures.outputs.macos_arm64 }}"
+          MACOS_X64_SIG="${{ steps.signatures.outputs.macos_x64 }}"
+          WINDOWS_X64_SIG="${{ steps.signatures.outputs.windows_x64 }}"
+          WINDOWS_ARM64_SIG="${{ steps.signatures.outputs.windows_arm64 }}"
 
           # 生成 latest-cdn.json (使用 CDN URLs)
           cat > latest-cdn.json << EOF
