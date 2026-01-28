@@ -140,7 +140,12 @@ jobs:
         run: cargo install tauri-cli --version "^2.0" --locked --force
 
       - name: 构建 Tauri 应用
-        run: cargo tauri build --target ${{ matrix.target }}
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 30
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: cargo tauri build --target ${{ matrix.target }}
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
