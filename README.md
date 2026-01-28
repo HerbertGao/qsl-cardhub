@@ -33,7 +33,7 @@
 
 **其他**
 - 跨平台支持：Windows、macOS
-- 应用内自动更新
+- 应用内自动更新（支持阿里云 CDN 加速，国内用户可获得更快的下载速度）
 
 ## 快速开始
 
@@ -63,6 +63,17 @@ cargo tauri dev
 ./scripts/build.sh  # macOS/Linux
 .\scripts\build.ps1 # Windows
 ```
+
+### 阿里云 CDN 加速配置（可选）
+
+为了给国内用户提供更快的下载速度，项目支持通过阿里云 OSS + CDN 加速应用更新。此配置为可选项，如果不配置，应用仍会使用 GitHub Releases 进行更新。
+
+**配置步骤**：
+1. 参考 [阿里云 CDN 配置指南](docs/aliyun-cdn-setup.md) 完成基础设施搭建
+2. 在 GitHub 项目的 Settings > Secrets 中添加必要的密钥
+3. 参考 [CDN Endpoint 配置](docs/cdn-endpoint-setup.md) 修改应用配置
+
+配置完成后，发布新版本时会自动上传到阿里云 OSS，国内用户更新应用时会优先使用 CDN 下载。
 
 ## 技术栈
 
