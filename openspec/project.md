@@ -491,5 +491,30 @@ cargo tauri build
 - **工作流**：
   - `build.yml`：PR 构建和测试
   - `release.yml`：Tag 发布构建（多平台）
-- **自动更新**：通过 GitHub Releases 提供 `latest.json` 清单文件
+- **自动更新**：
+  - **主要下载源**：阿里云 OSS + CDN（为国内用户提供高速下载，5-20MB/s）
+  - **备用下载源**：GitHub Releases（CDN 失败时自动降级）
+  - **更新清单**：`latest.json`（存储在 OSS 和 GitHub）
+  - **安全性**：私有 OSS + CDN 回源，所有更新包经过签名验证
+
+### 阿里云 OSS + CDN 配置（可选）
+应用支持通过阿里云 OSS + CDN 加速更新下载，特别适合国内用户：
+
+- **私有 OSS Bucket**：存储所有版本的安装包和签名文件
+- **CDN 回源**：通过 CDN 加速访问，自动缓存文件（TTL 7 天）
+- **自动同步**：CI/CD 自动将构建产物上传到 OSS 和 GitHub
+- **智能降级**：CDN 失败时自动降级到 GitHub（Tauri Updater 内置功能）
+
+**配置步骤**：
+1. 在阿里云创建私有 OSS Bucket 和 CDN 加速域名
+2. 在 GitHub Secrets 配置阿里云凭据（AccessKey、Bucket 名称、CDN 域名）
+3. 修改 `tauri.conf.json` 的 `updater.endpoints`，将 CDN URL 作为第一个 endpoint
+4. 详细配置说明见：`docs/aliyun-cdn-setup.md`
+
+**GitHub Secrets 配置**：
+- `ALIYUN_OSS_ACCESS_KEY_ID`：阿里云 AccessKey ID
+- `ALIYUN_OSS_ACCESS_KEY_SECRET`：阿里云 AccessKey Secret
+- `ALIYUN_OSS_BUCKET_NAME`：OSS Bucket 名称
+- `ALIYUN_OSS_ENDPOINT`：OSS Endpoint（如 `oss-cn-hangzhou.aliyuncs.com`）
+- `ALIYUN_CDN_DOMAIN`：CDN 域名（如 `cdn.qsl-cardhub.com`）
 

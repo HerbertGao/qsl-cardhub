@@ -248,6 +248,55 @@ jobs:
           tag_name: v${{ needs.create-release.outputs.version }}
           files: dist/*
 
+      # 阿里云 OSS 上传（可选，需要配置 Secrets）
+      - name: 安装 ossutil
+        if: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID != '' }}
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            wget https://gosspublic.alicdn.com/ossutil/1.7.18/ossutil-v1.7.18-linux-amd64.zip
+            unzip ossutil-v1.7.18-linux-amd64.zip
+            sudo mv ossutil-v1.7.18-linux-amd64/ossutil /usr/local/bin/
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            wget https://gosspublic.alicdn.com/ossutil/1.7.18/ossutil-v1.7.18-mac-arm64.zip
+            unzip ossutil-v1.7.18-mac-arm64.zip
+            sudo mv ossutil-v1.7.18-mac-arm64/ossutil /usr/local/bin/
+          elif [[ "$RUNNER_OS" == "Windows" ]]; then
+            curl -o ossutil.zip https://gosspublic.alicdn.com/ossutil/1.7.18/ossutil-v1.7.18-windows-amd64.zip
+            unzip ossutil.zip
+            mv ossutil-v1.7.18-windows-amd64/ossutil.exe /c/Windows/System32/
+          fi
+          ossutil --version
+
+      - name: 配置 ossutil
+        if: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID != '' }}
+        shell: bash
+        env:
+          OSS_ACCESS_KEY_ID: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_SECRET }}
+          OSS_ENDPOINT: ${{ secrets.ALIYUN_OSS_ENDPOINT }}
+        run: |
+          ossutil config -e "${OSS_ENDPOINT}" -i "${OSS_ACCESS_KEY_ID}" -k "${OSS_ACCESS_KEY_SECRET}"
+
+      - name: 上传到阿里云 OSS
+        if: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID != '' }}
+        shell: bash
+        env:
+          OSS_BUCKET: ${{ secrets.ALIYUN_OSS_BUCKET_NAME }}
+        run: |
+          VERSION=${{ needs.create-release.outputs.version }}
+          
+          # 上传所有文件到 OSS
+          for file in dist/*; do
+            filename=$(basename "$file")
+            # 上传到 /releases/v{version}/ 目录
+            ossutil cp "$file" "oss://${OSS_BUCKET}/releases/v${VERSION}/${filename}" --force
+            echo "已上传: ${filename}"
+          done
+          
+          # 验证上传
+          ossutil ls "oss://${OSS_BUCKET}/releases/v${VERSION}/"
+
   generate-update-manifest:
     name: 生成更新清单
     needs: [create-release, build-and-upload]
@@ -355,6 +404,117 @@ jobs:
         with:
           tag_name: v${{ needs.create-release.outputs.version }}
           files: latest.json
+
+      # 生成阿里云 CDN 版本的 latest.json（可选）
+      - name: 生成 latest.json (CDN 版本)
+        if: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID != '' && secrets.ALIYUN_CDN_DOMAIN != '' }}
+        env:
+          CDN_DOMAIN: ${{ secrets.ALIYUN_CDN_DOMAIN }}
+        run: |
+          VERSION=${{ needs.create-release.outputs.version }}
+          RELEASE_DATE="${{ steps.release_info.outputs.release_date }}"
+          NOTES=$(cat << 'NOTES_EOF'
+          ${{ steps.release_info.outputs.release_body }}
+          NOTES_EOF
+          )
+
+          # 获取签名文件内容（从 GitHub Releases，带重试机制）
+          get_signature() {
+            local sig_url="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/$1"
+            local max_attempts=20
+            local attempt=1
+            local wait_time=5
+            
+            while [ $attempt -le $max_attempts ]; do
+              echo "尝试获取 $1 (第 ${attempt}/${max_attempts} 次)..." >&2
+              local content=$(curl -sL "$sig_url" 2>/dev/null)
+              
+              if [ -n "$content" ] && ! echo "$content" | grep -qi "<!DOCTYPE html>" && ! echo "$content" | grep -qi '"message".*"Not Found"'; then
+                echo "成功获取 $1" >&2
+                echo "$content"
+                return 0
+              fi
+              
+              if [ $attempt -lt $max_attempts ]; then
+                echo "资产尚未可用，等待 ${wait_time} 秒后重试..." >&2
+                sleep $wait_time
+              fi
+              
+              attempt=$((attempt + 1))
+            done
+            
+            echo "错误：在 $max_attempts 次尝试后仍无法获取 $1" >&2
+            return 1
+          }
+
+          # 获取签名（签名与 GitHub 版本相同）
+          MACOS_ARM64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-macos-arm64.app.tar.gz.sig") || exit 1
+          MACOS_X64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-macos-x64.app.tar.gz.sig") || exit 1
+          WINDOWS_X64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-windows-x64-setup.exe.sig") || exit 1
+          WINDOWS_ARM64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-windows-arm64-setup.exe.sig") || exit 1
+
+          # 生成 latest-cdn.json (使用 CDN URLs)
+          cat > latest-cdn.json << EOF
+          {
+            "version": "${VERSION}",
+            "notes": $(echo "$NOTES" | jq -Rs .),
+            "pub_date": "${RELEASE_DATE}",
+            "platforms": {
+              "darwin-aarch64": {
+                "signature": "${MACOS_ARM64_SIG}",
+                "url": "https://${CDN_DOMAIN}/releases/v${VERSION}/qsl-cardhub-v${VERSION}-macos-arm64.app.tar.gz"
+              },
+              "darwin-x86_64": {
+                "signature": "${MACOS_X64_SIG}",
+                "url": "https://${CDN_DOMAIN}/releases/v${VERSION}/qsl-cardhub-v${VERSION}-macos-x64.app.tar.gz"
+              },
+              "windows-x86_64": {
+                "signature": "${WINDOWS_X64_SIG}",
+                "url": "https://${CDN_DOMAIN}/releases/v${VERSION}/qsl-cardhub-v${VERSION}-windows-x64-setup.exe"
+              },
+              "windows-aarch64": {
+                "signature": "${WINDOWS_ARM64_SIG}",
+                "url": "https://${CDN_DOMAIN}/releases/v${VERSION}/qsl-cardhub-v${VERSION}-windows-arm64-setup.exe"
+              }
+            }
+          }
+          EOF
+
+          echo "生成的 latest-cdn.json:"
+          cat latest-cdn.json
+
+      - name: 安装 ossutil
+        if: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID != '' && secrets.ALIYUN_CDN_DOMAIN != '' }}
+        run: |
+          wget https://gosspublic.alicdn.com/ossutil/1.7.18/ossutil-v1.7.18-linux-amd64.zip
+          unzip ossutil-v1.7.18-linux-amd64.zip
+          sudo mv ossutil-v1.7.18-linux-amd64/ossutil /usr/local/bin/
+          ossutil --version
+
+      - name: 配置 ossutil
+        if: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID != '' && secrets.ALIYUN_CDN_DOMAIN != '' }}
+        env:
+          OSS_ACCESS_KEY_ID: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_SECRET }}
+          OSS_ENDPOINT: ${{ secrets.ALIYUN_OSS_ENDPOINT }}
+        run: |
+          ossutil config -e "${OSS_ENDPOINT}" -i "${OSS_ACCESS_KEY_ID}" -k "${OSS_ACCESS_KEY_SECRET}"
+
+      - name: 上传 latest.json 到阿里云 OSS
+        if: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID != '' && secrets.ALIYUN_CDN_DOMAIN != '' }}
+        env:
+          OSS_BUCKET: ${{ secrets.ALIYUN_OSS_BUCKET_NAME }}
+        run: |
+          # 上传 CDN 版本的 latest.json 到 OSS 根目录，命名为 latest.json
+          ossutil cp latest-cdn.json "oss://${OSS_BUCKET}/latest.json" --force
+          
+          # 验证上传
+          echo "已上传 latest.json 到 OSS:"
+          ossutil ls "oss://${OSS_BUCKET}/latest.json"
+          
+          echo ""
+          echo "✅ CDN 更新清单已上传"
+          echo "CDN URL: https://${{ secrets.ALIYUN_CDN_DOMAIN }}/latest.json"
 
   release-summary:
     name: 发布总结
