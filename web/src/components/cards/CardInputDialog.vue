@@ -81,12 +81,14 @@
           style="--el-switch-on-color: #409EFF; --el-switch-off-color: #67C23A"
         />
         <el-tooltip placement="right">
-          <el-icon style="margin-left: 8px; color: #909399; cursor: help"><QuestionFilled /></el-icon>
+          <el-icon style="margin-left: 8px; color: #909399; cursor: help">
+            <QuestionFilled />
+          </el-icon>
           <template #content>
             精确模式输入具体数量；
-            <br/>
+            <br>
             大致模式选择数量范围（≤10、≤50、>50），
-            <br/>
+            <br>
             实际存储值为 10、50、100
           </template>
         </el-tooltip>
