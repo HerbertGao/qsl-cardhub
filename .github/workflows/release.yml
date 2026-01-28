@@ -115,6 +115,10 @@ jobs:
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      ALIYUN_OSS_ACCESS_KEY_ID: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID }}
+      ALIYUN_OSS_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_SECRET }}
+      ALIYUN_OSS_ENDPOINT: ${{ secrets.ALIYUN_OSS_ENDPOINT }}
+      ALIYUN_OSS_BUCKET_NAME: ${{ secrets.ALIYUN_OSS_BUCKET_NAME }}
 
     steps:
       - name: 检出代码
@@ -250,7 +254,7 @@ jobs:
 
       # 阿里云 OSS 上传（可选，需要配置 Secrets）
       - name: 安装 ossutil
-        if: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID != '' && secrets.ALIYUN_OSS_ACCESS_KEY_SECRET != '' && secrets.ALIYUN_OSS_ENDPOINT != '' && secrets.ALIYUN_OSS_BUCKET_NAME != '' }}
+        if: ${{ env.ALIYUN_OSS_ACCESS_KEY_ID != '' && env.ALIYUN_OSS_ACCESS_KEY_SECRET != '' && env.ALIYUN_OSS_ENDPOINT != '' && env.ALIYUN_OSS_BUCKET_NAME != '' }}
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == "macOS" ]]; then
@@ -272,20 +276,20 @@ jobs:
           ossutil --version
 
       - name: 配置 ossutil
-        if: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID != '' && secrets.ALIYUN_OSS_ACCESS_KEY_SECRET != '' && secrets.ALIYUN_OSS_ENDPOINT != '' && secrets.ALIYUN_OSS_BUCKET_NAME != '' }}
+        if: ${{ env.ALIYUN_OSS_ACCESS_KEY_ID != '' && env.ALIYUN_OSS_ACCESS_KEY_SECRET != '' && env.ALIYUN_OSS_ENDPOINT != '' && env.ALIYUN_OSS_BUCKET_NAME != '' }}
         shell: bash
         env:
-          OSS_ACCESS_KEY_ID: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID }}
-          OSS_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_SECRET }}
-          OSS_ENDPOINT: ${{ secrets.ALIYUN_OSS_ENDPOINT }}
+          OSS_ACCESS_KEY_ID: ${{ env.ALIYUN_OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ env.ALIYUN_OSS_ACCESS_KEY_SECRET }}
+          OSS_ENDPOINT: ${{ env.ALIYUN_OSS_ENDPOINT }}
         run: |
           ossutil config -e "${OSS_ENDPOINT}" -i "${OSS_ACCESS_KEY_ID}" -k "${OSS_ACCESS_KEY_SECRET}"
 
       - name: 上传到阿里云 OSS
-        if: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID != '' && secrets.ALIYUN_OSS_ACCESS_KEY_SECRET != '' && secrets.ALIYUN_OSS_ENDPOINT != '' && secrets.ALIYUN_OSS_BUCKET_NAME != '' }}
+        if: ${{ env.ALIYUN_OSS_ACCESS_KEY_ID != '' && env.ALIYUN_OSS_ACCESS_KEY_SECRET != '' && env.ALIYUN_OSS_ENDPOINT != '' && env.ALIYUN_OSS_BUCKET_NAME != '' }}
         shell: bash
         env:
-          OSS_BUCKET: ${{ secrets.ALIYUN_OSS_BUCKET_NAME }}
+          OSS_BUCKET: ${{ env.ALIYUN_OSS_BUCKET_NAME }}
         run: |
           VERSION=${{ needs.create-release.outputs.version }}
           
@@ -304,6 +308,12 @@ jobs:
     name: 生成更新清单
     needs: [create-release, build-and-upload]
     runs-on: ubuntu-latest
+    env:
+      ALIYUN_OSS_ACCESS_KEY_ID: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID }}
+      ALIYUN_OSS_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_SECRET }}
+      ALIYUN_OSS_ENDPOINT: ${{ secrets.ALIYUN_OSS_ENDPOINT }}
+      ALIYUN_OSS_BUCKET_NAME: ${{ secrets.ALIYUN_OSS_BUCKET_NAME }}
+      ALIYUN_CDN_DOMAIN: ${{ secrets.ALIYUN_CDN_DOMAIN }}
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -436,9 +446,9 @@ jobs:
 
       # 生成阿里云 CDN 版本的 latest.json（可选）
       - name: 生成 latest.json (CDN 版本)
-        if: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID != '' && secrets.ALIYUN_OSS_ACCESS_KEY_SECRET != '' && secrets.ALIYUN_OSS_ENDPOINT != '' && secrets.ALIYUN_OSS_BUCKET_NAME != '' && secrets.ALIYUN_CDN_DOMAIN != '' }}
+        if: ${{ env.ALIYUN_OSS_ACCESS_KEY_ID != '' && env.ALIYUN_OSS_ACCESS_KEY_SECRET != '' && env.ALIYUN_OSS_ENDPOINT != '' && env.ALIYUN_OSS_BUCKET_NAME != '' && env.ALIYUN_CDN_DOMAIN != '' }}
         env:
-          CDN_DOMAIN: ${{ secrets.ALIYUN_CDN_DOMAIN }}
+          CDN_DOMAIN: ${{ env.ALIYUN_CDN_DOMAIN }}
         run: |
           VERSION=${{ needs.create-release.outputs.version }}
           RELEASE_DATE="${{ steps.release_info.outputs.release_date }}"
@@ -484,7 +494,7 @@ jobs:
           cat latest-cdn.json
 
       - name: 安装 ossutil
-        if: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID != '' && secrets.ALIYUN_OSS_ACCESS_KEY_SECRET != '' && secrets.ALIYUN_OSS_ENDPOINT != '' && secrets.ALIYUN_OSS_BUCKET_NAME != '' && secrets.ALIYUN_CDN_DOMAIN != '' }}
+        if: ${{ env.ALIYUN_OSS_ACCESS_KEY_ID != '' && env.ALIYUN_OSS_ACCESS_KEY_SECRET != '' && env.ALIYUN_OSS_ENDPOINT != '' && env.ALIYUN_OSS_BUCKET_NAME != '' && env.ALIYUN_CDN_DOMAIN != '' }}
         run: |
           wget https://gosspublic.alicdn.com/ossutil/1.7.18/ossutil-v1.7.18-linux-amd64.zip
           unzip ossutil-v1.7.18-linux-amd64.zip
@@ -492,18 +502,18 @@ jobs:
           ossutil --version
 
       - name: 配置 ossutil
-        if: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID != '' && secrets.ALIYUN_OSS_ACCESS_KEY_SECRET != '' && secrets.ALIYUN_OSS_ENDPOINT != '' && secrets.ALIYUN_OSS_BUCKET_NAME != '' && secrets.ALIYUN_CDN_DOMAIN != '' }}
+        if: ${{ env.ALIYUN_OSS_ACCESS_KEY_ID != '' && env.ALIYUN_OSS_ACCESS_KEY_SECRET != '' && env.ALIYUN_OSS_ENDPOINT != '' && env.ALIYUN_OSS_BUCKET_NAME != '' && env.ALIYUN_CDN_DOMAIN != '' }}
         env:
-          OSS_ACCESS_KEY_ID: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID }}
-          OSS_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_SECRET }}
-          OSS_ENDPOINT: ${{ secrets.ALIYUN_OSS_ENDPOINT }}
+          OSS_ACCESS_KEY_ID: ${{ env.ALIYUN_OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ env.ALIYUN_OSS_ACCESS_KEY_SECRET }}
+          OSS_ENDPOINT: ${{ env.ALIYUN_OSS_ENDPOINT }}
         run: |
           ossutil config -e "${OSS_ENDPOINT}" -i "${OSS_ACCESS_KEY_ID}" -k "${OSS_ACCESS_KEY_SECRET}"
 
       - name: 上传 latest.json 到阿里云 OSS
-        if: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID != '' && secrets.ALIYUN_OSS_ACCESS_KEY_SECRET != '' && secrets.ALIYUN_OSS_ENDPOINT != '' && secrets.ALIYUN_OSS_BUCKET_NAME != '' && secrets.ALIYUN_CDN_DOMAIN != '' }}
+        if: ${{ env.ALIYUN_OSS_ACCESS_KEY_ID != '' && env.ALIYUN_OSS_ACCESS_KEY_SECRET != '' && env.ALIYUN_OSS_ENDPOINT != '' && env.ALIYUN_OSS_BUCKET_NAME != '' && env.ALIYUN_CDN_DOMAIN != '' }}
         env:
-          OSS_BUCKET: ${{ secrets.ALIYUN_OSS_BUCKET_NAME }}
+          OSS_BUCKET: ${{ env.ALIYUN_OSS_BUCKET_NAME }}
         run: |
           # 上传 CDN 版本的 latest.json 到 OSS 根目录，命名为 latest.json
           ossutil cp latest-cdn.json "oss://${OSS_BUCKET}/latest.json" --force
@@ -514,7 +524,7 @@ jobs:
           
           echo ""
           echo "✅ CDN 更新清单已上传"
-          echo "CDN URL: https://${{ secrets.ALIYUN_CDN_DOMAIN }}/latest.json"
+          echo "CDN URL: https://${ALIYUN_CDN_DOMAIN}/latest.json"
 
   release-summary:
     name: 发布总结
