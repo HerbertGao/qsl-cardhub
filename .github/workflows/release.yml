@@ -370,11 +370,22 @@ jobs:
           WINDOWS_X64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-windows-x64-setup.exe.sig") || exit 1
           WINDOWS_ARM64_SIG=$(get_signature "qsl-cardhub-v${VERSION}-windows-arm64-setup.exe.sig") || exit 1
 
-          # 保存到输出
-          echo "macos_arm64=$MACOS_ARM64_SIG" >> $GITHUB_OUTPUT
-          echo "macos_x64=$MACOS_X64_SIG" >> $GITHUB_OUTPUT
-          echo "windows_x64=$WINDOWS_X64_SIG" >> $GITHUB_OUTPUT
-          echo "windows_arm64=$WINDOWS_ARM64_SIG" >> $GITHUB_OUTPUT
+          # 保存到输出（使用 heredoc 语法支持多行签名）
+          echo "macos_arm64<<EOF" >> $GITHUB_OUTPUT
+          echo "$MACOS_ARM64_SIG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo "macos_x64<<EOF" >> $GITHUB_OUTPUT
+          echo "$MACOS_X64_SIG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo "windows_x64<<EOF" >> $GITHUB_OUTPUT
+          echo "$WINDOWS_X64_SIG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo "windows_arm64<<EOF" >> $GITHUB_OUTPUT
+          echo "$WINDOWS_ARM64_SIG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: 生成 latest.json
         run: |
