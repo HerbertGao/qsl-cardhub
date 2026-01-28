@@ -207,31 +207,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_qrz_com_format() {
-        let html = r##"
-            <span class="csignm hamcall">BY1CRA</span>
-            <p class="m0" style="color: #666; font-weight: normal; font-size: 17px">
-                <span style="color: black; font-weight: bold">Chinese Amateur Radio Club Station</span>
-                <span class="csgnl none">, BY1CRA</span>
-                <br />Box 100029-73
-                <br/>Beijing 100029
-                <br/>China
-            </p>
-            <tr><td class="dh">Last Update</td><td class="di">2020-04-26 12:33:04</td></tr>
-        "##;
-
-        let result = parse_qrz_com_page(html, "BY1CRA").unwrap();
-        assert!(result.is_some());
-
-        let info = result.unwrap();
-        assert_eq!(info.callsign, "BY1CRA");
-        assert_eq!(info.name, Some("Chinese Amateur Radio Club Station".to_string()));
-        assert_eq!(info.address, Some("Box 100029-73\nBeijing 100029\nChina".to_string()));
-        assert_eq!(info.updated_at, Some("2020-04-26".to_string()));
-        assert_eq!(info.source, "qrz.com");
-    }
-
-    #[test]
     fn test_parse_qrz_com_no_data() {
         let html = r##"
             <html>

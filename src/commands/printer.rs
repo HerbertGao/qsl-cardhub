@@ -324,7 +324,16 @@ pub async fn preview_address(
     log::debug!("请求参数: {:?}", request);
 
     // 1. 加载地址模板配置
-    let config = load_address_template_config()?;
+    let mut config = load_address_template_config()?;
+
+    // 如果数据中没有 name 或为空，移除 name 元素（不打印姓名）
+    let has_name = request
+        .data
+        .get("name")
+        .map_or(false, |n| !n.trim().is_empty());
+    if !has_name {
+        config.elements.retain(|e| e.id != "name");
+    }
 
     // 2. 模板解析
     log::debug!("解析模板，数据: {:?}", request.data);
@@ -525,17 +534,26 @@ pub async fn print_address(
     log::debug!("地址打印请求: {:?}", request);
 
     // 1. 加载地址模板配置
-    let config = load_address_template_config()?;
+    let mut config = load_address_template_config()?;
 
     // 2. 构建数据映射
     let mut data: HashMap<String, String> = HashMap::new();
-    if let Some(name) = &request.name {
-        if !name.is_empty() {
-            data.insert("name".to_string(), name.clone());
-        }
-    }
     data.insert("callsign".to_string(), request.callsign.clone());
-    data.insert("address".to_string(), request.address.clone());
+    // 将地址中的逗号替换为换行，便于多行打印
+    let address = request.address.replace("，", "\n").replace(", ", "\n");
+    data.insert("address".to_string(), address);
+
+    // 如果有姓名则加入数据，否则从模板中移除 name 元素（不打印姓名）
+    let has_name = request
+        .name
+        .as_ref()
+        .map_or(false, |n| !n.trim().is_empty());
+    if has_name {
+        data.insert("name".to_string(), request.name.clone().unwrap());
+    } else {
+        config.elements.retain(|e| e.id != "name");
+        log::info!("姓名为空，跳过打印姓名元素");
+    }
 
     // 3. 模板解析
     let resolved_elements = TemplateEngine::resolve(&config, &data)

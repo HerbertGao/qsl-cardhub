@@ -26,7 +26,7 @@
             {{ card.callsign }}
           </el-descriptions-item>
           <el-descriptions-item label="数量">
-            {{ card.qty }}
+            {{ formatQty(card.qty) }}
           </el-descriptions-item>
           <el-descriptions-item label="序列号">
             <span :style="{ color: card.serial ? undefined : '#909399' }">{{ formatSerial(card.serial) }}</span>
@@ -142,6 +142,9 @@
 import { computed } from 'vue'
 import type { CardWithProject, CardStatus } from '@/types/models'
 import { formatSerial } from '@/utils/format'
+import { useQtyDisplayMode } from '@/composables/useQtyDisplayMode'
+
+const { formatQty } = useQtyDisplayMode()
 
 interface Props {
   visible: boolean

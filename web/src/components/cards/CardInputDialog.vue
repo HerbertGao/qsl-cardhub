@@ -53,10 +53,43 @@
         prop="qty"
       >
         <el-input-number
+          v-if="!isApproximate"
           v-model="form.qty"
           :min="1"
           :max="9999"
         />
+        <el-radio-group
+          v-else
+          v-model="form.qty"
+        >
+          <el-radio-button :value="10">
+            ≤10
+          </el-radio-button>
+          <el-radio-button :value="50">
+            ≤50
+          </el-radio-button>
+          <el-radio-button :value="100">
+            >50
+          </el-radio-button>
+        </el-radio-group>
+      </el-form-item>
+      <el-form-item label="数量模式">
+        <el-switch
+          v-model="isApproximate"
+          active-text="大致"
+          inactive-text="精确"
+          style="--el-switch-on-color: #409EFF; --el-switch-off-color: #67C23A"
+        />
+        <el-tooltip placement="right">
+          <el-icon style="margin-left: 8px; color: #909399; cursor: help"><QuestionFilled /></el-icon>
+          <template #content>
+            精确模式输入具体数量；
+            <br/>
+            大致模式选择数量范围（≤10、≤50、>50），
+            <br/>
+            实际存储值为 10、50、100
+          </template>
+        </el-tooltip>
       </el-form-item>
 
       <!-- 序列号区域 -->
@@ -148,6 +181,13 @@ import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import type { ProjectWithStats, SinglePrinterConfig } from '@/types/models'
 import { formatSerial } from '@/utils/format'
+import { useQtyDisplayMode } from '@/composables/useQtyDisplayMode'
+
+const { qtyDisplayMode } = useQtyDisplayMode()
+const isApproximate = computed({
+  get: () => qtyDisplayMode.value === 'approximate',
+  set: (val: boolean) => { qtyDisplayMode.value = val ? 'approximate' : 'exact' }
+})
 
 interface Props {
   visible: boolean
@@ -193,6 +233,18 @@ const form = ref<CardInputFormData>({
   projectId: '',
   callsign: '',
   qty: 1
+})
+
+// 切换大致/精确模式时调整数量值
+watch(isApproximate, (approx) => {
+  if (approx) {
+    // 切换到大致模式，映射当前值到最近的档位
+    if (form.value.qty <= 10) form.value.qty = 10
+    else if (form.value.qty <= 50) form.value.qty = 50
+    else form.value.qty = 100
+  } else {
+    form.value.qty = 1
+  }
 })
 
 // 序列号（单独管理，使用数字类型）
@@ -390,7 +442,7 @@ watch(() => props.visible, (newVal: boolean): void => {
     form.value = {
       projectId: props.preselectedProjectId || '',
       callsign: '',
-      qty: 1
+      qty: isApproximate.value ? 10 : 1
     }
     serialNumber.value = 1
     previousSerial.value = 1
@@ -456,7 +508,7 @@ const handleSubmit = async (): Promise<void> => {
 // 重置表单（连续录入模式使用）
 const resetForContinuous = async (): Promise<void> => {
   form.value.callsign = ''
-  form.value.qty = 1
+  form.value.qty = isApproximate.value ? 10 : 1
 
   // 序列号自动递增（无论是否打印）
   // 必须等待加载完成，避免竞态条件导致序列号重复

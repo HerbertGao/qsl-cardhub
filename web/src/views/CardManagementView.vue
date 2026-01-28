@@ -127,6 +127,9 @@ import ReturnDialog from '@/components/cards/ReturnDialog.vue'
 import CardDetailDialog from '@/components/cards/CardDetailDialog.vue'
 import WaybillPrintDialog from '@/components/cards/WaybillPrintDialog.vue'
 import { formatSerial } from '@/utils/format'
+import { useQtyDisplayMode } from '@/composables/useQtyDisplayMode'
+
+const { formatQty } = useQtyDisplayMode()
 
 // ==================== 侧边栏状态 ====================
 const sidebarCollapsed = ref<boolean>(false)
@@ -356,7 +359,7 @@ const handleCardInputConfirm = async (data: CardInputConfirmData): Promise<void>
               project_name: projectName,
               callsign: data.callsign,
               sn: serialStr,
-              qty: String(data.qty)
+              qty: formatQty(data.qty)
             },
             output_config: {
               mode: 'text_bitmap_plus_native_barcode',
@@ -364,12 +367,12 @@ const handleCardInputConfirm = async (data: CardInputConfirmData): Promise<void>
             }
           }
         })
-        ElMessage.success(`录入并打印成功: ${data.callsign} x ${data.qty}`)
+        ElMessage.success(`录入并打印成功: ${data.callsign} x ${formatQty(data.qty)}`)
       } catch (printError) {
         ElMessage.warning(`录入成功，但打印失败: ${printError}`)
       }
     } else {
-      ElMessage.success(`录入成功: ${data.callsign} x ${data.qty}`)
+      ElMessage.success(`录入成功: ${data.callsign} x ${formatQty(data.qty)}`)
     }
 
     if (data.continuousMode) {

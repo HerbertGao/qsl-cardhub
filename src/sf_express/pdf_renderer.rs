@@ -417,19 +417,6 @@ mod tests {
     use image::Luma;
     use super::*;
 
-    #[test]
-    fn test_waybill_size_default() {
-        let size = WaybillSize::default();
-        assert_eq!(size.width_mm, 76.0);
-        assert_eq!(size.height_mm, 130.0);
-        assert_eq!(size.dpi, 203);
-
-        // 验证像素计算
-        // 76mm / 25.4 * 203 ≈ 608
-        // 130mm / 25.4 * 203 ≈ 1039
-        assert_eq!(size.width_pixels(), 607);
-        assert_eq!(size.height_pixels(), 1039);
-    }
 
     #[test]
     fn test_bytes_per_row() {

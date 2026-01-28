@@ -373,7 +373,7 @@ key = "callsign"
 max_height_mm = 28.0
 
 [output]
-mode = "text_bitmap_plus_native_barcode"
+mode = "full_bitmap"
 threshold = 160
 "#;
             let mut file = fs::File::create(&callsign_template_dst)

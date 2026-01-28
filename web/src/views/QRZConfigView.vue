@@ -5,7 +5,7 @@
     <el-card shadow="hover">
       <div style="margin-bottom: 20px">
         <p style="color: #909399; font-size: 14px; margin: 0">
-          配置 QRZ.cn 登录凭据，用于查询呼号地址信息。凭据将加密保存到系统钥匙串或本地加密文件。
+          配置 QRZ.cn 登录凭据，用于查询呼号地址信息。凭据将加密保存到本地加密文件。
         </p>
       </div>
 

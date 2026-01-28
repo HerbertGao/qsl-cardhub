@@ -71,6 +71,33 @@ impl TextRenderer {
             return Ok((0, 0));
         }
 
+        // 支持多行文本：按换行符拆分，取最大宽度，高度累加
+        if text.contains('\n') {
+            let lines: Vec<&str> = text.split('\n').collect();
+            let mut total_width = 0u32;
+            let mut total_height = 0u32;
+            for line in &lines {
+                let (w, h) = self.measure_single_line(line, font_size)?;
+                total_width = total_width.max(w);
+                total_height += h;
+            }
+            // 行间加少量间距
+            let line_gap = (font_size * 0.2) as u32;
+            if lines.len() > 1 {
+                total_height += line_gap * (lines.len() as u32 - 1);
+            }
+            return Ok((total_width, total_height));
+        }
+
+        self.measure_single_line(text, font_size)
+    }
+
+    /// 测量单行文本尺寸
+    fn measure_single_line(&mut self, text: &str, font_size: f32) -> Result<(u32, u32)> {
+        if text.is_empty() {
+            return Ok((0, (font_size * 1.2) as u32));
+        }
+
         let scale = Scale::uniform(font_size);
         let mut x_offset = 0.0;
         let mut min_x = 0i32;
@@ -119,12 +146,52 @@ impl TextRenderer {
     /// # 返回
     /// 1bpp灰度图像 (0=黑色, 255=白色)
     pub fn render_text(&mut self, text: &str, font_size: f32) -> Result<GrayImage> {
-        // 1. 测量文本尺寸
-        let (width, height) = self.measure_text(text, font_size)?;
+        // 支持多行文本：按换行符拆分，逐行渲染后垂直拼接
+        if text.contains('\n') {
+            let lines: Vec<&str> = text.split('\n').collect();
+            let mut line_images: Vec<GrayImage> = Vec::new();
+            for line in &lines {
+                line_images.push(self.render_single_line(line, font_size)?);
+            }
 
-        if width == 0 || height == 0 {
+            // 计算总画布尺寸
+            let max_width = line_images.iter().map(|img| img.width()).max().unwrap_or(1);
+            let line_gap = (font_size * 0.2) as u32;
+            let total_height: u32 = line_images.iter().map(|img| img.height()).sum::<u32>()
+                + line_gap * (line_images.len().saturating_sub(1) as u32);
+
+            // 拼接到画布（每行水平居中）
+            let mut canvas = ImageBuffer::from_pixel(max_width, total_height, Luma([255u8]));
+            let mut y_offset = 0u32;
+            for img in &line_images {
+                let x_offset = (max_width - img.width()) / 2;
+                for (x, y, pixel) in img.enumerate_pixels() {
+                    if x + x_offset < max_width && y + y_offset < total_height {
+                        canvas.put_pixel(x + x_offset, y + y_offset, *pixel);
+                    }
+                }
+                y_offset += img.height() + line_gap;
+            }
+
+            return Ok(canvas);
+        }
+
+        self.render_single_line(text, font_size)
+    }
+
+    /// 渲染单行文本为1bpp位图
+    fn render_single_line(&mut self, text: &str, font_size: f32) -> Result<GrayImage> {
+        // 1. 测量文本尺寸
+        let (width, height) = self.measure_single_line(text, font_size)?;
+
+        if height == 0 {
             // 返回空图像
             return Ok(ImageBuffer::from_pixel(1, 1, Luma([255u8])));
+        }
+
+        if width == 0 {
+            // 空文本但有行高，返回最小宽度但正确高度的图像
+            return Ok(ImageBuffer::from_pixel(1, height, Luma([255u8])));
         }
 
         // 2. 创建白色画布

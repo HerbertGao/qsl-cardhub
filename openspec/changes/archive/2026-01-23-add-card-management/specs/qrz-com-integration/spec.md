@@ -268,7 +268,7 @@
   - 地址: `<p class="m0" style="color: #666; font-weight: normal; font-size: 17px">...</p>`
   - 更新时间: `<tr><td class="dh">Last Update</td><td class="di">日期时间</td></tr>`
 - **页面布局**: QRZ.com 配置页面使用标准页面布局（page-content）
-- **存储方式提示**: 页面显示当前使用的存储方式（系统钥匙串或本地加密文件）
+- **存储方式提示**: 页面显示当前使用的存储方式（本地加密文件）
 
 ## 向后兼容性
 

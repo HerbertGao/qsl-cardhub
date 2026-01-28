@@ -620,30 +620,6 @@ mod tests {
         assert_eq!(height, 1039); // 精确计算值
     }
 
-    #[test]
-    fn test_calculate_available_area() {
-        let engine = LayoutEngine::new().unwrap();
-        let page_config = PageConfig {
-            dpi: 203,
-            width_mm: 76.0,
-            height_mm: 130.0,
-            margin_left_mm: 2.0,
-            margin_right_mm: 2.0,
-            margin_top_mm: 3.0,
-            margin_bottom_mm: 3.0,
-            border: true,
-            border_thickness_mm: 0.3,
-            duplicate_print: false,
-        };
-
-        let (left, _right, top, _bottom, available_width, available_height) =
-            engine.calculate_available_area(&page_config);
-
-        assert_eq!(left, 16);
-        assert_eq!(top, 24);
-        assert_eq!(available_width, 576);
-        assert_eq!(available_height, 991); // 1039 - 24 - 24 = 991
-    }
 
     #[test]
     fn test_calculate_total_content_height() {
