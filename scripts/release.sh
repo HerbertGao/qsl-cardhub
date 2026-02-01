@@ -145,7 +145,7 @@ run_build_check() {
 
         # 类型检查
         echo "  检查前端类型..."
-        if pnpm run type-check --silent 2>/dev/null; then
+        if pnpm run type-check 2>/dev/null; then
             print_success "前端类型检查通过"
         else
             print_warning "前端类型检查跳过或失败（非致命）"
