@@ -75,7 +75,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { invoke } from '@tauri-apps/api/core'
@@ -177,8 +177,10 @@ const loadConfig = async (): Promise<void> => {
     }
   } finally {
     loading.value = false
-    // 标记初始化完成
-    initialized.value = true
+    // 标记初始化完成 - 使用 nextTick 确保在 watcher 执行后才设置，防止初始加载时触发保存
+    nextTick(() => {
+      initialized.value = true
+    })
   }
 }
 
