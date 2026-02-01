@@ -199,17 +199,6 @@ pub struct PrintRequest {
     pub template_path: Option<String>,
     /// 运行时数据（替换模板中的占位符）
     pub data: HashMap<String, String>,
-    /// 输出配置
-    pub output_config: OutputConfigRequest,
-}
-
-/// 输出配置请求
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OutputConfigRequest {
-    /// 渲染模式: "text_bitmap_plus_native_barcode" 或 "full_bitmap"
-    pub mode: String,
-    /// 二值化阈值 (0-255)
-    pub threshold: u8,
 }
 
 /// 预览响应
@@ -269,8 +258,8 @@ pub async fn preview_qsl(
         .lock()
         .map_err(|e| format!("锁定渲染管道失败: {}", e))?;
     let output_config = OutputConfig {
-        mode: request.output_config.mode.clone(),
-        threshold: request.output_config.threshold,
+        mode: config.output.mode.clone(),
+        threshold: config.output.threshold,
     };
     let render_result = render_pipeline
         .render(layout_result, &output_config)
@@ -304,8 +293,6 @@ pub async fn preview_qsl(
 pub struct AddressPreviewRequest {
     /// 运行时数据
     pub data: HashMap<String, String>,
-    /// 输出配置
-    pub output_config: OutputConfigRequest,
 }
 
 /// 生成地址标签预览（PNG）
@@ -361,8 +348,8 @@ pub async fn preview_address(
         .lock()
         .map_err(|e| format!("锁定渲染管道失败: {}", e))?;
     let output_config = OutputConfig {
-        mode: request.output_config.mode.clone(),
-        threshold: request.output_config.threshold,
+        mode: config.output.mode.clone(),
+        threshold: config.output.threshold,
     };
     let render_result = render_pipeline
         .render(layout_result, &output_config)
@@ -425,14 +412,17 @@ pub async fn print_qsl(
         .map_err(|e| format!("布局计算失败: {}", e))?;
 
     // 4. 渲染
+    // 注意：打印时使用模板文件中保存的 output 配置，而不是前端传入的参数
+    // 这样用户在模板配置页面修改后，打印会自动使用新配置
     let mut render_pipeline = state
         .render_pipeline
         .lock()
         .map_err(|e| format!("锁定渲染管道失败: {}", e))?;
     let output_config = OutputConfig {
-        mode: request.output_config.mode.clone(),
-        threshold: request.output_config.threshold,
+        mode: config.output.mode.clone(),
+        threshold: config.output.threshold,
     };
+    log::info!("使用渲染模式: {}", output_config.mode);
     let render_result = render_pipeline
         .render(layout_result, &output_config)
         .map_err(|e| format!("渲染失败: {}", e))?;
@@ -681,8 +671,8 @@ pub async fn generate_tspl(
         .lock()
         .map_err(|e| format!("锁定渲染管道失败: {}", e))?;
     let output_config = OutputConfig {
-        mode: request.output_config.mode.clone(),
-        threshold: request.output_config.threshold,
+        mode: config.output.mode.clone(),
+        threshold: config.output.threshold,
     };
     let render_result = render_pipeline
         .render(layout_result, &output_config)

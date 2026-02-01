@@ -337,10 +337,6 @@ const handlePrintLabel = async (card: CardWithProject): Promise<void> => {
           callsign: card.callsign,
           sn: serialStr,
           qty: formatQty(card.qty)
-        },
-        output_config: {
-          mode: 'text_bitmap_plus_native_barcode',
-          threshold: 160
         }
       }
     })

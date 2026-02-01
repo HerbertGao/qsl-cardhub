@@ -482,20 +482,6 @@ interface SaveStatus {
   message: string
 }
 
-interface PreviewRequest {
-  template_path: string | null
-  data: {
-    project_name: string
-    callsign: string
-    sn: string
-    qty: string
-  }
-  output_config: {
-    mode: string
-    threshold: number
-  }
-}
-
 interface PreviewResponse {
   base64_data: string
 }
@@ -601,10 +587,6 @@ const handleRefreshPreview = async (silent: boolean = false): Promise<void> => {
             name: '张三',
             callsign: 'BG7XXX',
             address: '广东省深圳市南山区科技园路1号'
-          },
-          output_config: {
-            mode: templateConfig.value?.output.mode ?? 'full_bitmap',
-            threshold: templateConfig.value?.output.threshold ?? 160
           }
         }
       })
@@ -618,12 +600,8 @@ const handleRefreshPreview = async (silent: boolean = false): Promise<void> => {
             callsign: 'BG7XXX',
             sn: '001',
             qty: '100'
-          },
-          output_config: {
-            mode: templateConfig.value?.output.mode ?? 'full_bitmap',
-            threshold: templateConfig.value?.output.threshold ?? 160
           }
-        } as PreviewRequest
+        }
       })
     }
 
