@@ -9,14 +9,13 @@
       <template #header>
         <div style="display: flex; justify-content: space-between; align-items: center">
           <span style="font-weight: bold">打印机设置</span>
-          <el-button
-            type="primary"
+          <el-tag
+            v-if="saveStatus"
+            :type="saveStatus.type === 'success' ? 'success' : 'danger'"
             size="small"
-            :loading="saving"
-            @click="handleSaveConfig"
           >
-            保存
-          </el-button>
+            {{ saveStatus.message }}
+          </el-tag>
         </div>
       </template>
 
@@ -58,17 +57,34 @@
             </el-button>
           </div>
         </el-form-item>
+
+        <el-divider />
+
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+        >
+          <template #title>
+            所有打印功能（QSL标签、地址标签、顺丰面单）都将使用此打印机
+          </template>
+        </el-alert>
       </el-form>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { invoke } from '@tauri-apps/api/core'
 import type { SinglePrinterConfig, PlatformInfo } from '@/types/models'
+
+interface SaveStatus {
+  type: 'success' | 'error'
+  message: string
+}
 
 // 配置数据
 const config = ref<SinglePrinterConfig>({
@@ -83,7 +99,10 @@ const config = ref<SinglePrinterConfig>({
 
 const availablePrinters = ref<string[]>([])
 const loading = ref<boolean>(true)
-const saving = ref<boolean>(false)
+const saveStatus = ref<SaveStatus | null>(null)
+
+// 是否已完成初始加载（防止加载时触发保存）
+const initialized = ref<boolean>(false)
 
 // 计算平台显示文本
 const platformDisplay = computed(() => {
@@ -92,6 +111,54 @@ const platformDisplay = computed(() => {
   }
   return '加载中...'
 })
+
+// 防抖保存
+let saveTimeout: ReturnType<typeof setTimeout> | null = null
+const debouncedSave = (): void => {
+  // 未初始化完成时不保存
+  if (!initialized.value) return
+
+  // 清除保存状态
+  saveStatus.value = null
+
+  // 清除之前的定时器
+  if (saveTimeout) {
+    clearTimeout(saveTimeout)
+  }
+
+  // 设置新的定时器
+  saveTimeout = setTimeout(async () => {
+    // 未选择打印机时不保存
+    if (!config.value.printer.name) {
+      return
+    }
+
+    try {
+      await invoke('save_printer_config', {
+        config: config.value
+      })
+      saveStatus.value = { type: 'success', message: '✓ 配置已自动保存' }
+
+      // 3秒后清除成功提示
+      setTimeout(() => {
+        if (saveStatus.value?.type === 'success') {
+          saveStatus.value = null
+        }
+      }, 3000)
+    } catch (error) {
+      console.error('保存失败:', error)
+      saveStatus.value = { type: 'error', message: `保存失败: ${error}` }
+    }
+  }, 500) // 500ms 防抖
+}
+
+// 监听配置变化，自动保存
+watch(
+  () => config.value.printer.name,
+  (): void => {
+    debouncedSave()
+  }
+)
 
 // 加载打印机配置
 const loadConfig = async (): Promise<void> => {
@@ -110,6 +177,10 @@ const loadConfig = async (): Promise<void> => {
     }
   } finally {
     loading.value = false
+    // 标记初始化完成 - 使用 nextTick 确保在 watcher 执行后才设置，防止初始加载时触发保存
+    nextTick(() => {
+      initialized.value = true
+    })
   }
 }
 
@@ -127,27 +198,6 @@ const loadPrinters = async (): Promise<void> => {
 const refreshPrinters = async (): Promise<void> => {
   await loadPrinters()
   ElMessage.success('打印机列表已刷新')
-}
-
-// 保存配置
-const handleSaveConfig = async (): Promise<void> => {
-  if (!config.value.printer.name) {
-    ElMessage.warning('请选择打印机')
-    return
-  }
-
-  saving.value = true
-  try {
-    await invoke('save_printer_config', {
-      config: config.value
-    })
-    ElMessage.success('打印机配置已保存')
-  } catch (error) {
-    console.error('保存打印机配置失败:', error)
-    ElMessage.error('保存失败: ' + error)
-  } finally {
-    saving.value = false
-  }
 }
 
 onMounted(async (): Promise<void> => {

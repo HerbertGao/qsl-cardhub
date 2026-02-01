@@ -482,20 +482,6 @@ interface SaveStatus {
   message: string
 }
 
-interface PreviewRequest {
-  template_path: string | null
-  data: {
-    project_name: string
-    callsign: string
-    sn: string
-    qty: string
-  }
-  output_config: {
-    mode: string
-    threshold: number
-  }
-}
-
 interface PreviewResponse {
   base64_data: string
 }
@@ -508,6 +494,20 @@ const previewLoading = ref<boolean>(false)
 const previewImageUrl = ref<string>('')
 const saveStatus = ref<SaveStatus | null>(null)
 const activeCollapse = ref<string[]>(['page', 'layout']) // 默认展开的折叠面板
+
+// 立即保存（不使用防抖）
+const saveImmediately = async (): Promise<void> => {
+  try {
+    // 根据模板类型调用不同的保存命令
+    const saveCommand = templateType.value === 'address'
+      ? 'save_address_template_config'
+      : 'save_template_config'
+    await invoke(saveCommand, { config: templateConfig.value })
+  } catch (error) {
+    console.error('保存失败:', error)
+    throw error
+  }
+}
 
 // 防抖保存
 let saveTimeout: ReturnType<typeof setTimeout> | null = null
@@ -523,11 +523,7 @@ const debouncedSave = (): void => {
   // 设置新的定时器
   saveTimeout = setTimeout(async () => {
     try {
-      // 根据模板类型调用不同的保存命令
-      const saveCommand = templateType.value === 'address'
-        ? 'save_address_template_config'
-        : 'save_template_config'
-      await invoke(saveCommand, { config: templateConfig.value })
+      await saveImmediately()
       saveStatus.value = { type: 'success', message: '✓ 配置已自动保存' }
 
       // 3秒后清除成功提示
@@ -591,6 +587,17 @@ const handleTemplateTypeChange = (): void => {
 const handleRefreshPreview = async (silent: boolean = false): Promise<void> => {
   previewLoading.value = true
   try {
+    // 在预览前先保存配置，确保后端读取的是最新配置
+    if (templateConfig.value) {
+      // 取消待处理的防抖保存
+      if (saveTimeout) {
+        clearTimeout(saveTimeout)
+        saveTimeout = null
+      }
+      // 立即保存到磁盘
+      await saveImmediately()
+    }
+
     let response: PreviewResponse
 
     if (templateType.value === 'address') {
@@ -601,10 +608,6 @@ const handleRefreshPreview = async (silent: boolean = false): Promise<void> => {
             name: '张三',
             callsign: 'BG7XXX',
             address: '广东省深圳市南山区科技园路1号'
-          },
-          output_config: {
-            mode: templateConfig.value?.output.mode ?? 'full_bitmap',
-            threshold: templateConfig.value?.output.threshold ?? 160
           }
         }
       })
@@ -618,12 +621,8 @@ const handleRefreshPreview = async (silent: boolean = false): Promise<void> => {
             callsign: 'BG7XXX',
             sn: '001',
             qty: '100'
-          },
-          output_config: {
-            mode: templateConfig.value?.output.mode ?? 'full_bitmap',
-            threshold: templateConfig.value?.output.threshold ?? 160
           }
-        } as PreviewRequest
+        }
       })
     }
 

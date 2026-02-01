@@ -360,10 +360,6 @@ const handleCardInputConfirm = async (data: CardInputConfirmData): Promise<void>
               callsign: data.callsign,
               sn: serialStr,
               qty: formatQty(data.qty)
-            },
-            output_config: {
-              mode: 'text_bitmap_plus_native_barcode',
-              threshold: 160
             }
           }
         })
