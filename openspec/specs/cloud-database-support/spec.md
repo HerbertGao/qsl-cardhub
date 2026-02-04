@@ -181,7 +181,7 @@ TBD - created by archiving change add-card-management. Update Purpose after arch
 - 请求体包含：
   - `client_id`: 客户端标识
   - `sync_time`: 同步时间戳
-  - `data`: 所有本地数据（projects, cards, sf_senders, sf_orders）
+  - `data`: 所有本地数据，与导出/导入范围一致，即**数据库全部业务表**：projects、cards、sf_senders、sf_orders（若将来新增业务表，须同步加入导出、导入与云端同步的 data 中）
 - 同步成功：
   - 显示统计信息（项目数、卡片数等）
   - 记录上次同步时间

@@ -149,7 +149,6 @@
 <script setup lang="ts">
 import { h, onMounted, onUnmounted, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
-import { getVersion } from '@tauri-apps/api/app'
 import { ElNotification, ElButton } from 'element-plus'
 import type { SinglePrinterConfig } from '@/types/models'
 import ConfigView from '@/views/ConfigView.vue'
@@ -162,11 +161,8 @@ import SFExpressConfigView from '@/views/SFExpressConfigView.vue'
 import SFOrderListView from '@/views/SFOrderListView.vue'
 import LogView from '@/views/LogView.vue'
 import AboutView from '@/views/AboutView.vue'
-import {
-  updateState,
-  setUpdateAvailable,
-  type UpdateInfo
-} from '@/stores/updateStore'
+import { updateState } from '@/stores/updateStore'
+import { checkForUpdate } from '@/services/updateCheck'
 import { logger } from '@/utils/logger'
 import IconSfExpress from '~icons/custom/sf-express'
 import GlobalLoading from '@/components/common/GlobalLoading.vue'
@@ -181,88 +177,35 @@ useNavigationWatcher(activeMenu)
 let updateCheckTimer: ReturnType<typeof setInterval> | null = null
 const UPDATE_CHECK_INTERVAL = 5 * 60 * 1000 // 5分钟
 
-// GitHub 仓库信息
-const GITHUB_OWNER = 'HerbertGao'
-const GITHUB_REPO = 'QSL-CardHub'
-
-// 比较版本号
-function compareVersions(v1: string, v2: string): number {
-  const parts1 = v1.replace(/^v/, '').split('.').map(Number)
-  const parts2 = v2.replace(/^v/, '').split('.').map(Number)
-
-  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
-    const num1 = parts1[i] || 0
-    const num2 = parts2[i] || 0
-    if (num1 > num2) return 1
-    if (num1 < num2) return -1
-  }
-  return 0
-}
-
-// 静默检查更新
+// 静默检查更新（与关于页「检查更新」同一套逻辑，保证关于页展示与下载更新行为一致）
 async function silentCheckUpdate(): Promise<void> {
-  // 如果已经发现更新，不再重复检查
   if (updateState.hasUpdate) {
     logger.info('[更新检查] 已发现更新，跳过检查')
     return
   }
-
   logger.info('[更新检查] 开始检查更新...')
-
-  try {
-    const currentVersion = await getVersion()
-    logger.info(`[更新检查] 当前版本: v${currentVersion}`)
-
-    const response = await fetch(
-      `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`,
-      {
-        headers: {
-          'Accept': 'application/vnd.github.v3+json'
-        }
-      }
-    )
-
-    if (!response.ok) {
-      return
-    }
-
-    const release = await response.json()
-    const latestVersion = release.tag_name.replace(/^v/, '')
-    logger.info(`[更新检查] 最新版本: v${latestVersion}`)
-
-    if (compareVersions(latestVersion, currentVersion) > 0) {
-      const updateInfo: UpdateInfo = {
-        version: latestVersion,
-        notes: release.body || '无更新说明',
-        pubDate: release.published_at,
-        downloadUrl: release.html_url
-      }
-      setUpdateAvailable(updateInfo)
-      logger.info(`[更新检查] 发现新版本: v${latestVersion}`)
-
-      // 发送更新通知
-      ElNotification({
-        title: '发现新版本',
-        message: h('div', [
-          h('p', { style: 'margin: 0 0 8px 0' }, `新版本 v${latestVersion} 已发布`),
-          h(ElButton, {
-            type: 'primary',
-            size: 'small',
-            onClick: () => {
-              activeMenu.value = 'about'
-            }
-          }, () => '查看详情')
-        ]),
-        type: 'success',
-        duration: 8000,
-        position: 'bottom-right'
-      })
-    } else {
-      logger.info('[更新检查] 已是最新版本')
-    }
-  } catch (error) {
-    // 静默忽略错误
-    logger.error(`[更新检查] 检查失败: ${error}`)
+  const hadUpdate = updateState.hasUpdate
+  await checkForUpdate({ silent: true })
+  if (!hadUpdate && updateState.hasUpdate && updateState.updateInfo) {
+    logger.info(`[更新检查] 发现新版本: v${updateState.updateInfo.version}`)
+    ElNotification({
+      title: '发现新版本',
+      message: h('div', [
+        h('p', { style: 'margin: 0 0 8px 0' }, `新版本 v${updateState.updateInfo.version} 已发布`),
+        h(ElButton, {
+          type: 'primary',
+          size: 'small',
+          onClick: () => {
+            activeMenu.value = 'about'
+          }
+        }, () => '查看详情')
+      ]),
+      type: 'success',
+      duration: 8000,
+      position: 'bottom-right'
+    })
+  } else if (!updateState.hasUpdate) {
+    logger.info('[更新检查] 已是最新版本')
   }
 }
 

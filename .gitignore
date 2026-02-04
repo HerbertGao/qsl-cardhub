@@ -78,3 +78,8 @@ test_output/
 /dist/
 /data/
 /.tauri-keys/
+
+web_query_service/wrangler.toml
+web_query_service/.wrangler
+web_query_service/node_modules
+web_query_service/public
