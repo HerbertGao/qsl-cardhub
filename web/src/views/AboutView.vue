@@ -204,7 +204,6 @@ import { onMounted, ref } from 'vue'
 import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-shell'
-import { check } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { CoffeeCup } from '@element-plus/icons-vue'
@@ -213,16 +212,12 @@ import wechatQR from '@/assets/wechat.jpg'
 import {
   updateState,
   markAsViewed,
-  setChecking,
-  setUpdateAvailable,
   setError,
   setDownloading,
   setDownloadProgress,
-  type UpdateInfo
+  getPendingTauriUpdate
 } from '@/stores/updateStore'
-
-// 保存更新对象引用
-let pendingUpdate: Awaited<ReturnType<typeof check>> | null = null
+import { checkForUpdate } from '@/services/updateCheck'
 
 // 应用版本号
 const appVersion = ref('0.0.0')
@@ -250,20 +245,6 @@ onMounted(async () => {
   markAsViewed()
 })
 
-// 比较版本号，返回 1 表示 v1 > v2，-1 表示 v1 < v2，0 表示相等
-function compareVersions(v1: string, v2: string): number {
-  const parts1 = v1.replace(/^v/, '').split('.').map(Number)
-  const parts2 = v2.replace(/^v/, '').split('.').map(Number)
-
-  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
-    const num1 = parts1[i] || 0
-    const num2 = parts2[i] || 0
-    if (num1 > num2) return 1
-    if (num1 < num2) return -1
-  }
-  return 0
-}
-
 // 格式化日期
 function formatDate(dateStr: string): string {
   try {
@@ -278,81 +259,20 @@ function formatDate(dateStr: string): string {
   }
 }
 
-// 检查更新
+// 检查更新（与启动时自动检查共用同一套逻辑，保证关于页展示与下载更新行为一致）
 async function handleCheckUpdate(): Promise<void> {
-  setChecking(true)
   showLatestMessage.value = false
-
-  try {
-    // 首先尝试使用 Tauri Updater 插件检查
-    const update = await check()
-
-    if (update) {
-      pendingUpdate = update
-      const updateInfo: UpdateInfo = {
-        version: update.version,
-        notes: update.body || '无更新说明',
-        pubDate: update.date || new Date().toISOString(),
-        downloadUrl: `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tag/v${update.version}`
-      }
-      setUpdateAvailable(updateInfo)
-      ElMessage.success('发现新版本！')
-    } else {
-      showLatestMessage.value = true
-      ElMessage.info('已是最新版本')
-    }
-  } catch (error) {
-    console.error('Tauri Updater 检查失败，尝试 GitHub API:', error)
-
-    // 回退到 GitHub API
-    try {
-      const response = await fetch(
-        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`,
-        {
-          headers: {
-            'Accept': 'application/vnd.github.v3+json'
-          }
-        }
-      )
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error('未找到发布版本')
-        }
-        throw new Error(`请求失败: ${response.status}`)
-      }
-
-      const release = await response.json()
-      const latestVersion = release.tag_name.replace(/^v/, '')
-      const currentVersion = appVersion.value
-
-      if (compareVersions(latestVersion, currentVersion) > 0) {
-        const updateInfo: UpdateInfo = {
-          version: latestVersion,
-          notes: release.body || '无更新说明',
-          pubDate: release.published_at,
-          downloadUrl: release.html_url
-        }
-        setUpdateAvailable(updateInfo)
-        ElMessage.success('发现新版本！')
-      } else {
-        showLatestMessage.value = true
-        ElMessage.info('已是最新版本')
-      }
-    } catch (fallbackError) {
-      console.error('GitHub API 检查也失败:', fallbackError)
-      setError(`检查更新失败: ${fallbackError instanceof Error ? fallbackError.message : '未知错误'}`)
-      ElMessage.error('检查更新失败，请稍后重试')
-    }
-  } finally {
-    setChecking(false)
+  await checkForUpdate({ silent: false })
+  showLatestMessage.value = !updateState.hasUpdate
+  if (!updateState.hasUpdate && !updateState.error) {
+    ElMessage.info('已是最新版本')
   }
 }
 
 // 下载并安装更新
 async function handleDownloadUpdate(): Promise<void> {
+  const pendingUpdate = getPendingTauriUpdate()
   if (!pendingUpdate) {
-    // 如果没有 Tauri Updater 的更新对象，打开发布页面
     await handleOpenReleasePage()
     ElMessage.info('请下载对应平台的安装包进行安装')
     return
@@ -401,6 +321,7 @@ async function handleDownloadUpdate(): Promise<void> {
 
 // 安装更新
 async function handleInstallUpdate(): Promise<void> {
+  const pendingUpdate = getPendingTauriUpdate()
   if (pendingUpdate) {
     // 如果有 Tauri Updater 的更新，重启应用完成安装
     try {

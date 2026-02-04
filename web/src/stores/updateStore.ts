@@ -1,4 +1,5 @@
 import { reactive } from 'vue'
+import type { Update } from '@tauri-apps/plugin-updater'
 
 // 更新信息接口
 export interface UpdateInfo {
@@ -37,6 +38,17 @@ export const updateState = reactive<UpdateState>({
   showBadge: false,
 })
 
+// Tauri Updater 返回的更新对象，供关于页「下载更新」使用（与手动检查更新逻辑一致）
+let pendingTauriUpdate: Update | null = null
+
+export function setPendingTauriUpdate(update: Update | null): void {
+  pendingTauriUpdate = update
+}
+
+export function getPendingTauriUpdate(): Update | null {
+  return pendingTauriUpdate
+}
+
 // 设置有新更新
 export function setUpdateAvailable(info: UpdateInfo): void {
   updateState.hasUpdate = true
@@ -51,6 +63,7 @@ export function clearUpdate(): void {
   updateState.updateInfo = null
   updateState.showBadge = false
   updateState.error = null
+  pendingTauriUpdate = null
 }
 
 // 标记已查看（清除红点）

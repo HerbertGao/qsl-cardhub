@@ -1,0 +1,72 @@
+# QSL CardHub 云端查询与同步服务
+# 使用前请先执行: npx wrangler d1 create qsl-sync
+# 将返回的 database_id 填入下方 [[d1_databases]].database_id
+
+name = "qsl-web-query-service"
+main = "src/worker/index.js"
+compatibility_date = "2024-01-01"
+
+# 启用 workers.dev 子域名（设为 false 则仅通过自定义域名访问）
+workers_dev = true
+
+# 启用预览 URL（设为 false 可禁用）
+preview_urls = true
+
+# 静态资源目录（构建后的前端文件）
+[assets]
+directory = "./public"
+
+# D1 数据库绑定（创建后填入 database_id）
+[[d1_databases]]
+binding = "DB"
+database_name = "qsl-sync"
+database_id = "<RUN_WRANGLER_D1_CREATE_AND_PASTE_ID_HERE>"
+
+# KV 命名空间绑定（用于限流计数和 nonce 去重）
+# 创建命令：npx wrangler kv namespace create "RATE_LIMIT"
+# 将返回的 id 填入下方
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "<RUN_WRANGLER_KV_CREATE_AND_PASTE_ID_HERE>"
+
+# 环境变量（敏感信息请在 dashboard 或 wrangler secret 中配置）
+[vars]
+# API_KEY 用于 /ping 与 /sync 的 Bearer 校验，部署后通过 wrangler secret put API_KEY 设置
+
+# ============================================================
+# 微信服务号配置（可选）
+# ============================================================
+# 以下配置为可选，未配置时订阅收卡功能将自动禁用，查询功能不受影响。
+#
+# 启用订阅功能需配置：
+#   - WECHAT_APPID: 微信服务号 AppID
+#   - WECHAT_SECRET: 微信服务号 AppSecret
+#
+# 启用微信推送需额外配置：
+#   - WECHAT_TEMPLATE_ID: 微信模板消息 ID
+#
+# 配置方式（推荐使用 secret 保护敏感信息）：
+#   wrangler secret put WECHAT_APPID
+#   wrangler secret put WECHAT_SECRET
+#   wrangler secret put WECHAT_TEMPLATE_ID
+
+# ============================================================
+# 验证码防护配置（可选）
+# ============================================================
+# 启用验证码防护需配置以下环境变量：
+#
+# CLIENT_SIGN_KEY: 前端请求签名密钥（可公开，用于生成请求签名）
+#   - 建议使用随机字符串，如 UUID
+#   - 前端通过 /api/config 获取此密钥
+#
+# CAPTCHA_SECRET: 验证码 token 签名密钥（仅服务端，不可公开）
+#   - 用于生成和验证验证码 token 的 HMAC 签名
+#   - 必须保密，建议使用 wrangler secret 配置
+#
+# 配置方式：
+#   在下方 [vars] 中添加 CLIENT_SIGN_KEY（非敏感）
+#   wrangler secret put CAPTCHA_SECRET（敏感信息）
+#
+# 示例：
+# [vars]
+# CLIENT_SIGN_KEY = "your-random-sign-key-here"
