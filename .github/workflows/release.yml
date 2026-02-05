@@ -49,6 +49,15 @@ jobs:
         working-directory: web
         run: pnpm install --frozen-lockfile
 
+      - name: 生成占位配置文件
+        run: |
+          cat > config/sf_express_default.toml << TOML
+          enabled = false
+          partner_id = ""
+          checkword_sandbox = ""
+          checkword_prod = ""
+          TOML
+
       - name: 验证 TypeScript 类型同步
         run: |
           cargo test export_bindings --features ts-rs
