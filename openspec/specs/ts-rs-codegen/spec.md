@@ -84,6 +84,27 @@ ts-rs 必须正确处理 Rust 结构体上的 serde 属性（如 `#[serde(rename
 - **当** Rust 字段标记了 `#[serde(rename = "customName")]`
 - **那么** 生成的 TypeScript 定义必须使用 `customName` 作为字段名
 
+### 需求：整数类型必须与 JSON 序列化结果一致
+
+Rust 的 `i64`/`u64` 类型必须映射为 TypeScript 的 `number` 而非 `bigint`，以确保与 JSON 序列化结果一致。
+
+**背景**：ts-rs 默认将 `i64`/`u64` 映射为 TypeScript 的 `bigint`，但 serde_json 将这些类型序列化为普通 JSON number，前端 JSON.parse 解析后得到的是 JavaScript `number` 而非 `bigint`。由于 `bigint` 和 `number` 在 TypeScript 中不兼容，会导致类型检查失败和运行时错误。
+
+#### 场景：i64 字段导出
+
+- **当** Rust 结构体包含 `i64` 类型的字段
+- **那么** 必须使用 `#[ts(type = "number")]` 注解，使生成的 TypeScript 类型为 `number`
+
+#### 场景：u64 字段导出
+
+- **当** Rust 结构体包含 `u64` 类型的字段
+- **那么** 必须使用 `#[ts(type = "number")]` 注解，使生成的 TypeScript 类型为 `number`
+
+#### 场景：数值运算兼容性
+
+- **当** 前端代码对导出的数值字段进行算术运算（如 `total || 0`）
+- **那么** 类型检查必须通过，运行时行为必须正确
+
 ### 需求：导出的类型必须包含类型守卫（可选）
 
 系统可以选择性地为导出的类型生成 TypeScript 类型守卫函数，用于运行时类型检查。

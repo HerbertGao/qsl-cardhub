@@ -23,16 +23,16 @@ updated_at: string,
 /**
  * 卡片总数
  */
-total_cards: bigint, 
+total_cards: number, 
 /**
  * 待分发卡片数
  */
-pending_cards: bigint, 
+pending_cards: number, 
 /**
  * 已分发卡片数
  */
-distributed_cards: bigint, 
+distributed_cards: number, 
 /**
  * 已退卡卡片数
  */
-returned_cards: bigint, };
+returned_cards: number, };

@@ -69,12 +69,16 @@ pub struct ProjectWithStats {
     /// 更新时间
     pub updated_at: String,
     /// 卡片总数
+    #[cfg_attr(feature = "ts-rs", ts(type = "number"))]
     pub total_cards: i64,
     /// 待分发卡片数
+    #[cfg_attr(feature = "ts-rs", ts(type = "number"))]
     pub pending_cards: i64,
     /// 已分发卡片数
+    #[cfg_attr(feature = "ts-rs", ts(type = "number"))]
     pub distributed_cards: i64,
     /// 已退卡卡片数
+    #[cfg_attr(feature = "ts-rs", ts(type = "number"))]
     pub returned_cards: i64,
 }
 
