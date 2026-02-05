@@ -46,14 +46,16 @@ get_cargo_version() {
     grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/'
 }
 
-# 更新 Cargo.toml 中的版本号
+# 更新 Cargo.toml 中的版本号（只更新 [package] 部分的版本）
 update_cargo_version() {
     local new_version=$1
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        sed -i '' "s/^version = \"[^\"]*\"/version = \"$new_version\"/" Cargo.toml
-    else
-        sed -i "s/^version = \"[^\"]*\"/version = \"$new_version\"/" Cargo.toml
-    fi
+    # 使用 awk 只更新 [package] section 中的 version，避免修改依赖版本
+    awk -v ver="$new_version" '
+        /^\[package\]/ { in_package=1 }
+        /^\[/ && !/^\[package\]/ { in_package=0 }
+        in_package && /^version = / { $0="version = \"" ver "\"" }
+        { print }
+    ' Cargo.toml > Cargo.toml.tmp && mv Cargo.toml.tmp Cargo.toml
 }
 
 # 更新 tauri.conf.json 中的版本号（如果存在 version 字段）
