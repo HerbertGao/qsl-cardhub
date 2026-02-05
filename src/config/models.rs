@@ -5,8 +5,13 @@
 use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "ts-rs")]
+use ts_rs::TS;
+
 /// 打印配置 Profile
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct Profile {
     /// 唯一标识符（UUID v4）
     pub id: String,
@@ -32,6 +37,8 @@ pub struct Profile {
 
 /// 平台信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct Platform {
     /// 操作系统：Windows | macOS | Linux
     pub os: String,
@@ -41,6 +48,8 @@ pub struct Platform {
 
 /// 打印机配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct PrinterConfig {
     /// 系统中的打印机名称
     pub name: String,
@@ -48,6 +57,8 @@ pub struct PrinterConfig {
 
 /// 打印模板配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct Template {
     /// 模板文件路径（相对于 config/templates/）
     pub path: String,

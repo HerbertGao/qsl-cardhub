@@ -19,7 +19,7 @@ pub use models::{
     SearchOrderRequest, SearchOrderResponseData,
     ContactInfo, CargoDetail, WaybillNoInfo,
     // 本地存储模型
-    SenderInfo, SFOrder, SFOrderWithCard, OrderStatus,
+    SenderInfo, RecipientInfo, SFOrder, SFOrderWithCard, OrderStatus,
     // 工具函数
     get_user_friendly_error,
 };

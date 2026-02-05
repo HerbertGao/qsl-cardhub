@@ -110,3 +110,15 @@ tauri-build = "2"
 # 开发依赖
 [dev-dependencies]
 tempfile = "3.8"
+ts-rs = "10"
+
+# Feature flags
+[features]
+default = []
+ts-rs = ["dep:ts-rs"]
+
+# ts-rs 作为可选依赖
+[dependencies.ts-rs]
+version = "10"
+optional = true
+features = ["chrono-impl"]

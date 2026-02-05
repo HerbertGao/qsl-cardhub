@@ -209,6 +209,12 @@ pub fn execute_import<P: AsRef<Path>>(file_path: P) -> Result<ExportStats, AppEr
 
     // 导入订单
     for order in &data.tables.sf_orders {
+        // 序列化为 JSON 字符串
+        let sender_info_json = serde_json::to_string(&order.sender_info)
+            .map_err(|e| AppError::Other(format!("序列化寄件人信息失败: {}", e)))?;
+        let recipient_info_json = serde_json::to_string(&order.recipient_info)
+            .map_err(|e| AppError::Other(format!("序列化收件人信息失败: {}", e)))?;
+
         tx.execute(
             "INSERT INTO sf_orders (id, order_id, waybill_no, card_id, status, pay_method, cargo_name, sender_info, recipient_info, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
@@ -220,8 +226,8 @@ pub fn execute_import<P: AsRef<Path>>(file_path: P) -> Result<ExportStats, AppEr
                 &order.status,
                 &order.pay_method,
                 &order.cargo_name,
-                &order.sender_info,
-                &order.recipient_info,
+                &sender_info_json,
+                &recipient_info_json,
                 &order.created_at,
                 &order.updated_at,
             ],

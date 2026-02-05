@@ -471,25 +471,25 @@ const waybillPrintDialogVisible = ref(false)
 const selectedWaybillNo = ref('')
 
 // 获取状态标签类型
-function getStatusType(status: SFOrderStatus): 'info' | 'warning' | 'success' | 'danger' {
+function getStatusType(status: string): 'info' | 'warning' | 'success' | 'danger' {
   const types: Record<SFOrderStatus, 'info' | 'warning' | 'success' | 'danger'> = {
     pending: 'warning',
     confirmed: 'success',
     cancelled: 'info',
     printed: 'success'
   }
-  return types[status] || 'info'
+  return types[status as SFOrderStatus] || 'info'
 }
 
 // 获取状态标签文本
-function getStatusLabel(status: SFOrderStatus): string {
+function getStatusLabel(status: string): string {
   const labels: Record<SFOrderStatus, string> = {
     pending: '待确认',
     confirmed: '已确认',
     cancelled: '已取消',
     printed: '已打印'
   }
-  return labels[status] || status
+  return labels[status as SFOrderStatus] || status
 }
 
 // 获取筛单结果标签
