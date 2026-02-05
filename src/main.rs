@@ -23,6 +23,7 @@ use commands::{
         save_pending_waybill_cmd,
     },
     data_transfer::{export_data, import_data, preview_import_data},
+    export::export_cards_to_excel,
     factory_reset::factory_reset,
     logger::{clear_logs, export_logs, get_log_file_path, get_logs, log_from_frontend},
     platform::get_platform_info,
@@ -223,6 +224,8 @@ fn main() {
             export_data,
             preview_import_data,
             import_data,
+            // 卡片导出 Excel
+            export_cards_to_excel,
             // 云端同步
             save_sync_config_cmd,
             load_sync_config_cmd,

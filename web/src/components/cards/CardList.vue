@@ -12,6 +12,16 @@
           </el-icon>
           <span>录入卡片</span>
         </el-button>
+        <el-button
+          :disabled="props.total === 0"
+          :loading="exporting"
+          @click="handleExport"
+        >
+          <el-icon>
+            <Download />
+          </el-icon>
+          <span>导出</span>
+        </el-button>
       </div>
       <div class="toolbar-right">
         <el-input
@@ -248,7 +258,15 @@ import type { CardWithProject, CardStatus, SinglePrinterConfig } from '@/types/m
 import { formatSerial } from '@/utils/format'
 import { useQtyDisplayMode } from '@/composables/useQtyDisplayMode'
 
-const { formatQty } = useQtyDisplayMode()
+const { formatQty, qtyDisplayMode } = useQtyDisplayMode()
+
+// 导出结果类型
+interface ExportResult {
+  success: boolean
+  file_path: string | null
+  error: string | null
+  cancelled: boolean
+}
 
 interface Props {
   cards: CardWithProject[]
@@ -256,6 +274,7 @@ interface Props {
   page: number
   pageSize: number
   loading: boolean
+  projectId: string | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -263,7 +282,8 @@ const props = withDefaults(defineProps<Props>(), {
   total: 0,
   page: 1,
   pageSize: 20,
-  loading: false
+  loading: false,
+  projectId: null
 })
 
 interface Emits {
@@ -292,12 +312,46 @@ const pageSize = ref<number>(props.pageSize)
 // 防抖计时器
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
+// 导出状态
+const exporting = ref<boolean>(false)
+
 // 搜索处理（防抖）
 const handleSearch = (): void => {
   if (searchTimer) clearTimeout(searchTimer)
   searchTimer = setTimeout(() => {
     emit('search', searchKeyword.value)
   }, 300)
+}
+
+// 导出卡片到 Excel
+const handleExport = async (): Promise<void> => {
+  if (!props.projectId) {
+    ElMessage.warning('请先选择一个项目')
+    return
+  }
+
+  exporting.value = true
+  try {
+    const result = await invoke<ExportResult>('export_cards_to_excel', {
+      projectId: props.projectId,
+      qtyDisplayMode: qtyDisplayMode.value
+    })
+
+    if (result.cancelled) {
+      // 用户取消，静默返回
+      return
+    }
+
+    if (result.success) {
+      ElMessage.success('导出成功')
+    } else if (result.error) {
+      ElMessage.error('导出失败: ' + result.error)
+    }
+  } catch (error) {
+    ElMessage.error('导出失败: ' + error)
+  } finally {
+    exporting.value = false
+  }
 }
 
 // 状态筛选处理

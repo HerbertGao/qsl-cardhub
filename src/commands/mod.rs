@@ -4,6 +4,7 @@
 
 pub mod cards;
 pub mod data_transfer;
+pub mod export;
 pub mod factory_reset;
 pub mod logger;
 pub mod platform;
