@@ -13,6 +13,7 @@ use crate::sf_express::{
     PdfRenderer, SFExpressClient, SFExpressConfig,
     CreateOrderRequest, UpdateOrderRequest, SearchOrderRequest,
     ContactInfo, CargoDetail, WaybillNoInfo, SenderInfo, SFOrder, SFOrderWithCard, OrderStatus,
+    RecipientInfo,
 };
 use crate::db;
 use crate::printer::backend::ImagePrintConfig;
@@ -495,25 +496,13 @@ pub struct CreateOrderParams {
     /// 寄件人 ID（从数据库加载）
     pub sender_id: String,
     /// 收件人信息
-    pub recipient: RecipientInfoParams,
+    pub recipient: RecipientInfo,
     /// 托寄物名称（可选，默认"QSL卡片"）
     pub cargo_name: Option<String>,
     /// 关联的卡片 ID（可选）
     pub card_id: Option<String>,
     /// 付款方式：1=寄方付, 2=收方付（可选，默认寄方付）
     pub pay_method: Option<i32>,
-}
-
-/// 收件人参数
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RecipientInfoParams {
-    pub name: String,
-    pub phone: String,
-    pub mobile: Option<String>,
-    pub province: String,
-    pub city: String,
-    pub district: String,
-    pub address: String,
 }
 
 /// 联系人展示信息（用于前端确认页面）
@@ -649,21 +638,6 @@ pub fn sf_create_order(params: CreateOrderParams) -> Result<CreateOrderResponse,
     let response = client.create_order(&request)
         .map_err(|e| format!("下单失败: {}", e))?;
 
-    // 保存到本地数据库
-    let sender_json = serde_json::to_string(&sender)
-        .map_err(|e| format!("序列化寄件人失败: {}", e))?;
-    let recipient_json = serde_json::to_string(&params.recipient)
-        .map_err(|e| format!("序列化收件人失败: {}", e))?;
-
-    let local_order = db::create_order(
-        order_id.clone(),
-        params.card_id,
-        params.pay_method,
-        Some(cargo_name.clone()),
-        sender_json,
-        recipient_json,
-    ).map_err(|e| format!("保存订单失败: {}", e))?;
-
     // 提取运单号
     let waybill_no_list: Vec<String> = response.waybill_no_info_list
         .iter()
@@ -673,8 +647,8 @@ pub fn sf_create_order(params: CreateOrderParams) -> Result<CreateOrderResponse,
 
     log::info!("订单创建成功: order_id={}, waybill_nos={:?}", order_id, waybill_no_list);
 
-    // 构建展示信息
-    let sender_info = ContactDisplayInfo {
+    // 构建展示信息（在移动 sender 和 recipient 之前）
+    let sender_display = ContactDisplayInfo {
         name: sender.name.clone(),
         phone: sender.phone.clone(),
         full_address: format!(
@@ -683,7 +657,7 @@ pub fn sf_create_order(params: CreateOrderParams) -> Result<CreateOrderResponse,
         ),
     };
 
-    let recipient_info = ContactDisplayInfo {
+    let recipient_display = ContactDisplayInfo {
         name: params.recipient.name.clone(),
         phone: params.recipient.phone.clone(),
         full_address: format!(
@@ -695,13 +669,23 @@ pub fn sf_create_order(params: CreateOrderParams) -> Result<CreateOrderResponse,
         ),
     };
 
+    // 保存到本地数据库
+    let local_order = db::create_order(
+        order_id.clone(),
+        params.card_id,
+        params.pay_method,
+        Some(cargo_name.clone()),
+        sender,
+        params.recipient,
+    ).map_err(|e| format!("保存订单失败: {}", e))?;
+
     Ok(CreateOrderResponse {
         order_id: response.order_id,
         waybill_no_list,
         filter_result: response.filter_result,
         local_order,
-        sender_info,
-        recipient_info,
+        sender_info: sender_display,
+        recipient_info: recipient_display,
         cargo_name,
         pay_method: params.pay_method.unwrap_or(1),
         express_type_id: 2, // 顺丰标快

@@ -5,7 +5,7 @@
 use crate::db::models::{format_datetime, now_china};
 use crate::db::sqlite::get_connection;
 use crate::error::AppError;
-use crate::sf_express::{OrderStatus, SFOrder, SFOrderWithCard, SenderInfo};
+use crate::sf_express::{OrderStatus, RecipientInfo, SFOrder, SFOrderWithCard, SenderInfo};
 use uuid::Uuid;
 
 // ==================== 寄件人操作 ====================
@@ -268,11 +268,17 @@ pub fn create_order(
     card_id: Option<String>,
     pay_method: Option<i32>,
     cargo_name: Option<String>,
-    sender_info: String,
-    recipient_info: String,
+    sender_info: SenderInfo,
+    recipient_info: RecipientInfo,
 ) -> Result<SFOrder, AppError> {
     let conn = get_connection()?;
     let now = format_datetime(&now_china());
+
+    // 序列化为 JSON 字符串存入数据库
+    let sender_info_json = serde_json::to_string(&sender_info)
+        .map_err(|e| AppError::Other(format!("序列化寄件人信息失败: {}", e)))?;
+    let recipient_info_json = serde_json::to_string(&recipient_info)
+        .map_err(|e| AppError::Other(format!("序列化收件人信息失败: {}", e)))?;
 
     let order = SFOrder {
         id: Uuid::new_v4().to_string(),
@@ -301,8 +307,8 @@ pub fn create_order(
             &order.status,
             &order.pay_method,
             &order.cargo_name,
-            &order.sender_info,
-            &order.recipient_info,
+            &sender_info_json,
+            &recipient_info_json,
             &order.created_at,
             &order.updated_at,
         ],
@@ -613,6 +619,22 @@ pub fn delete_order(id: &str) -> Result<(), AppError> {
 
 // 辅助函数：将数据库行转换为订单
 fn row_to_order(row: &rusqlite::Row) -> rusqlite::Result<SFOrder> {
+    let sender_info_json: String = row.get(7)?;
+    let recipient_info_json: String = row.get(8)?;
+
+    let sender_info: SenderInfo = serde_json::from_str(&sender_info_json)
+        .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+            7,
+            rusqlite::types::Type::Text,
+            Box::new(e),
+        ))?;
+    let recipient_info: RecipientInfo = serde_json::from_str(&recipient_info_json)
+        .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+            8,
+            rusqlite::types::Type::Text,
+            Box::new(e),
+        ))?;
+
     Ok(SFOrder {
         id: row.get(0)?,
         order_id: row.get(1)?,
@@ -621,8 +643,8 @@ fn row_to_order(row: &rusqlite::Row) -> rusqlite::Result<SFOrder> {
         status: row.get(4)?,
         pay_method: row.get(5)?,
         cargo_name: row.get(6)?,
-        sender_info: row.get(7)?,
-        recipient_info: row.get(8)?,
+        sender_info,
+        recipient_info,
         created_at: row.get(9)?,
         updated_at: row.get(10)?,
     })
@@ -630,6 +652,22 @@ fn row_to_order(row: &rusqlite::Row) -> rusqlite::Result<SFOrder> {
 
 // 辅助函数：将数据库行转换为带卡片信息的订单
 fn row_to_order_with_card(row: &rusqlite::Row) -> rusqlite::Result<SFOrderWithCard> {
+    let sender_info_json: String = row.get(7)?;
+    let recipient_info_json: String = row.get(8)?;
+
+    let sender_info: SenderInfo = serde_json::from_str(&sender_info_json)
+        .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+            7,
+            rusqlite::types::Type::Text,
+            Box::new(e),
+        ))?;
+    let recipient_info: RecipientInfo = serde_json::from_str(&recipient_info_json)
+        .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+            8,
+            rusqlite::types::Type::Text,
+            Box::new(e),
+        ))?;
+
     Ok(SFOrderWithCard {
         id: row.get(0)?,
         order_id: row.get(1)?,
@@ -638,8 +676,8 @@ fn row_to_order_with_card(row: &rusqlite::Row) -> rusqlite::Result<SFOrderWithCa
         status: row.get(4)?,
         pay_method: row.get(5)?,
         cargo_name: row.get(6)?,
-        sender_info: row.get(7)?,
-        recipient_info: row.get(8)?,
+        sender_info,
+        recipient_info,
         created_at: row.get(9)?,
         updated_at: row.get(10)?,
         callsign: row.get(11)?,

@@ -1,0 +1,4 @@
+# ts-rs 类型导出配置
+# 设置 TypeScript 类型文件的默认导出目录
+[env]
+TS_RS_EXPORT_DIR = { value = "web/src/types/generated/", relative = true }

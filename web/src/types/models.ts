@@ -1,71 +1,47 @@
-// 卡片状态枚举
-export type CardStatus = 'pending' | 'distributed' | 'returned'
+// ==================== 自动生成的类型（从 Rust 导出） ====================
+// 这些类型由 ts-rs 从 Rust 代码自动生成
+// 运行 `pnpm generate:types` 重新生成
 
-// 分发信息
-export interface DistributionInfo {
-  method: string
-  address?: string | null
-  remarks?: string | null
-  proxy_callsign?: string | null
-  distributed_at: string
+// 数据库模型
+export type { Card } from './generated/Card'
+export type { CardMetadata } from './generated/CardMetadata'
+export type { CardStatus } from './generated/CardStatus'
+export type { CardWithProject } from './generated/CardWithProject'
+export type { DistributionInfo } from './generated/DistributionInfo'
+export type { ReturnInfo } from './generated/ReturnInfo'
+export type { AddressEntry } from './generated/AddressEntry'
+export type { Project } from './generated/Project'
+export type { ProjectWithStats } from './generated/ProjectWithStats'
+export type { PagedCards } from './generated/PagedCards'
+
+// 顺丰模型
+export type { SenderInfo } from './generated/SenderInfo'
+export type { RecipientInfo } from './generated/RecipientInfo'
+export type { SFOrder } from './generated/SFOrder'
+export type { SFOrderWithCard } from './generated/SFOrderWithCard'
+export type { OrderStatus } from './generated/OrderStatus'
+// 兼容别名
+export type { OrderStatus as SFOrderStatus } from './generated/OrderStatus'
+
+// 配置模型
+export type { Profile } from './generated/Profile'
+export type { Platform } from './generated/Platform'
+export type { PrinterConfig } from './generated/PrinterConfig'
+export type { Template } from './generated/Template'
+
+// ==================== 手动维护的类型（未在 Rust 中定义或参数类型） ====================
+
+// 兼容别名
+export type PlatformInfo = import('./generated/Platform').Platform
+export type TemplatePathConfig = import('./generated/Template').Template
+
+// 单配置模式的打印机配置
+export interface SinglePrinterConfig {
+  printer: import('./generated/PrinterConfig').PrinterConfig
+  platform: import('./generated/Platform').Platform
 }
 
-// 退卡信息
-export interface ReturnInfo {
-  method: string
-  remarks?: string | null
-  returned_at: string
-}
-
-// 地址缓存记录
-export interface AddressEntry {
-  source: string
-  chinese_address?: string | null
-  english_address?: string | null
-  name?: string | null
-  mail_method?: string | null
-  updated_at?: string | null
-  cached_at: string
-}
-
-// 卡片元数据
-export interface CardMetadata {
-  distribution?: DistributionInfo | null
-  return?: ReturnInfo | null
-  address_cache?: AddressEntry[]
-  pending_waybill_no?: string | null
-}
-
-// 卡片数据模型
-export interface Card {
-  id: string
-  project_id: string
-  creator_id?: string | null
-  callsign: string
-  qty: number
-  serial?: number | null
-  status: CardStatus
-  metadata?: CardMetadata | null
-  created_at: string
-  updated_at: string
-}
-
-// 带项目信息的卡片
-export interface CardWithProject {
-  id: string
-  project_id: string
-  project_name: string
-  creator_id?: string | null
-  callsign: string
-  qty: number
-  serial?: number | null
-  status: CardStatus
-  metadata?: CardMetadata | null
-  created_at: string
-  updated_at: string
-}
-
-// 卡片筛选条件
+// 卡片筛选条件（前端参数类型）
 export interface CardFilter {
   project_id?: string | null
   callsign?: string | null
@@ -74,70 +50,6 @@ export interface CardFilter {
   page_size?: number
 }
 
-// 分页卡片结果
-export interface PagedCards {
-  items: CardWithProject[]
-  total: number
-  page: number
-  page_size: number
-  total_pages: number
-}
-
-// 项目数据模型
-export interface Project {
-  id: string
-  name: string
-  created_at: string
-  updated_at: string
-}
-
-// 带统计信息的项目
-export interface ProjectWithStats {
-  id: string
-  name: string
-  created_at: string
-  updated_at: string
-  total_cards: number
-  pending_cards: number
-  distributed_cards: number
-  returned_cards: number
-}
-
-// 打印机配置
-export interface PrinterConfig {
-  name: string
-}
-
-// 平台信息
-export interface PlatformInfo {
-  os: string
-  arch: string
-}
-
-// 模板路径配置
-export interface TemplatePathConfig {
-  path: string
-}
-
-// Profile 配置（将被废弃，改为单配置模式）
-export interface Profile {
-  id: string
-  name: string
-  printer: PrinterConfig
-  platform: PlatformInfo
-  template: TemplatePathConfig
-  template_display_name?: string
-  created_at: string
-  updated_at: string
-}
-
-// 单配置模式的打印机配置
-export interface SinglePrinterConfig {
-  printer: PrinterConfig
-  platform: PlatformInfo
-}
-
-// 模板字段
 // 模板元素
 export interface TemplateElement {
   id: string
@@ -211,22 +123,7 @@ export interface LogEntry {
   target?: string
 }
 
-// ==================== 顺丰速运相关类型 ====================
-
-// 寄件人信息
-export interface SenderInfo {
-  id: string
-  name: string
-  phone: string
-  mobile?: string | null
-  province: string
-  city: string
-  district: string
-  address: string
-  is_default: boolean
-  created_at: string
-  updated_at: string
-}
+// ==================== 顺丰速运相关参数类型 ====================
 
 // 创建/更新寄件人参数
 export interface SenderParams {
@@ -239,46 +136,10 @@ export interface SenderParams {
   address: string
 }
 
-// 收件人信息
-export interface RecipientInfo {
-  name: string
-  phone: string
-  mobile?: string | null
-  province: string
-  city: string
-  district: string
-  address: string
-}
-
-// 顺丰订单状态
-export type SFOrderStatus = 'pending' | 'confirmed' | 'cancelled' | 'printed'
-
-// 顺丰订单
-export interface SFOrder {
-  id: string
-  order_id: string
-  waybill_no?: string | null
-  card_id?: string | null
-  status: SFOrderStatus
-  pay_method?: number | null
-  cargo_name?: string | null
-  sender_info: SenderInfo
-  recipient_info: RecipientInfo
-  created_at: string
-  updated_at: string
-}
-
-// 顺丰订单（带卡片信息）
-export interface SFOrderWithCard extends SFOrder {
-  callsign?: string | null
-  project_name?: string | null
-  qty?: number | null
-}
-
 // 创建订单参数
 export interface CreateOrderParams {
   sender_id: string
-  recipient: RecipientInfo
+  recipient: import('./generated/RecipientInfo').RecipientInfo
   cargo_name?: string | null
   pay_method?: number | null
   card_id?: string | null
@@ -296,7 +157,7 @@ export interface CreateOrderResponse {
   order_id: string
   waybill_no_list: string[]
   filter_result?: number | null
-  local_order: SFOrder
+  local_order: import('./generated/SFOrder').SFOrder
   sender_info: ContactDisplayInfo
   recipient_info: ContactDisplayInfo
   cargo_name: string
@@ -311,7 +172,7 @@ export interface ConfirmOrderResponse {
   order_id: string
   waybill_no_list: string[]
   res_status?: number | null
-  local_order: SFOrder
+  local_order: import('./generated/SFOrder').SFOrder
 }
 
 // 查询订单响应
@@ -329,7 +190,7 @@ export interface SearchOrderResponse {
 
 // 订单列表参数
 export interface ListOrdersParams {
-  status?: SFOrderStatus | null
+  status?: import('./generated/OrderStatus').OrderStatus | null
   card_id?: string | null
   page?: number
   page_size?: number
@@ -337,7 +198,7 @@ export interface ListOrdersParams {
 
 // 订单列表响应
 export interface ListOrdersResponse {
-  items: SFOrderWithCard[]
+  items: import('./generated/SFOrderWithCard').SFOrderWithCard[]
   total: number
   page: number
   page_size: number

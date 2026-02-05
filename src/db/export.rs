@@ -5,11 +5,15 @@
 use crate::db::models::{Card, Project};
 use crate::db::sqlite::{get_connection, get_db_version, format_version};
 use crate::error::AppError;
-use crate::sf_express::{SFOrder, SenderInfo};
+use crate::sf_express::{RecipientInfo, SFOrder, SenderInfo};
 use serde::{Deserialize, Serialize};
 
 /// 导出格式版本
-pub const EXPORT_FORMAT_VERSION: &str = "1.0";
+///
+/// 版本历史:
+/// - 1.0: 初始版本
+/// - 1.1: SFOrder.sender_info/recipient_info 从 JSON 字符串改为嵌套对象
+pub const EXPORT_FORMAT_VERSION: &str = "1.1";
 
 /// 导出数据结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -204,6 +208,22 @@ fn export_orders(conn: &rusqlite::Connection) -> Result<Vec<SFOrder>, AppError> 
 
     let orders = stmt
         .query_map([], |row| {
+            let sender_info_json: String = row.get(7)?;
+            let recipient_info_json: String = row.get(8)?;
+
+            let sender_info: SenderInfo = serde_json::from_str(&sender_info_json)
+                .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+                    7,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                ))?;
+            let recipient_info: RecipientInfo = serde_json::from_str(&recipient_info_json)
+                .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+                    8,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                ))?;
+
             Ok(SFOrder {
                 id: row.get(0)?,
                 order_id: row.get(1)?,
@@ -212,8 +232,8 @@ fn export_orders(conn: &rusqlite::Connection) -> Result<Vec<SFOrder>, AppError> 
                 status: row.get(4)?,
                 pay_method: row.get(5)?,
                 cargo_name: row.get(6)?,
-                sender_info: row.get(7)?,
-                recipient_info: row.get(8)?,
+                sender_info,
+                recipient_info,
                 created_at: row.get(9)?,
                 updated_at: row.get(10)?,
             })
@@ -241,6 +261,6 @@ mod tests {
 
     #[test]
     fn test_export_format_version() {
-        assert_eq!(EXPORT_FORMAT_VERSION, "1.0");
+        assert_eq!(EXPORT_FORMAT_VERSION, "1.1");
     }
 }

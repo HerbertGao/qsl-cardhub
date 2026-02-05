@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "sync-version": "node ../scripts/sync-version.js",
+    "generate:types": "cd .. && cargo test export_bindings --features ts-rs",
     "predev": "npm run sync-version",
     "dev": "vite",
     "prebuild": "npm run sync-version",

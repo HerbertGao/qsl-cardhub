@@ -4,6 +4,9 @@
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "ts-rs")]
+use ts_rs::TS;
+
 /// 顺丰速运配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SFExpressConfig {
@@ -383,6 +386,8 @@ pub struct ApiBusinessResponse<T> {
 
 /// 寄件人信息（本地存储）
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct SenderInfo {
     /// ID
     pub id: String,
@@ -408,10 +413,33 @@ pub struct SenderInfo {
     pub updated_at: String,
 }
 
+/// 收件人信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
+pub struct RecipientInfo {
+    /// 姓名
+    pub name: String,
+    /// 电话
+    pub phone: String,
+    /// 手机
+    pub mobile: Option<String>,
+    /// 省份
+    pub province: String,
+    /// 城市
+    pub city: String,
+    /// 区县
+    pub district: String,
+    /// 详细地址
+    pub address: String,
+}
+
 // ==================== 订单模型 ====================
 
 /// 订单状态
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 #[serde(rename_all = "lowercase")]
 pub enum OrderStatus {
     /// 待确认
@@ -451,6 +479,8 @@ impl std::str::FromStr for OrderStatus {
 
 /// 顺丰订单（本地存储）
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct SFOrder {
     /// ID
     pub id: String,
@@ -466,10 +496,10 @@ pub struct SFOrder {
     pub pay_method: Option<i32>,
     /// 托寄物名称
     pub cargo_name: Option<String>,
-    /// 寄件人信息（JSON）
-    pub sender_info: String,
-    /// 收件人信息（JSON）
-    pub recipient_info: String,
+    /// 寄件人信息
+    pub sender_info: SenderInfo,
+    /// 收件人信息
+    pub recipient_info: RecipientInfo,
     /// 创建时间
     pub created_at: String,
     /// 更新时间
@@ -478,6 +508,8 @@ pub struct SFOrder {
 
 /// 顺丰订单（带卡片信息）
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct SFOrderWithCard {
     /// ID
     pub id: String,
@@ -493,10 +525,10 @@ pub struct SFOrderWithCard {
     pub pay_method: Option<i32>,
     /// 托寄物名称
     pub cargo_name: Option<String>,
-    /// 寄件人信息（JSON）
-    pub sender_info: String,
-    /// 收件人信息（JSON）
-    pub recipient_info: String,
+    /// 寄件人信息
+    pub sender_info: SenderInfo,
+    /// 收件人信息
+    pub recipient_info: RecipientInfo,
     /// 创建时间
     pub created_at: String,
     /// 更新时间

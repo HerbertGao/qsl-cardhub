@@ -5,6 +5,9 @@
 use chrono::{DateTime, FixedOffset, Utc};
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "ts-rs")]
+use ts_rs::TS;
+
 /// 东八区偏移量（秒）
 const CHINA_TIMEZONE_OFFSET: i32 = 8 * 3600;
 
@@ -26,6 +29,8 @@ pub fn parse_datetime(s: &str) -> Result<DateTime<FixedOffset>, chrono::ParseErr
 
 /// 转卡项目
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct Project {
     /// 项目 ID（UUID 格式）
     pub id: String,
@@ -52,6 +57,8 @@ impl Project {
 
 /// 带统计信息的项目
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct ProjectWithStats {
     /// 项目 ID
     pub id: String,
@@ -62,12 +69,16 @@ pub struct ProjectWithStats {
     /// 更新时间
     pub updated_at: String,
     /// 卡片总数
+    #[cfg_attr(feature = "ts-rs", ts(type = "number"))]
     pub total_cards: i64,
     /// 待分发卡片数
+    #[cfg_attr(feature = "ts-rs", ts(type = "number"))]
     pub pending_cards: i64,
     /// 已分发卡片数
+    #[cfg_attr(feature = "ts-rs", ts(type = "number"))]
     pub distributed_cards: i64,
     /// 已退卡卡片数
+    #[cfg_attr(feature = "ts-rs", ts(type = "number"))]
     pub returned_cards: i64,
 }
 
@@ -88,6 +99,8 @@ impl From<Project> for ProjectWithStats {
 
 /// 卡片状态
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 #[serde(rename_all = "lowercase")]
 pub enum CardStatus {
     /// 已录入（待分发）
@@ -127,6 +140,8 @@ impl CardStatus {
 
 /// 分发信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct DistributionInfo {
     /// 处理方式：直接分发、邮寄、自取
     pub method: String,
@@ -145,6 +160,8 @@ pub struct DistributionInfo {
 
 /// 退卡信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct ReturnInfo {
     /// 处理方式：NOT FOUND、CALLSIGN INVALID、REFUSED、OTHER
     pub method: String,
@@ -157,6 +174,8 @@ pub struct ReturnInfo {
 
 /// 地址缓存记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct AddressEntry {
     /// 数据来源（如 "qrz.cn", "qrz.com", "QRZ卡片查询"）
     pub source: String,
@@ -181,6 +200,8 @@ pub struct AddressEntry {
 
 /// 卡片元数据
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct CardMetadata {
     /// 分发信息
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -200,6 +221,8 @@ pub struct CardMetadata {
 
 /// 卡片
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct Card {
     /// 卡片 ID（UUID 格式）
     pub id: String,
@@ -352,6 +375,8 @@ impl Card {
 
 /// 带项目名称的卡片（用于列表显示）
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct CardWithProject {
     /// 卡片 ID
     pub id: String,
@@ -411,10 +436,13 @@ impl Default for Pagination {
 
 /// 分页结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct PagedCards {
     /// 卡片列表
     pub items: Vec<CardWithProject>,
     /// 总记录数
+    #[cfg_attr(feature = "ts-rs", ts(type = "number"))]
     pub total: u64,
     /// 当前页码
     pub page: u32,

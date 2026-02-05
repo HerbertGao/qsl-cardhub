@@ -45,6 +45,7 @@
           :page="cardPage"
           :page-size="cardPageSize"
           :loading="cardLoading"
+          :project-id="selectedProjectId"
           @add="handleAddCard"
           @view="handleViewCard"
           @distribute="handleDistributeCard"
