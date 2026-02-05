@@ -2,12 +2,135 @@
 //
 // 从 JSON 格式文件导入数据到本地数据库
 
-use crate::db::export::{ExportData, ExportStats, EXPORT_FORMAT_VERSION};
+use crate::db::export::{ExportData, ExportStats, ExportTables, EXPORT_FORMAT_VERSION};
+use crate::db::models::{Card, Project};
 use crate::db::sqlite::{format_version, get_connection, get_db_version};
 use crate::error::AppError;
+use crate::sf_express::{RecipientInfo, SFOrder, SenderInfo};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
+
+/// 支持的导出格式版本
+const SUPPORTED_VERSIONS: &[&str] = &["1.0", "1.1"];
+
+// ==================== v1.0 兼容类型 ====================
+
+/// v1.0 格式的订单（sender_info/recipient_info 是 JSON 字符串）
+#[derive(Debug, Clone, Deserialize)]
+struct SFOrderV1_0 {
+    pub id: String,
+    pub order_id: String,
+    pub waybill_no: Option<String>,
+    pub card_id: Option<String>,
+    pub status: String,
+    pub pay_method: Option<i32>,
+    pub cargo_name: Option<String>,
+    pub sender_info: String,      // v1.0: JSON 字符串
+    pub recipient_info: String,   // v1.0: JSON 字符串
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// v1.0 格式的表数据
+#[derive(Debug, Clone, Deserialize)]
+struct ExportTablesV1_0 {
+    pub projects: Vec<Project>,
+    pub cards: Vec<Card>,
+    pub sf_senders: Vec<SenderInfo>,
+    pub sf_orders: Vec<SFOrderV1_0>,
+}
+
+/// v1.0 格式的导出数据
+#[derive(Debug, Clone, Deserialize)]
+struct ExportDataV1_0 {
+    pub version: String,
+    pub db_version: i32,
+    pub db_version_display: String,
+    pub app_version: String,
+    pub exported_at: String,
+    pub tables: ExportTablesV1_0,
+}
+
+impl ExportDataV1_0 {
+    /// 转换为当前版本格式
+    fn into_current(self) -> Result<ExportData, AppError> {
+        let mut sf_orders = Vec::with_capacity(self.tables.sf_orders.len());
+
+        for order in self.tables.sf_orders {
+            let sender_info: SenderInfo = serde_json::from_str(&order.sender_info)
+                .map_err(|e| AppError::Other(format!(
+                    "解析订单 {} 的寄件人信息失败: {}", order.id, e
+                )))?;
+            let recipient_info: RecipientInfo = serde_json::from_str(&order.recipient_info)
+                .map_err(|e| AppError::Other(format!(
+                    "解析订单 {} 的收件人信息失败: {}", order.id, e
+                )))?;
+
+            sf_orders.push(SFOrder {
+                id: order.id,
+                order_id: order.order_id,
+                waybill_no: order.waybill_no,
+                card_id: order.card_id,
+                status: order.status,
+                pay_method: order.pay_method,
+                cargo_name: order.cargo_name,
+                sender_info,
+                recipient_info,
+                created_at: order.created_at,
+                updated_at: order.updated_at,
+            });
+        }
+
+        Ok(ExportData {
+            version: EXPORT_FORMAT_VERSION.to_string(), // 升级到当前版本
+            db_version: self.db_version,
+            db_version_display: self.db_version_display,
+            app_version: self.app_version,
+            exported_at: self.exported_at,
+            tables: ExportTables {
+                projects: self.tables.projects,
+                cards: self.tables.cards,
+                sf_senders: self.tables.sf_senders,
+                sf_orders,
+            },
+        })
+    }
+}
+
+/// 解析导出数据，支持多版本
+fn parse_export_data(content: &str) -> Result<ExportData, AppError> {
+    // 先解析版本号
+    let version_check: serde_json::Value = serde_json::from_str(content)
+        .map_err(|e| AppError::Other(format!("文件格式错误: {}", e)))?;
+
+    let version = version_check.get("version")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| AppError::Other("文件缺少版本信息".to_string()))?;
+
+    // 检查是否支持该版本
+    if !SUPPORTED_VERSIONS.contains(&version) {
+        return Err(AppError::Other(format!(
+            "不支持的导出格式版本: {}，当前支持版本: {}",
+            version,
+            SUPPORTED_VERSIONS.join(", ")
+        )));
+    }
+
+    // 根据版本解析
+    match version {
+        "1.0" => {
+            log::info!("📦 检测到 v1.0 格式，将自动转换为当前格式");
+            let data_v1: ExportDataV1_0 = serde_json::from_str(content)
+                .map_err(|e| AppError::Other(format!("解析 v1.0 格式失败: {}", e)))?;
+            data_v1.into_current()
+        }
+        "1.1" | _ => {
+            serde_json::from_str(content)
+                .map_err(|e| AppError::Other(format!("解析文件失败: {}", e)))
+        }
+    }
+}
 
 /// 导入预览信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,18 +168,8 @@ pub fn preview_import<P: AsRef<Path>>(file_path: P) -> Result<ImportPreview, App
         AppError::Other(format!("无法读取文件: {}", e))
     })?;
 
-    // 解析 JSON
-    let data: ExportData = serde_json::from_str(&content).map_err(|e| {
-        AppError::Other(format!("文件格式错误，请选择有效的 QSL-CardHub 导出文件: {}", e))
-    })?;
-
-    // 验证格式版本
-    if data.version != EXPORT_FORMAT_VERSION {
-        return Err(AppError::Other(format!(
-            "不支持的导出格式版本: {}，当前支持版本: {}",
-            data.version, EXPORT_FORMAT_VERSION
-        )));
-    }
+    // 解析 JSON（支持多版本）
+    let data = parse_export_data(&content)?;
 
     // 获取本地数据库版本
     let conn = get_connection()?;
@@ -109,10 +222,8 @@ pub fn execute_import<P: AsRef<Path>>(file_path: P) -> Result<ExportStats, AppEr
         AppError::Other(format!("无法读取文件: {}", e))
     })?;
 
-    // 解析 JSON
-    let data: ExportData = serde_json::from_str(&content).map_err(|e| {
-        AppError::Other(format!("文件格式错误: {}", e))
-    })?;
+    // 解析 JSON（支持多版本）
+    let data = parse_export_data(&content)?;
 
     // 验证版本
     let conn = get_connection()?;

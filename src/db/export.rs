@@ -9,7 +9,11 @@ use crate::sf_express::{RecipientInfo, SFOrder, SenderInfo};
 use serde::{Deserialize, Serialize};
 
 /// 导出格式版本
-pub const EXPORT_FORMAT_VERSION: &str = "1.0";
+///
+/// 版本历史:
+/// - 1.0: 初始版本
+/// - 1.1: SFOrder.sender_info/recipient_info 从 JSON 字符串改为嵌套对象
+pub const EXPORT_FORMAT_VERSION: &str = "1.1";
 
 /// 导出数据结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -257,6 +261,6 @@ mod tests {
 
     #[test]
     fn test_export_format_version() {
-        assert_eq!(EXPORT_FORMAT_VERSION, "1.0");
+        assert_eq!(EXPORT_FORMAT_VERSION, "1.1");
     }
 }
