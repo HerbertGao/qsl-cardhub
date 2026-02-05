@@ -471,8 +471,9 @@ pub fn list_orders(filter: OrderFilter, pagination: OrderPagination) -> Result<P
             .prepare(&count_sql)
             .map_err(|e| AppError::Other(format!("准备计数语句失败: {}", e)))?;
         let params_ref: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
-        stmt.query_row(params_ref.as_slice(), |row| row.get(0))
-            .map_err(|e| AppError::Other(format!("查询计数失败: {}", e)))?
+        let count: i64 = stmt.query_row(params_ref.as_slice(), |row| row.get(0))
+            .map_err(|e| AppError::Other(format!("查询计数失败: {}", e)))?;
+        count as u64
     };
 
     // 计算分页
@@ -556,8 +557,9 @@ pub fn list_orders_with_cards(filter: OrderFilter, pagination: OrderPagination) 
             .prepare(&count_sql)
             .map_err(|e| AppError::Other(format!("准备计数语句失败: {}", e)))?;
         let params_ref: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
-        stmt.query_row(params_ref.as_slice(), |row| row.get(0))
-            .map_err(|e| AppError::Other(format!("查询计数失败: {}", e)))?
+        let count: i64 = stmt.query_row(params_ref.as_slice(), |row| row.get(0))
+            .map_err(|e| AppError::Other(format!("查询计数失败: {}", e)))?;
+        count as u64
     };
 
     // 计算分页
