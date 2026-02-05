@@ -1,6 +1,6 @@
 [package]
 name = "qsl-cardhub"
-version = "0.6.7"
+version = "0.6.8"
 edition = "2024"
 authors = ["Herbert Software"]
 description = "QSL 分卡助手 - 业余无线电 QSL 卡片管理工具"
