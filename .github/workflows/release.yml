@@ -25,6 +25,9 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
+      - name: 安装 Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: 安装 pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -40,6 +43,14 @@ jobs:
       - name: 安装依赖
         working-directory: web
         run: pnpm install --frozen-lockfile
+
+      - name: 验证 TypeScript 类型同步
+        run: |
+          cargo test export_bindings --features ts-rs
+          if ! git diff --exit-code web/src/types/generated/; then
+            echo "::error::生成的 TypeScript 类型与 Rust 定义不同步。请运行 'cargo test export_bindings --features ts-rs' 并提交更新后的文件。"
+            exit 1
+          fi
 
       - name: TypeScript 类型检查
         working-directory: web
