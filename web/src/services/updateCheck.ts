@@ -1,4 +1,5 @@
 import { getVersion } from '@tauri-apps/api/app'
+import { invoke } from '@tauri-apps/api/core'
 import { check } from '@tauri-apps/plugin-updater'
 import { ElMessage } from 'element-plus'
 import {
@@ -11,6 +12,42 @@ import {
 
 const GITHUB_OWNER = 'HerbertGao'
 const GITHUB_REPO = 'QSL-CardHub'
+
+/**
+ * 获取当前平台对应的 GitHub Release 资产文件名匹配关键词。
+ * 返回 { platform, extension } 或 null（无法识别平台时）。
+ */
+async function getPlatformAssetKeyword(): Promise<{ platform: string; extension: string } | null> {
+  try {
+    const info = await invoke<{ os: string; arch: string }>('get_platform_info')
+    const os = info.os.toLowerCase()
+    const arch = info.arch.toLowerCase()
+
+    if (os === 'macos' || os === 'darwin') {
+      if (arch === 'arm64' || arch === 'aarch64') return { platform: 'macos-arm64', extension: '.dmg' }
+      if (arch === 'x86_64') return { platform: 'macos-x64', extension: '.dmg' }
+    } else if (os === 'windows') {
+      if (arch === 'x86_64') return { platform: 'windows-x64', extension: '-setup.exe' }
+      if (arch === 'arm64' || arch === 'aarch64') return { platform: 'windows-arm64', extension: '-setup.exe' }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 检查 GitHub Release 的 assets 中是否包含当前平台的安装包。
+ */
+function hasAssetForPlatform(
+  assets: Array<{ name: string }>,
+  platformKeyword: string,
+  extensionKeyword: string
+): boolean {
+  return assets.some(
+    (asset) => asset.name.includes(platformKeyword) && asset.name.endsWith(extensionKeyword)
+  )
+}
 
 function compareVersions(v1: string, v2: string): number {
   const parts1 = v1.replace(/^v/, '').split('.').map(Number)
@@ -70,6 +107,13 @@ export async function checkForUpdate(options: { silent: boolean }): Promise<void
     const release = await response.json()
     const latestVersion = release.tag_name.replace(/^v/, '')
     if (compareVersions(latestVersion, currentVersion) > 0) {
+      // 验证当前平台的安装包是否已上传（避免 CI/CD 构建期间误报）
+      const keyword = await getPlatformAssetKeyword()
+      const assets = release.assets || []
+      if (keyword && !hasAssetForPlatform(assets, keyword.platform, keyword.extension)) {
+        console.warn(`新版本 ${latestVersion} 已发布，但当前平台 (${keyword.platform}) 的安装包尚未就绪`)
+        return
+      }
       setPendingTauriUpdate(null)
       const updateInfo: UpdateInfo = {
         version: latestVersion,
@@ -101,6 +145,13 @@ export async function checkForUpdate(options: { silent: boolean }): Promise<void
       const release = await response.json()
       const latestVersion = release.tag_name.replace(/^v/, '')
       if (compareVersions(latestVersion, currentVersion) > 0) {
+        // 验证当前平台的安装包是否已上传（避免 CI/CD 构建期间误报）
+        const keyword = await getPlatformAssetKeyword()
+        const assets = release.assets || []
+        if (keyword && !hasAssetForPlatform(assets, keyword.platform, keyword.extension)) {
+          console.warn(`新版本 ${latestVersion} 已发布，但当前平台 (${keyword.platform}) 的安装包尚未就绪`)
+          return
+        }
         const updateInfo: UpdateInfo = {
           version: latestVersion,
           notes: release.body || '无更新说明',

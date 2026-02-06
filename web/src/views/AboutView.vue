@@ -125,17 +125,6 @@
           @close="updateState.error = null"
         />
 
-        <!-- 已是最新版本提示 -->
-        <el-alert
-          v-if="showLatestMessage"
-          title="已是最新版本"
-          type="success"
-          style="margin-top: 20px"
-          show-icon
-          closable
-          @close="showLatestMessage = false"
-        />
-
         <!-- 危险操作区域 -->
         <el-card
           style="margin-top: 30px"
@@ -212,6 +201,7 @@ import wechatQR from '@/assets/wechat.jpg'
 import {
   updateState,
   markAsViewed,
+  clearUpdate,
   setError,
   setDownloading,
   setDownloadProgress,
@@ -221,9 +211,6 @@ import { checkForUpdate } from '@/services/updateCheck'
 
 // 应用版本号
 const appVersion = ref('0.0.0')
-
-// 显示"已是最新版本"提示
-const showLatestMessage = ref(false)
 
 // 恢复出厂设置状态
 const resetting = ref(false)
@@ -261,11 +248,9 @@ function formatDate(dateStr: string): string {
 
 // 检查更新（与启动时自动检查共用同一套逻辑，保证关于页展示与下载更新行为一致）
 async function handleCheckUpdate(): Promise<void> {
-  showLatestMessage.value = false
   await checkForUpdate({ silent: false })
-  showLatestMessage.value = !updateState.hasUpdate
   if (!updateState.hasUpdate && !updateState.error) {
-    ElMessage.info('已是最新版本')
+    ElMessage.success('已是最新版本')
   }
 }
 
@@ -311,9 +296,17 @@ async function handleDownloadUpdate(): Promise<void> {
       await relaunch()
     }, 1500)
   } catch (error) {
-    console.error('下载更新失败:', error)
-    setError(`下载失败: ${error instanceof Error ? error.message : '未知错误'}`)
-    ElMessage.error('下载失败，请稍后重试或手动下载')
+    const msg = error instanceof Error ? error.message : String(error)
+    // 404 或网络超时类错误说明安装包尚未就绪（CI/CD 构建中）
+    if (msg.includes('404') || msg.includes('Not Found') || msg.includes('timeout') || msg.includes('network')) {
+      console.warn('更新下载失败，安装包可能尚未就绪:', msg)
+      clearUpdate()
+      ElMessage.warning('更新暂时不可用，请稍后重试')
+    } else {
+      console.error('下载更新失败:', error)
+      setError(`下载失败: ${msg}`)
+      ElMessage.error('下载失败，请稍后重试或手动下载')
+    }
   } finally {
     setDownloading(false)
   }
