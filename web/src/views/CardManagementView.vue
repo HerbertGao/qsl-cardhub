@@ -46,6 +46,8 @@
           :page-size="cardPageSize"
           :loading="cardLoading"
           :project-id="selectedProjectId"
+          :sync-configured="syncConfigured"
+          :syncing="syncing"
           @add="handleAddCard"
           @view="handleViewCard"
           @distribute="handleDistributeCard"
@@ -55,6 +57,7 @@
           @search="handleSearchCard"
           @filter="handleFilterCard"
           @page-change="handlePageChange"
+          @sync="handleSync"
         />
       </el-main>
     </el-container>
@@ -149,6 +152,10 @@ const projectDialogVisible = ref<boolean>(false)
 const projectDialogMode = ref<'create' | 'edit'>('create')
 const editingProject = ref<ProjectWithStats | null>(null)
 
+// ==================== 云端同步状态 ====================
+const syncConfigured = ref<boolean>(false)
+const syncing = ref<boolean>(false)
+
 // ==================== 卡片相关状态 ====================
 const cards = ref<CardWithProject[]>([])
 const cardTotal = ref<number>(0)
@@ -238,6 +245,25 @@ const handleProjectDialogConfirm = async (data: { name: string }): Promise<void>
     await loadProjects()
   } catch (error) {
     ElMessage.error(String(error))
+  }
+}
+
+// ==================== 云端同步方法 ====================
+const handleSync = async (): Promise<void> => {
+  syncing.value = true
+  try {
+    const result = await invoke<{
+      response: { success: boolean; message: string }
+      stats: { projects: number; cards: number; sf_senders: number; sf_orders: number }
+      sync_time: string
+    }>('execute_sync_cmd')
+    ElMessage.success(
+      `同步成功：${result.stats.projects} 个项目，${result.stats.cards} 张卡片，${result.stats.sf_senders} 个寄件人，${result.stats.sf_orders} 个订单`
+    )
+  } catch (error) {
+    ElMessage.error(`同步失败：${error}`)
+  } finally {
+    syncing.value = false
   }
 }
 
@@ -442,6 +468,16 @@ onMounted(async () => {
     selectedProjectId.value = projects.value[0].id
   } else {
     handleCreateProject()
+  }
+
+  // 加载云端同步配置，判断是否已配置
+  try {
+    const config = await invoke<{ api_url: string; has_api_key: boolean } | null>('load_sync_config_cmd')
+    if (config && config.api_url && config.has_api_key) {
+      syncConfigured.value = true
+    }
+  } catch {
+    // 同步配置加载失败，不影响主流程
   }
 })
 </script>

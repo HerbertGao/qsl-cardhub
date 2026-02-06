@@ -22,6 +22,16 @@
           </el-icon>
           <span>导出</span>
         </el-button>
+        <el-button
+          v-if="props.syncConfigured"
+          :loading="props.syncing"
+          @click="$emit('sync')"
+        >
+          <el-icon>
+            <Upload />
+          </el-icon>
+          <span>同步到云端</span>
+        </el-button>
       </div>
       <div class="toolbar-right">
         <el-input
@@ -275,6 +285,8 @@ interface Props {
   pageSize: number
   loading: boolean
   projectId: string | null
+  syncConfigured: boolean
+  syncing: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -283,7 +295,9 @@ const props = withDefaults(defineProps<Props>(), {
   page: 1,
   pageSize: 20,
   loading: false,
-  projectId: null
+  projectId: null,
+  syncConfigured: false,
+  syncing: false
 })
 
 interface Emits {
@@ -296,6 +310,7 @@ interface Emits {
   (e: 'search', keyword: string): void
   (e: 'filter', status: string): void
   (e: 'page-change', data: { page: number; pageSize: number }): void
+  (e: 'sync'): void
 }
 
 const emit = defineEmits<Emits>()
