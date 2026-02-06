@@ -607,6 +607,10 @@ export default {
         const wechatSubscribeEnabled = !!(env.WECHAT_APPID && env.WECHAT_SECRET);
         const wechatPushEnabled = !!(env.WECHAT_APPID && env.WECHAT_SECRET && env.WECHAT_TEMPLATE_ID);
         const captchaEnabled = !!(env.CLIENT_SIGN_KEY && env.CAPTCHA_SECRET);
+        let filing = null;
+        if (env.SITE_FILING) {
+          try { filing = JSON.parse(env.SITE_FILING); } catch { /* ignore invalid JSON */ }
+        }
         return json({
           features: {
             wechat_subscribe: wechatSubscribeEnabled,
@@ -615,6 +619,7 @@ export default {
           },
           wechat_appid: wechatSubscribeEnabled ? env.WECHAT_APPID : null,
           sign_key: env.CLIENT_SIGN_KEY || null,
+          filing,
         });
       }
 
