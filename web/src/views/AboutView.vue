@@ -212,9 +212,6 @@ import { checkForUpdate } from '@/services/updateCheck'
 // 应用版本号
 const appVersion = ref('0.0.0')
 
-// 显示"已是最新版本"提示
-const showLatestMessage = ref(false)
-
 // 恢复出厂设置状态
 const resetting = ref(false)
 
@@ -251,9 +248,7 @@ function formatDate(dateStr: string): string {
 
 // 检查更新（与启动时自动检查共用同一套逻辑，保证关于页展示与下载更新行为一致）
 async function handleCheckUpdate(): Promise<void> {
-  showLatestMessage.value = false
   await checkForUpdate({ silent: false })
-  showLatestMessage.value = !updateState.hasUpdate
   if (!updateState.hasUpdate && !updateState.error) {
     ElMessage.success('已是最新版本')
   }
