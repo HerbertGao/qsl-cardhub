@@ -30,6 +30,29 @@
         </template>
       </el-alert>
 
+      <!-- 沙箱环境提示 -->
+      <el-alert
+        v-if="isSandbox"
+        title="当前为沙箱环境"
+        type="warning"
+        show-icon
+        :closable="false"
+        style="margin-bottom: 12px"
+      >
+        <template #default>
+          <div style="display: flex; align-items: center; gap: 4px">
+            <span>订单将不会被真实派发，如需切换至生产环境</span>
+            <el-link
+              type="warning"
+              :underline="true"
+              @click="goToConfig('api')"
+            >
+              请点击此处
+            </el-link>
+          </div>
+        </template>
+      </el-alert>
+
       <!-- 寄件人信息 -->
       <div class="section">
         <div class="section-title">
@@ -57,7 +80,7 @@
           <el-button
             type="primary"
             size="small"
-            @click="goToConfig"
+            @click="goToConfig('sender')"
           >
             去配置
           </el-button>
@@ -203,7 +226,7 @@ interface Props {
 interface Emits {
   (e: 'update:visible', value: boolean): void
   (e: 'success', order: SFOrder): void
-  (e: 'go-config'): void
+  (e: 'go-config', tab?: string): void
   (e: 'order-created', response: CreateOrderResponse): void
 }
 
@@ -223,6 +246,7 @@ const sender = ref<SenderInfo | null>(null)
 
 // API 配置状态
 const apiConfigured = ref(true)
+const currentEnvironment = ref('')
 
 // 托寄物名称（从 localStorage 读取上次使用的值，默认 QSL卡片）
 const CARGO_NAME_STORAGE_KEY = 'sf_last_cargo_name'
@@ -260,6 +284,9 @@ const rules: FormRules = {
     { min: 5, max: 100, message: '详细地址长度在 5 到 100 个字符', trigger: 'blur' }
   ]
 }
+
+// 是否为沙箱环境
+const isSandbox = computed(() => apiConfigured.value && currentEnvironment.value === 'sandbox')
 
 // 双向绑定
 const dialogVisible = computed({
@@ -323,16 +350,18 @@ async function checkApiConfig(): Promise<void> {
       : config.has_sandbox_checkword
 
     apiConfigured.value = config.partner_id !== '' && hasCheckword
+    currentEnvironment.value = config.environment
   } catch (error) {
     console.error('检查 API 配置失败:', error)
     apiConfigured.value = false
+    currentEnvironment.value = ''
   }
 }
 
 // 跳转到配置页面
-function goToConfig(): void {
+function goToConfig(tab?: string): void {
   dialogVisible.value = false
-  emit('go-config')
+  emit('go-config', tab)
 }
 
 // 关闭对话框
@@ -472,6 +501,11 @@ onMounted(() => {
 .sender-address {
   color: #909399;
   font-size: 12px;
+}
+
+/* 寄件人未配置空状态紧凑 */
+.section :deep(.el-empty) {
+  padding: 4px 0;
 }
 
 /* 紧凑表单 */

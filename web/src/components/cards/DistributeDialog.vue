@@ -1005,13 +1005,13 @@ const handleConfirmCancel = async (): Promise<void> => {
 }
 
 // 跳转到顺丰速运配置页面
-const handleGoConfig = (): void => {
+const handleGoConfig = (tab?: string): void => {
   // 关闭顺丰下单弹窗
   sfOrderDialogVisible.value = false
   // 关闭分发弹窗
   dialogVisible.value = false
   // 导航到顺丰速运配置页面
-  navigateTo('data-config-sf-express')
+  navigateTo('data-config-sf-express', tab ? { tab } : undefined)
 }
 
 // 提交表单

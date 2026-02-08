@@ -325,6 +325,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import type { SenderInfo } from '@/types/models'
 import AddressSelector from '@/components/sf-express/AddressSelector.vue'
 import { useLoading } from '@/composables/useLoading'
+import { consumeNavigationParams } from '@/stores/navigationStore'
 
 const { withLoading } = useLoading()
 
@@ -667,8 +668,13 @@ const handleSaveSender = async (): Promise<void> => {
 }
 
 onMounted(async () => {
+  const navParams = consumeNavigationParams()
   await loadDefaultApiConfig()
-  await loadConfig(true)
+  await loadConfig(!navParams.tab)
+  // 导航参数指定了目标 tab 时，优先使用
+  if (navParams.tab) {
+    activeTab.value = navParams.tab
+  }
   loadDefaultSender()
 })
 </script>
