@@ -22,7 +22,7 @@
             <el-button
               type="primary"
               size="small"
-              @click="goToConfig"
+              @click="goToConfig('api')"
             >
               去配置
             </el-button>
