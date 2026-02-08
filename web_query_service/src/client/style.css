@@ -155,9 +155,12 @@ body {
   color: #3730a3;
 }
 
-/* 安全区域适配 */
-@supports (padding-bottom: env(safe-area-inset-bottom)) {
-  body {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
+/* 全局表单元素移动端优化 - 防止 iOS 输入框聚焦缩放 */
+input,
+textarea,
+select {
+  font-size: 16px;
+  touch-action: manipulation;
 }
+
+/* 安全区域适配 - 由 footer 处理，见 App.vue */

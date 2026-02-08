@@ -70,3 +70,18 @@ id = "<RUN_WRANGLER_KV_CREATE_AND_PASTE_ID_HERE>"
 # 示例：
 # [vars]
 # CLIENT_SIGN_KEY = "your-random-sign-key-here"
+
+# ============================================================
+# 网站备案信息配置（可选）
+# ============================================================
+# 配置后将在页面底部展示 ICP 备案和公安备案信息，仅当访问域名匹配时显示。
+#
+# SITE_FILING: JSON 字符串，包含以下字段：
+#   - domain: 展示备案信息的域名（仅当 hostname 匹配时展示）
+#   - icp: ICP 备案号文本
+#   - police: 公安备案号文本
+#   - police_code: 公安备案号纯数字编码（用于拼接 beian.mps.gov.cn 链接）
+#
+# 示例：
+# [vars]
+# SITE_FILING = '{"domain":"qsl.example.com","icp":"京ICP备XXXXXXX号-X","police":"京公网安备XXXXXXXXXXX号","police_code":"XXXXXXXXXXX"}'

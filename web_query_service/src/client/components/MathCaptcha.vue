@@ -313,6 +313,8 @@ onMounted(() => {
   border: 1px solid #d1d5db;
   border-radius: 8px;
   outline: none;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .captcha-input:focus {

@@ -39,6 +39,9 @@ const wechatSubscribeEnabled = ref(false)
 const signKey = ref<string | null>(null)
 const captchaEnabled = ref(false)
 const showCaptcha = ref(false)
+const filing = ref<{ domain?: string; icp?: string; police?: string; police_code?: string } | null>(null)
+
+const showFiling = computed(() => filing.value?.domain && window.location.hostname === filing.value.domain)
 
 const hasResults = computed(() => result.value?.success && (result.value.items?.length ?? 0) > 0)
 
@@ -50,6 +53,7 @@ onMounted(async () => {
     captchaEnabled.value = data.features?.captcha ?? false
     wechatAppId.value = data.wechat_appid || ''
     signKey.value = data.sign_key || null
+    filing.value = data.filing || null
   } catch {
     // 配置加载失败不影响查询功能
   }
@@ -165,6 +169,22 @@ function redirectToWechatAuth() {
     />
 
     <footer class="footer">
+      <div v-if="showFiling" class="filing">
+        <a
+          v-if="filing?.icp"
+          href="https://beian.miit.gov.cn/"
+          target="_blank"
+          rel="noopener"
+          class="filing-link"
+        >{{ filing.icp }}</a>
+        <a
+          v-if="filing?.police && filing?.police_code"
+          :href="`https://beian.mps.gov.cn/#/query/webSearch?code=${filing.police_code}`"
+          target="_blank"
+          rel="noopener"
+          class="filing-link"
+        >{{ filing.police }}</a>
+      </div>
       <p>&copy; {{ new Date().getFullYear() }} Herbert Software</p>
       <a href="https://github.com/HerbertGao/qsl-cardhub" target="_blank" rel="noopener" class="footer-link">GitHub</a>
     </footer>
@@ -230,14 +250,19 @@ function redirectToWechatAuth() {
 .footer {
   background: var(--card-bg);
   border-top: 1px solid var(--border);
-  padding: 1rem;
+  padding: 0.75rem 1rem;
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
   text-align: center;
   font-size: 0.875rem;
   color: var(--text-secondary);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.375rem;
+  gap: 0.25rem;
+}
+
+.footer p {
+  margin: 0;
 }
 
 .footer-link {
@@ -247,6 +272,23 @@ function redirectToWechatAuth() {
 }
 
 .footer-link:hover {
+  text-decoration: underline;
+}
+
+.filing {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem 1rem;
+}
+
+.filing-link {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.8125rem;
+}
+
+.filing-link:hover {
   text-decoration: underline;
 }
 </style>
