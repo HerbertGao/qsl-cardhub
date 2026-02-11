@@ -112,12 +112,30 @@
             placeholder="请选择 DIRECTION"
             style="width: 100%"
           >
-            <el-option label="旋转 180°，不镜像（1,0）" value="1,0" />
-            <el-option label="旋转 180°，不镜像（兼容写法，1）" value="1" />
-            <el-option label="正常方向，不镜像（0,0）" value="0,0" />
-            <el-option label="正常方向，不镜像（兼容写法，0）" value="0" />
-            <el-option label="旋转 180°，镜像（2,0）" value="2,0" />
-            <el-option label="正常方向，镜像（3,0）" value="3,0" />
+            <el-option
+              label="旋转 180°，不镜像（1,0）"
+              value="1,0"
+            />
+            <el-option
+              label="旋转 180°，不镜像（兼容写法，1）"
+              value="1"
+            />
+            <el-option
+              label="正常方向，不镜像（0,0）"
+              value="0,0"
+            />
+            <el-option
+              label="正常方向，不镜像（兼容写法，0）"
+              value="0"
+            />
+            <el-option
+              label="旋转 180°，镜像（2,0）"
+              value="2,0"
+            />
+            <el-option
+              label="正常方向，镜像（3,0）"
+              value="3,0"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="命令预览">
