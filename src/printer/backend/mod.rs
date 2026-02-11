@@ -77,6 +77,12 @@ pub struct ImagePrintConfig {
     pub height_mm: f32,
     /// 打印机 DPI
     pub dpi: u32,
+    /// GAP 长度（毫米）
+    pub gap_mm: f32,
+    /// GAP 偏移（毫米）
+    pub gap_offset_mm: f32,
+    /// 打印方向（TSPL DIRECTION 参数）
+    pub direction: String,
 }
 
 impl Default for ImagePrintConfig {
@@ -85,6 +91,9 @@ impl Default for ImagePrintConfig {
             width_mm: 76.0,
             height_mm: 130.0,
             dpi: 203,
+            gap_mm: 2.0,
+            gap_offset_mm: 0.0,
+            direction: "1,0".to_string(),
         }
     }
 }

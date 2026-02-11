@@ -10,3 +10,6 @@ mod end_to_end;
 
 #[path = "integration/backend_integration.rs"]
 mod backend_integration;
+
+#[path = "integration/sf_waybill_integration.rs"]
+mod sf_waybill_integration;

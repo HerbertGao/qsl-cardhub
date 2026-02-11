@@ -3,6 +3,9 @@
 // 使用新的模板系统架构
 
 use crate::config::template::{OutputConfig, TemplateConfig};
+use crate::config::models::TsplPrintConfig;
+use crate::commands::profile::ProfileState;
+use crate::commands::tspl_config::normalize_tspl_print_config;
 use crate::printer::backend::ImagePrintConfig;
 use crate::printer::backend::PdfBackend;
 use crate::printer::backend::PrinterBackend;
@@ -95,6 +98,23 @@ fn load_address_template_config() -> Result<TemplateConfig, String> {
 
     TemplateConfig::load_from_file(&address_template_path)
         .map_err(|e| format!("加载地址模板失败: {}", e))
+}
+
+/// 读取并校验全局 TSPL 参数
+fn load_tspl_print_config(profile_state: &State<'_, ProfileState>) -> Result<TsplPrintConfig, String> {
+    let manager = profile_state
+        .manager
+        .lock()
+        .map_err(|e| format!("锁定配置管理器失败: {}", e))?;
+    let raw = manager
+        .get_printer_config()
+        .map_err(|e| format!("读取打印机配置失败: {}", e))?
+        .tspl;
+    let (normalized, warnings) = normalize_tspl_print_config(&raw);
+    for warning in warnings {
+        log::warn!("TSPL参数回退: {}", warning);
+    }
+    Ok(normalized)
 }
 
 /// 打印机管理器状态
@@ -391,6 +411,7 @@ pub async fn print_qsl(
     printer_name: String,
     request: PrintRequest,
     state: State<'_, PrinterState>,
+    profile_state: State<'_, ProfileState>,
 ) -> Result<(), String> {
     log::info!("开始打印 QSL 卡片: 打印机={}", printer_name);
     log::debug!("请求参数: {:?}", request);
@@ -443,6 +464,11 @@ pub async fn print_qsl(
     } else {
         // 真实打印机：生成 TSPL 并发送
         log::info!("使用真实打印机: {}", printer_name);
+        let tspl_config = load_tspl_print_config(&profile_state)?;
+        log::info!(
+            "QSL打印生效TSPL参数: GAP {} mm, {} mm; DIRECTION {}",
+            tspl_config.gap_mm, tspl_config.gap_offset_mm, tspl_config.direction
+        );
 
         // 生成 TSPL 指令
         let tspl_generator = state
@@ -450,7 +476,14 @@ pub async fn print_qsl(
             .lock()
             .map_err(|e| format!("锁定TSPL生成器失败: {}", e))?;
         let tspl = tspl_generator
-            .generate(render_result, config.page.width_mm, config.page.height_mm)
+            .generate_with_options(
+                render_result,
+                config.page.width_mm,
+                config.page.height_mm,
+                tspl_config.gap_mm,
+                tspl_config.gap_offset_mm,
+                &tspl_config.direction,
+            )
             .map_err(|e| format!("生成TSPL指令失败: {}", e))?;
 
         log::debug!("TSPL指令长度: {} 字节", tspl.len());
@@ -519,6 +552,7 @@ pub async fn print_address(
     printer_name: String,
     request: AddressPrintRequest,
     state: State<'_, PrinterState>,
+    profile_state: State<'_, ProfileState>,
 ) -> Result<(), String> {
     log::info!("开始打印地址标签: 打印机={}", printer_name);
     log::debug!("地址打印请求: {:?}", request);
@@ -587,6 +621,11 @@ pub async fn print_address(
     } else {
         // 真实打印机：生成 TSPL 并发送
         log::info!("使用真实打印机: {}", printer_name);
+        let tspl_config = load_tspl_print_config(&profile_state)?;
+        log::info!(
+            "地址打印生效TSPL参数: GAP {} mm, {} mm; DIRECTION {}",
+            tspl_config.gap_mm, tspl_config.gap_offset_mm, tspl_config.direction
+        );
 
         // 生成 TSPL 指令
         let tspl_generator = state
@@ -594,7 +633,14 @@ pub async fn print_address(
             .lock()
             .map_err(|e| format!("锁定TSPL生成器失败: {}", e))?;
         let tspl = tspl_generator
-            .generate(render_result, config.page.width_mm, config.page.height_mm)
+            .generate_with_options(
+                render_result,
+                config.page.width_mm,
+                config.page.height_mm,
+                tspl_config.gap_mm,
+                tspl_config.gap_offset_mm,
+                &tspl_config.direction,
+            )
             .map_err(|e| format!("生成TSPL指令失败: {}", e))?;
 
         log::debug!("地址标签TSPL指令长度: {} 字节", tspl.len());

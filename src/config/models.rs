@@ -66,11 +66,16 @@ pub struct Template {
 
 /// 单配置模式的打印机配置（用于替代多 Profile 模式）
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct SinglePrinterConfig {
     /// 打印机配置
     pub printer: PrinterConfig,
     /// 平台信息
     pub platform: Platform,
+    /// 全局 TSPL 打印参数（适用于所有标签打印）
+    #[serde(default)]
+    pub tspl: TsplPrintConfig,
 }
 
 impl Default for SinglePrinterConfig {
@@ -83,8 +88,48 @@ impl Default for SinglePrinterConfig {
                 os: std::env::consts::OS.to_string(),
                 arch: std::env::consts::ARCH.to_string(),
             },
+            tspl: TsplPrintConfig::default(),
         }
     }
+}
+
+/// 全局 TSPL 打印参数
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
+#[serde(default)]
+pub struct TsplPrintConfig {
+    /// GAP 长度（毫米）
+    #[serde(default = "default_tspl_gap_mm")]
+    pub gap_mm: f32,
+    /// GAP 偏移（毫米）
+    #[serde(default = "default_tspl_gap_offset_mm")]
+    pub gap_offset_mm: f32,
+    /// 打印方向（TSPL DIRECTION 参数）
+    #[serde(default = "default_tspl_direction")]
+    pub direction: String,
+}
+
+impl Default for TsplPrintConfig {
+    fn default() -> Self {
+        Self {
+            gap_mm: default_tspl_gap_mm(),
+            gap_offset_mm: default_tspl_gap_offset_mm(),
+            direction: default_tspl_direction(),
+        }
+    }
+}
+
+fn default_tspl_gap_mm() -> f32 {
+    2.0
+}
+
+fn default_tspl_gap_offset_mm() -> f32 {
+    0.0
+}
+
+fn default_tspl_direction() -> String {
+    "1,0".to_string()
 }
 
 /// 应用全局配置

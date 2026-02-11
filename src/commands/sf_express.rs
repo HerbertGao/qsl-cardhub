@@ -17,12 +17,16 @@ use crate::sf_express::{
 };
 use crate::db;
 use crate::printer::backend::ImagePrintConfig;
+use crate::config::models::TsplPrintConfig;
+use crate::commands::tspl_config::normalize_tspl_print_config;
+use crate::sf_express::pdf_renderer::WaybillSize;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use uuid::Uuid;
 use std::path::PathBuf;
 
 use crate::commands::printer::PrinterState;
+use crate::commands::profile::ProfileState;
 
 /// 顺丰配置响应
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -392,6 +396,7 @@ pub fn sf_print_waybill(
     pdf_data: String,
     printer_name: String,
     printer_state: State<'_, PrinterState>,
+    profile_state: State<'_, ProfileState>,
 ) -> Result<String, String> {
     log::info!("打印顺丰面单到打印机: {}", printer_name);
 
@@ -401,22 +406,51 @@ pub fn sf_print_waybill(
 
     log::info!("PDF 数据解码成功，大小: {} 字节", pdf_bytes.len());
 
+    // 读取并校验顺丰面单参数（支持旧配置自动回退默认值）
+    let printer_config = {
+        let manager = profile_state
+            .manager
+            .lock()
+            .map_err(|e| format!("锁定配置管理器失败: {}", e))?;
+        manager
+            .get_printer_config()
+            .map_err(|e| format!("读取打印机配置失败: {}", e))?
+    };
+    let (tspl_config, warnings) = normalize_tspl_print_config(&printer_config.tspl);
+    for warning in &warnings {
+        log::warn!("顺丰面单参数回退: {}", warning);
+    }
+    log::info!(
+        "顺丰面单打印生效TSPL参数: GAP {} mm, {} mm; DIRECTION {}",
+        tspl_config.gap_mm,
+        tspl_config.gap_offset_mm,
+        tspl_config.direction
+    );
+
     // 渲染 PDF 为灰度图像
-    let renderer = PdfRenderer::new();
+    let renderer = PdfRenderer::with_size(WaybillSize {
+        width_mm: 76.0,
+        height_mm: 130.0,
+        dpi: 203,
+    });
     let gray_image = renderer.render_pdf_to_grayscale(&pdf_bytes)
         .map_err(|e| format!("渲染面单图像失败: {}", e))?;
 
     log::info!("面单渲染完成，图像尺寸: {}x{}", gray_image.width(), gray_image.height());
 
-    // 配置打印参数（顺丰面单规格：76mm x 130mm）
-    let config = ImagePrintConfig {
-        width_mm: 76.0,
-        height_mm: 130.0,
-        dpi: 203,
-    };
-
     // 使用统一的打印接口
-    printer_state.print_image_to_printer(&printer_name, &gray_image, &config)
+    printer_state.print_image_to_printer(
+        &printer_name,
+        &gray_image,
+        &ImagePrintConfig {
+            width_mm: 76.0,
+            height_mm: 130.0,
+            dpi: 203,
+            gap_mm: tspl_config.gap_mm,
+            gap_offset_mm: tspl_config.gap_offset_mm,
+            direction: tspl_config.direction,
+        },
+    )
 }
 
 // ==================== 寄件人管理命令 ====================
@@ -942,4 +976,39 @@ pub fn sf_mark_order_printed(order_id: String) -> Result<SFOrder, String> {
 
     db::update_order_status(&order_id, OrderStatus::Printed, order.waybill_no)
         .map_err(|e| format!("更新订单状态失败: {}", e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_normalize_waybill_print_config_valid() {
+        let raw = TsplPrintConfig {
+            gap_mm: 2.0,
+            gap_offset_mm: 0.0,
+            direction: "1,0".to_string(),
+        };
+
+        let (config, warnings) = normalize_tspl_print_config(&raw);
+        assert!(warnings.is_empty());
+        assert_eq!(config.gap_mm, 2.0);
+        assert_eq!(config.gap_offset_mm, 0.0);
+        assert_eq!(config.direction, "1,0");
+    }
+
+    #[test]
+    fn test_normalize_waybill_print_config_fallback() {
+        let raw = TsplPrintConfig {
+            gap_mm: -1.0,
+            gap_offset_mm: 20.0,
+            direction: "bad".to_string(),
+        };
+
+        let (config, warnings) = normalize_tspl_print_config(&raw);
+        assert_eq!(config.gap_mm, 2.0);
+        assert_eq!(config.gap_offset_mm, 0.0);
+        assert_eq!(config.direction, "1,0");
+        assert_eq!(warnings.len(), 3);
+    }
 }

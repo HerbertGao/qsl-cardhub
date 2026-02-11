@@ -251,7 +251,14 @@ impl PrinterBackend for WindowsBackend {
         // 使用 TSPL 生成器将图像转换为 TSPL 指令
         let tspl_generator = TSPLGenerator::new();
         let tspl = tspl_generator
-            .generate_from_image(image, config.width_mm, config.height_mm)
+            .generate_from_image_with_options(
+                image,
+                config.width_mm,
+                config.height_mm,
+                config.gap_mm,
+                config.gap_offset_mm,
+                &config.direction,
+            )
             .context("生成 TSPL 指令失败")?;
 
         log::info!("TSPL 指令生成成功，长度: {} 字节", tspl.len());

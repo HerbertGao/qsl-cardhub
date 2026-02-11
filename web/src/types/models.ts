@@ -28,18 +28,14 @@ export type { Profile } from './generated/Profile'
 export type { Platform } from './generated/Platform'
 export type { PrinterConfig } from './generated/PrinterConfig'
 export type { Template } from './generated/Template'
+export type { TsplPrintConfig } from './generated/TsplPrintConfig'
+export type { SinglePrinterConfig } from './generated/SinglePrinterConfig'
 
 // ==================== 手动维护的类型（未在 Rust 中定义或参数类型） ====================
 
 // 兼容别名
 export type PlatformInfo = import('./generated/Platform').Platform
 export type TemplatePathConfig = import('./generated/Template').Template
-
-// 单配置模式的打印机配置
-export interface SinglePrinterConfig {
-  printer: import('./generated/PrinterConfig').PrinterConfig
-  platform: import('./generated/Platform').Platform
-}
 
 // 卡片筛选条件（前端参数类型）
 export interface CardFilter {
