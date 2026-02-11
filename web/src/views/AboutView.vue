@@ -71,9 +71,12 @@
               发布日期：{{ formatDate(updateState.updateInfo.pubDate) }}
             </div>
             <div
-              v-if="updateState.updateInfo.notes"
-              style="white-space: pre-wrap; line-height: 1.6"
-            >
+              v-if="updateState.updateInfo.notes && updateState.updateInfo.notes !== '无更新说明'"
+              class="release-notes"
+              @click="handleNotesLinkClick"
+              v-html="renderedNotes"
+            />
+            <div v-else-if="updateState.updateInfo.notes">
               {{ updateState.updateInfo.notes }}
             </div>
           </div>
@@ -189,7 +192,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-shell'
@@ -208,6 +211,7 @@ import {
   getPendingTauriUpdate
 } from '@/stores/updateStore'
 import { checkForUpdate } from '@/services/updateCheck'
+import { renderMarkdown } from '@/utils/markdown'
 
 // 应用版本号
 const appVersion = ref('0.0.0')
@@ -218,6 +222,23 @@ const resetting = ref(false)
 // GitHub 仓库信息
 const GITHUB_OWNER = 'HerbertGao'
 const GITHUB_REPO = 'QSL-CardHub'
+
+// 渲染更新说明 Markdown
+const renderedNotes = computed(() => {
+  const notes = updateState.updateInfo?.notes
+  if (!notes || notes === '无更新说明') return ''
+  return renderMarkdown(notes)
+})
+
+// 拦截更新说明中的链接点击，使用外部浏览器打开
+function handleNotesLinkClick(event: MouseEvent): void {
+  const target = event.target as HTMLElement
+  const anchor = target.closest('a')
+  if (anchor?.href) {
+    event.preventDefault()
+    open(anchor.href)
+  }
+}
 
 // 获取应用版本号
 onMounted(async () => {
@@ -444,6 +465,85 @@ async function handleFactoryReset(): Promise<void> {
   height: auto;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 更新说明 Markdown 渲染样式 */
+.release-notes {
+  line-height: 1.6;
+  font-size: 14px;
+  color: #303133;
+}
+
+.release-notes :deep(h1),
+.release-notes :deep(h2),
+.release-notes :deep(h3),
+.release-notes :deep(h4) {
+  margin: 16px 0 8px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.release-notes :deep(h1) { font-size: 20px; }
+.release-notes :deep(h2) { font-size: 17px; }
+.release-notes :deep(h3) { font-size: 15px; }
+.release-notes :deep(h4) { font-size: 14px; }
+
+.release-notes :deep(p) {
+  margin: 8px 0;
+}
+
+.release-notes :deep(ul),
+.release-notes :deep(ol) {
+  padding-left: 24px;
+  margin: 8px 0;
+}
+
+.release-notes :deep(li) {
+  margin: 4px 0;
+}
+
+.release-notes :deep(a) {
+  color: var(--el-color-primary);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.release-notes :deep(a:hover) {
+  text-decoration: underline;
+}
+
+.release-notes :deep(code) {
+  background: #f5f7fa;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 13px;
+  font-family: 'SF Mono', Monaco, Menlo, Consolas, monospace;
+}
+
+.release-notes :deep(pre) {
+  background: #f5f7fa;
+  padding: 12px 16px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.release-notes :deep(pre code) {
+  background: none;
+  padding: 0;
+}
+
+.release-notes :deep(blockquote) {
+  border-left: 3px solid #dcdfe6;
+  padding-left: 12px;
+  margin: 8px 0;
+  color: #909399;
+}
+
+.release-notes :deep(hr) {
+  border: none;
+  border-top: 1px solid #ebeef5;
+  margin: 12px 0;
 }
 
 /* 响应式布局 */
