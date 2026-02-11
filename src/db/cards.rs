@@ -424,7 +424,7 @@ pub fn get_project_callsigns(project_id: &str) -> Result<Vec<String>, AppError> 
             r#"
             SELECT DISTINCT UPPER(callsign) FROM cards
             WHERE project_id = ?1
-            ORDER BY callsign ASC
+            ORDER BY UPPER(callsign) ASC
             "#,
         )
         .map_err(|e| AppError::Other(format!("准备查询语句失败: {}", e)))?;
