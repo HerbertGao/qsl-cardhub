@@ -454,18 +454,25 @@ export default {
           .bind(callsign.toUpperCase())
           .all();
 
-        const items = (rows.results || []).map((r) => ({
-          id: r.id,
-          project_id: r.project_id,
-          project_name: r.project_name || null,
-          callsign: r.callsign,
-          qty: r.qty,
-          serial: r.serial,
-          status: r.status,
-          metadata: r.metadata ? (typeof r.metadata === 'string' ? JSON.parse(r.metadata) : r.metadata) : null,
-          created_at: r.created_at,
-          updated_at: r.updated_at,
-        }));
+        const items = (rows.results || []).map((r) => {
+          const metadata = r.metadata ? (typeof r.metadata === 'string' ? JSON.parse(r.metadata) : r.metadata) : null;
+          const dist = metadata?.distribution;
+          const ret = metadata?.return;
+          return {
+            id: r.id,
+            project_name: r.project_name || null,
+            status: r.status,
+            distribution: dist ? {
+              method: dist.method || null,
+              proxy_callsign: dist.proxy_callsign || null,
+              remarks: dist.remarks || null,
+            } : null,
+            return: ret ? {
+              method: ret.method || null,
+              remarks: ret.remarks || null,
+            } : null,
+          };
+        });
 
         return json({ success: true, callsign: callsign.toUpperCase(), items });
       }

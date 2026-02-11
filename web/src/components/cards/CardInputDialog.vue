@@ -273,6 +273,12 @@ const printerName = ref<string | null>(null)
 // 提交状态
 const submitting = ref<boolean>(false)
 
+// 当前项目下已有呼号集合（用于重复检查）
+const projectCallsigns = ref<Set<string>>(new Set())
+
+// 请求序列号，用于防止异步请求乱序
+let callsignLoadCounter = 0
+
 // 呼号验证正则
 const callsignPattern: RegExp = /^[A-Za-z0-9/]{3,10}$/
 
@@ -289,11 +295,13 @@ const rules: FormRules<CardInputFormData> = {
           callback()
         } else if (!callsignPattern.test(value)) {
           callback(new Error('呼号格式无效：3-10 个字符，仅包含字母、数字、斜杠'))
+        } else if (projectCallsigns.value.has(value.trim().toUpperCase())) {
+          callback(new Error('该呼号已在此项目中录入'))
         } else {
           callback()
         }
       },
-      trigger: 'blur'
+      trigger: ['blur', 'change']
     }
   ],
   qty: [
@@ -424,9 +432,37 @@ const handleResetSerial = (): void => {
   ElMessage.success('序列号已重置')
 }
 
-// 项目选择变化时加载序列号
+// 加载项目下已有呼号集合
+const loadProjectCallsigns = async (projectId: string): Promise<void> => {
+  // 递增请求计数器，使之前的慢请求失效
+  const requestId = ++callsignLoadCounter
+
+  // 立即清空旧数据
+  projectCallsigns.value = new Set()
+
+  if (!projectId) {
+    return
+  }
+
+  try {
+    const callsigns = await invoke<string[]>('get_project_callsigns_cmd', { projectId })
+    // 只有当这是最新的请求时才更新数据
+    if (requestId === callsignLoadCounter) {
+      projectCallsigns.value = new Set(callsigns)
+    }
+  } catch (error) {
+    console.error('加载项目呼号失败:', error)
+    // 只有当这是最新的请求时才清空数据
+    if (requestId === callsignLoadCounter) {
+      projectCallsigns.value = new Set()
+    }
+  }
+}
+
+// 项目选择变化时加载序列号和呼号集合
 const handleProjectChange = (projectId: string): void => {
   loadMaxSerial(projectId)
+  loadProjectCallsigns(projectId)
 }
 
 // 监听跳过4选项变化，重新计算序列号
@@ -452,9 +488,12 @@ watch(() => props.visible, (newVal: boolean): void => {
     // 加载打印机配置
     loadPrinterConfig()
 
-    // 如果有预选项目，加载序列号
+    // 如果有预选项目，加载序列号和呼号集合
     if (props.preselectedProjectId) {
       loadMaxSerial(props.preselectedProjectId)
+      loadProjectCallsigns(props.preselectedProjectId)
+    } else {
+      projectCallsigns.value = new Set()
     }
 
     // 清除验证状态
@@ -508,7 +547,12 @@ const handleSubmit = async (): Promise<void> => {
 }
 
 // 重置表单（连续录入模式使用）
-const resetForContinuous = async (): Promise<void> => {
+const resetForContinuous = async (enteredCallsign?: string): Promise<void> => {
+  // 将刚录入的呼号追加到本地集合，确保连续录入时能检测重复
+  if (enteredCallsign) {
+    projectCallsigns.value.add(enteredCallsign.trim().toUpperCase())
+  }
+
   form.value.callsign = ''
   form.value.qty = isApproximate.value ? 10 : 1
 

@@ -399,8 +399,8 @@ const handleCardInputConfirm = async (data: CardInputConfirmData): Promise<void>
     }
 
     if (data.continuousMode) {
-      // 连续录入模式：重置表单，等待序列号加载完成避免竞态条件
-      await cardInputDialogRef.value?.resetForContinuous()
+      // 连续录入模式：重置表单，传入刚录入的呼号以更新本地重复检查集合
+      await cardInputDialogRef.value?.resetForContinuous(data.callsign)
     } else {
       cardInputDialogVisible.value = false
     }

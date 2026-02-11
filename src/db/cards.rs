@@ -56,6 +56,21 @@ pub fn create_card(project_id: String, callsign: String, qty: i32, serial: Optio
         )));
     }
 
+    // 检查同项目下呼号是否已存在（大小写不敏感）
+    let callsign_exists: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM cards WHERE project_id = ?1 AND callsign = ?2 COLLATE NOCASE)",
+            [&project_id, &callsign],
+            |row| row.get(0),
+        )
+        .map_err(|e| AppError::Other(format!("查询呼号失败: {}", e)))?;
+
+    if callsign_exists {
+        return Err(AppError::InvalidParameter(
+            "该呼号已在此项目中录入".to_string(),
+        ));
+    }
+
     // 创建卡片
     let card = Card::new(project_id, callsign, qty, serial);
 
@@ -400,16 +415,16 @@ pub fn save_pending_waybill(card_id: &str, waybill_no: String) -> Result<Card, A
     get_card(card_id)?.ok_or_else(|| AppError::Other("更新后无法获取卡片".to_string()))
 }
 
-/// 获取项目下的所有呼号（去重）
+/// 获取项目下的所有呼号（去重，统一大写）
 pub fn get_project_callsigns(project_id: &str) -> Result<Vec<String>, AppError> {
     let conn = get_connection()?;
 
     let mut stmt = conn
         .prepare(
             r#"
-            SELECT DISTINCT callsign FROM cards
+            SELECT DISTINCT UPPER(callsign) FROM cards
             WHERE project_id = ?1
-            ORDER BY callsign ASC
+            ORDER BY UPPER(callsign) ASC
             "#,
         )
         .map_err(|e| AppError::Other(format!("准备查询语句失败: {}", e)))?;

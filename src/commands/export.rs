@@ -78,6 +78,45 @@ fn generate_filename(project_name: &str) -> String {
     format!("{}_{}.xlsx", sanitized_name, timestamp)
 }
 
+/// 从卡片缓存中提取导出列值（仅使用缓存，无缓存则留空）
+fn extract_qrz_cache_columns(card: &CardWithProject) -> (String, String, String) {
+    let mut qrz_cn_chinese = String::new();
+    let mut qrz_cn_english = String::new();
+    let mut qrz_com_english = String::new();
+
+    let Some(metadata) = card.metadata.as_ref() else {
+        return (qrz_cn_chinese, qrz_cn_english, qrz_com_english);
+    };
+    let Some(cache) = metadata.address_cache.as_ref() else {
+        return (qrz_cn_chinese, qrz_cn_english, qrz_com_english);
+    };
+
+    if let Some(entry) = cache
+        .iter()
+        .filter(|entry| entry.source == "qrz.cn")
+        .max_by(|a, b| a.cached_at.cmp(&b.cached_at))
+    {
+        if let Some(value) = entry.chinese_address.as_ref() {
+            qrz_cn_chinese = value.clone();
+        }
+        if let Some(value) = entry.english_address.as_ref() {
+            qrz_cn_english = value.clone();
+        }
+    }
+
+    if let Some(entry) = cache
+        .iter()
+        .filter(|entry| entry.source == "qrz.com")
+        .max_by(|a, b| a.cached_at.cmp(&b.cached_at))
+    {
+        if let Some(value) = entry.english_address.as_ref() {
+            qrz_com_english = value.clone();
+        }
+    }
+
+    (qrz_cn_chinese, qrz_cn_english, qrz_com_english)
+}
+
 /// 生成 Excel 文件内容
 fn generate_excel(cards: &[CardWithProject], qty_mode: QtyDisplayMode) -> Result<Vec<u8>, String> {
     let mut workbook = Workbook::new();
@@ -98,6 +137,15 @@ fn generate_excel(cards: &[CardWithProject], qty_mode: QtyDisplayMode) -> Result
         .map_err(|e| format!("写入表头失败: {}", e))?;
     worksheet
         .write_string_with_format(0, 3, "状态", &header_format)
+        .map_err(|e| format!("写入表头失败: {}", e))?;
+    worksheet
+        .write_string_with_format(0, 4, "QRZ.cn(中文)", &header_format)
+        .map_err(|e| format!("写入表头失败: {}", e))?;
+    worksheet
+        .write_string_with_format(0, 5, "QRZ.cn(English)", &header_format)
+        .map_err(|e| format!("写入表头失败: {}", e))?;
+    worksheet
+        .write_string_with_format(0, 6, "QRZ.com", &header_format)
         .map_err(|e| format!("写入表头失败: {}", e))?;
 
     // 写入数据行
@@ -126,6 +174,18 @@ fn generate_excel(cards: &[CardWithProject], qty_mode: QtyDisplayMode) -> Result
         worksheet
             .write_string(row, 3, status_str)
             .map_err(|e| format!("写入数据失败: {}", e))?;
+
+        // QRZ 缓存地址列（仅使用缓存，无缓存留空）
+        let (qrz_cn_chinese, qrz_cn_english, qrz_com_english) = extract_qrz_cache_columns(card);
+        worksheet
+            .write_string(row, 4, &qrz_cn_chinese)
+            .map_err(|e| format!("写入数据失败: {}", e))?;
+        worksheet
+            .write_string(row, 5, &qrz_cn_english)
+            .map_err(|e| format!("写入数据失败: {}", e))?;
+        worksheet
+            .write_string(row, 6, &qrz_com_english)
+            .map_err(|e| format!("写入数据失败: {}", e))?;
     }
 
     // 设置列宽
@@ -133,6 +193,9 @@ fn generate_excel(cards: &[CardWithProject], qty_mode: QtyDisplayMode) -> Result
     worksheet.set_column_width(1, 15).ok(); // 呼号
     worksheet.set_column_width(2, 10).ok(); // 数量
     worksheet.set_column_width(3, 10).ok(); // 状态
+    worksheet.set_column_width(4, 36).ok(); // QRZ.cn(中文)
+    worksheet.set_column_width(5, 36).ok(); // QRZ.cn(English)
+    worksheet.set_column_width(6, 36).ok(); // QRZ.com
 
     // 保存到内存
     let mut buffer = Cursor::new(Vec::new());
@@ -256,6 +319,7 @@ pub async fn export_cards_to_excel(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::{AddressEntry, CardMetadata};
 
     #[test]
     fn test_format_serial() {
@@ -308,5 +372,84 @@ mod tests {
         // 文件名应该包含时间戳（14位数字）
         let parts: Vec<&str> = filename.split('_').collect();
         assert!(parts.len() >= 2);
+    }
+
+    fn sample_card(metadata: Option<CardMetadata>) -> CardWithProject {
+        CardWithProject {
+            id: "card-1".to_string(),
+            project_id: "project-1".to_string(),
+            project_name: "Project".to_string(),
+            callsign: "BH2ABC".to_string(),
+            qty: 1,
+            serial: Some(1),
+            status: CardStatus::Pending,
+            metadata,
+            created_at: "2026-02-11T00:00:00+08:00".to_string(),
+            updated_at: "2026-02-11T00:00:00+08:00".to_string(),
+        }
+    }
+
+    #[test]
+    fn test_extract_qrz_cache_columns_full_cache() {
+        let metadata = CardMetadata {
+            address_cache: Some(vec![
+                AddressEntry {
+                    source: "qrz.cn".to_string(),
+                    chinese_address: Some("北京市朝阳区".to_string()),
+                    english_address: Some("Beijing, China".to_string()),
+                    name: None,
+                    mail_method: None,
+                    updated_at: None,
+                    cached_at: "2026-02-11T00:00:00+08:00".to_string(),
+                },
+                AddressEntry {
+                    source: "qrz.com".to_string(),
+                    chinese_address: None,
+                    english_address: Some("PO BOX 123, USA".to_string()),
+                    name: None,
+                    mail_method: None,
+                    updated_at: None,
+                    cached_at: "2026-02-11T00:00:00+08:00".to_string(),
+                },
+            ]),
+            ..Default::default()
+        };
+        let card = sample_card(Some(metadata));
+
+        let (cn_zh, cn_en, com_en) = extract_qrz_cache_columns(&card);
+        assert_eq!(cn_zh, "北京市朝阳区");
+        assert_eq!(cn_en, "Beijing, China");
+        assert_eq!(com_en, "PO BOX 123, USA");
+    }
+
+    #[test]
+    fn test_extract_qrz_cache_columns_no_cache() {
+        let card = sample_card(None);
+        let (cn_zh, cn_en, com_en) = extract_qrz_cache_columns(&card);
+        assert!(cn_zh.is_empty());
+        assert!(cn_en.is_empty());
+        assert!(com_en.is_empty());
+    }
+
+    #[test]
+    fn test_extract_qrz_cache_columns_partial_cache() {
+        let metadata = CardMetadata {
+            address_cache: Some(vec![AddressEntry {
+                source: "qrz.cn".to_string(),
+                chinese_address: Some("上海市浦东新区".to_string()),
+                english_address: Some("Shanghai, China".to_string()),
+                name: None,
+                mail_method: None,
+                updated_at: None,
+                cached_at: "2026-02-11T00:00:00+08:00".to_string(),
+            }]),
+            ..Default::default()
+        };
+        let card = sample_card(Some(metadata));
+
+        let (cn_zh, cn_en, com_en) = extract_qrz_cache_columns(&card);
+        assert_eq!(cn_zh, "上海市浦东新区");
+        assert_eq!(cn_en, "Shanghai, China");
+        assert!(com_en.is_empty());
     }
 }
