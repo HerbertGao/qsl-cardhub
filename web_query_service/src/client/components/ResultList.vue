@@ -10,6 +10,10 @@ interface CardItem {
     proxy_callsign?: string
     remarks?: string
   } | null
+  return_info: {
+    method?: string
+    remarks?: string
+  } | null
 }
 
 defineProps<{
@@ -21,17 +25,26 @@ const copiedId = ref<string | null>(null)
 
 function getStatusLabel(status: string): string {
   const map: Record<string, string> = {
-    pending: '待处理',
-    printed: '已打印',
+    pending: '待分发',
     distributed: '已分发',
-    completed: '已完成',
+    returned: '已退卡',
   }
   return map[status] || status
 }
 
+function getReturnMethodLabel(method: string): string {
+  const map: Record<string, string> = {
+    'NOT FOUND': '查无此人',
+    'CALLSIGN INVALID': '呼号无效',
+    'REFUSED': '拒收',
+    'OTHER': '其他',
+  }
+  return map[method] || method
+}
+
 function getStatusClass(status: string): string {
-  if (status === 'completed' || status === 'distributed') return 'badge-success'
-  if (status === 'printed') return 'badge-warning'
+  if (status === 'distributed') return 'badge-success'
+  if (status === 'returned') return 'badge-warning'
   return 'badge-pending'
 }
 
@@ -85,8 +98,10 @@ async function copyRemarks(id: string, text: string) {
         </div>
         <div
           v-if="
-            item.distribution?.remarks ||
-            (item.status === 'distributed' && item.distribution?.method)
+            (item.status === 'distributed' && item.distribution?.method) ||
+            (item.status === 'returned' && item.return_info?.method) ||
+            (item.status === 'distributed' && item.distribution?.remarks) ||
+            (item.status === 'returned' && item.return_info?.remarks)
           "
           class="card-body"
         >
@@ -108,6 +123,12 @@ async function copyRemarks(id: string, text: string) {
             </div>
           </div>
           <div
+            v-else-if="item.status === 'returned' && item.return_info?.method"
+            class="distribution-row"
+          >
+            <span class="method-tag return-tag">{{ getReturnMethodLabel(item.return_info.method) }}</span>
+          </div>
+          <div
             v-if="item.status === 'distributed' && item.distribution?.remarks"
             class="remarks-row"
           >
@@ -116,6 +137,26 @@ async function copyRemarks(id: string, text: string) {
               class="copy-btn"
               :class="{ copied: copiedId === item.id }"
               @click="copyRemarks(item.id, item.distribution.remarks!)"
+              :title="copiedId === item.id ? '已复制' : '复制备注'"
+            >
+              <svg v-if="copiedId === item.id" class="copy-icon" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+              </svg>
+              <svg v-else class="copy-icon" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+                <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
+              </svg>
+            </button>
+          </div>
+          <div
+            v-else-if="item.status === 'returned' && item.return_info?.remarks"
+            class="remarks-row"
+          >
+            <p class="remarks">{{ item.return_info.remarks }}</p>
+            <button
+              class="copy-btn"
+              :class="{ copied: copiedId === item.id }"
+              @click="copyRemarks(item.id, item.return_info.remarks!)"
               :title="copiedId === item.id ? '已复制' : '复制备注'"
             >
               <svg v-if="copiedId === item.id" class="copy-icon" viewBox="0 0 20 20" fill="currentColor">
@@ -235,6 +276,11 @@ async function copyRemarks(id: string, text: string) {
   font-weight: 600;
   color: #0f766e;
   background: #ccfbf1;
+}
+
+.method-tag.return-tag {
+  color: #9a3412;
+  background: #ffedd5;
 }
 
 .distribution-detail {

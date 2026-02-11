@@ -15,6 +15,10 @@ interface CardItem {
     proxy_callsign?: string
     remarks?: string
   } | null
+  return_info: {
+    method?: string
+    remarks?: string
+  } | null
 }
 
 interface QueryResponse {

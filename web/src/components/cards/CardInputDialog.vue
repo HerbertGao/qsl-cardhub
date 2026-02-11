@@ -439,6 +439,9 @@ const loadProjectCallsigns = async (projectId: string): Promise<void> => {
     return
   }
 
+  // 立即清空旧数据，避免异步加载期间用旧项目的数据校验
+  projectCallsigns.value = new Set()
+
   // 递增请求计数器，标记这次请求
   const requestId = ++callsignLoadCounter
 
