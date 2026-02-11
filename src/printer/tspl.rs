@@ -42,15 +42,25 @@ impl TSPLGenerator {
         paper_width_mm: f32,
         paper_height_mm: f32,
     ) -> Result<Vec<u8>> {
+        self.generate_with_options(result, paper_width_mm, paper_height_mm, 2.0, 0.0, "1,0")
+    }
+
+    /// 从 RenderResult 生成 TSPL 指令（支持自定义 TSPL 头参数）
+    pub fn generate_with_options(
+        &self,
+        result: RenderResult,
+        paper_width_mm: f32,
+        paper_height_mm: f32,
+        gap_mm: f32,
+        gap_offset_mm: f32,
+        direction: &str,
+    ) -> Result<Vec<u8>> {
         let mut tspl: Vec<u8> = Vec::new();
 
         // 纸张配置（使用 \r\n 作为行尾符，TSPL 标准要求）
         tspl.extend_from_slice(format!("SIZE {} mm, {} mm\r\n", paper_width_mm, paper_height_mm).as_bytes());
-        tspl.extend_from_slice(b"GAP 2 mm, 0 mm\r\n");
-        // DIRECTION 1: 打印方向旋转 180 度
-        // 这是针对实际打印机硬件测试后确定的正确方向，确保标签正向出纸时内容朝向正确
-        // DIRECTION 0 会导致标签内容上下颠倒
-        tspl.extend_from_slice(b"DIRECTION 1\r\n");
+        tspl.extend_from_slice(format!("GAP {} mm, {} mm\r\n", gap_mm, gap_offset_mm).as_bytes());
+        tspl.extend_from_slice(format!("DIRECTION {}\r\n", direction).as_bytes());
         tspl.extend_from_slice(b"CLS\r\n");
 
         // 根据渲染模式生成内容
@@ -139,12 +149,35 @@ impl TSPLGenerator {
         paper_width_mm: f32,
         paper_height_mm: f32,
     ) -> Result<Vec<u8>> {
+        self.generate_from_image_with_options(
+            image,
+            paper_width_mm,
+            paper_height_mm,
+            2.0,
+            0.0,
+            "1,0",
+        )
+    }
+
+    /// 从灰度图像直接生成 TSPL 指令（支持自定义 TSPL 头参数）
+    pub fn generate_from_image_with_options(
+        &self,
+        image: &GrayImage,
+        paper_width_mm: f32,
+        paper_height_mm: f32,
+        gap_mm: f32,
+        gap_offset_mm: f32,
+        direction: &str,
+    ) -> Result<Vec<u8>> {
         log::info!(
-            "从图像生成 TSPL 指令: 图像 {}x{}, 纸张 {}x{} mm",
+            "从图像生成 TSPL 指令: 图像 {}x{}, 纸张 {}x{} mm, GAP {} mm, {} mm, DIRECTION {}",
             image.width(),
             image.height(),
             paper_width_mm,
-            paper_height_mm
+            paper_height_mm,
+            gap_mm,
+            gap_offset_mm,
+            direction
         );
 
         let mut tspl: Vec<u8> = Vec::new();
@@ -153,9 +186,8 @@ impl TSPLGenerator {
         tspl.extend_from_slice(
             format!("SIZE {} mm, {} mm\r\n", paper_width_mm, paper_height_mm).as_bytes(),
         );
-        tspl.extend_from_slice(b"GAP 0 mm, 0 mm\r\n");
-        // DIRECTION 1,0: 打印方向旋转 180 度，镜像关闭
-        tspl.extend_from_slice(b"DIRECTION 1,0\r\n");
+        tspl.extend_from_slice(format!("GAP {} mm, {} mm\r\n", gap_mm, gap_offset_mm).as_bytes());
+        tspl.extend_from_slice(format!("DIRECTION {}\r\n", direction).as_bytes());
         tspl.extend_from_slice(b"CLS\r\n");
 
         // 生成位图指令
@@ -421,5 +453,21 @@ mod tests {
         // 8x8 位图，每行1字节，共8字节数据 + 指令头部 + \r\n
         // 指令头部 "BITMAP 10,20,1,8,0," = 19 字节 + 8 字节数据 + 2 字节换行 = 29 字节
         assert_eq!(cmd_bytes.len(), 19 + 8 + 2);
+    }
+
+    #[test]
+    fn test_generate_from_image_with_options_header() {
+        let generator = TSPLGenerator::new();
+        let image = GrayImage::new(8, 8);
+
+        let tspl_bytes = generator
+            .generate_from_image_with_options(&image, 76.0, 130.0, 2.0, 0.0, "1,0")
+            .unwrap();
+        let tspl = String::from_utf8_lossy(&tspl_bytes);
+
+        assert!(tspl.contains("SIZE 76 mm, 130 mm"));
+        assert!(tspl.contains("GAP 2 mm, 0 mm"));
+        assert!(tspl.contains("DIRECTION 1,0"));
+        assert!(tspl.contains("PRINT 1"));
     }
 }

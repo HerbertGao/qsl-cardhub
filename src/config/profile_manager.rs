@@ -235,6 +235,7 @@ impl ProfileManager {
                 name: profile.printer.name.clone(),
             },
             platform: profile.platform.clone(),
+            tspl: super::models::TsplPrintConfig::default(),
         };
 
         // 保存新配置

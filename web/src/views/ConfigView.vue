@@ -58,6 +58,42 @@
           </div>
         </el-form-item>
 
+        <el-form-item label="GAP (mm)">
+          <div style="display: flex; gap: 8px; width: 100%">
+            <el-input-number
+              v-model="config.tspl.gap_mm"
+              :min="0"
+              :max="10"
+              :step="0.5"
+              :precision="1"
+              style="width: 50%"
+            />
+            <el-input-number
+              v-model="config.tspl.gap_offset_mm"
+              :min="0"
+              :max="10"
+              :step="0.5"
+              :precision="1"
+              style="width: 50%"
+            />
+          </div>
+        </el-form-item>
+
+        <el-form-item label="DIRECTION">
+          <el-select
+            v-model="config.tspl.direction"
+            placeholder="请选择 DIRECTION"
+            style="width: 100%"
+          >
+            <el-option label="1,0 (推荐)" value="1,0" />
+            <el-option label="1" value="1" />
+            <el-option label="0,0" value="0,0" />
+            <el-option label="0" value="0" />
+            <el-option label="2,0" value="2,0" />
+            <el-option label="3,0" value="3,0" />
+          </el-select>
+        </el-form-item>
+
         <el-divider />
 
         <el-alert
@@ -94,7 +130,12 @@ const config = ref<SinglePrinterConfig>({
   platform: {
     os: '',
     arch: ''
-  }
+  },
+  tspl: {
+    gap_mm: 2,
+    gap_offset_mm: 0,
+    direction: '1,0'
+  },
 })
 
 const availablePrinters = ref<string[]>([])
@@ -154,7 +195,7 @@ const debouncedSave = (): void => {
 
 // 监听配置变化，自动保存
 watch(
-  () => config.value.printer.name,
+  () => [config.value.printer.name, config.value.tspl.gap_mm, config.value.tspl.gap_offset_mm, config.value.tspl.direction],
   (): void => {
     debouncedSave()
   }
