@@ -29,6 +29,9 @@ impl TSPLGenerator {
 
     /// 从 RenderResult 生成 TSPL 指令
     ///
+    /// 注意：便捷方法默认使用 `GAP 2.0,0.0` 与 `DIRECTION 1,0`。
+    /// 这是为修复历史默认 `GAP 0,0` 在部分机型（如 HPRT N31D）上导致的跳纸/空白页问题。
+    ///
     /// # 参数
     /// - `result`: 渲染结果
     /// - `paper_width_mm`: 纸张宽度(mm)
@@ -135,6 +138,9 @@ impl TSPLGenerator {
     /// 从灰度图像直接生成 TSPL 指令
     ///
     /// 用于打印机后端的 print_image 方法，直接从图像生成完整的 TSPL 打印指令
+    ///
+    /// 注意：便捷方法默认使用 `GAP 2.0,0.0` 与 `DIRECTION 1,0`。
+    /// 这是为修复历史默认 `GAP 0,0` 在部分机型（如 HPRT N31D）上导致的跳纸/空白页问题。
     ///
     /// # 参数
     /// - `image`: 灰度图像
