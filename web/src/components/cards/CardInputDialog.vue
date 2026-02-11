@@ -276,6 +276,9 @@ const submitting = ref<boolean>(false)
 // 当前项目下已有呼号集合（用于重复检查）
 const projectCallsigns = ref<Set<string>>(new Set())
 
+// 请求序列号，用于防止异步请求乱序
+let callsignLoadCounter = 0
+
 // 呼号验证正则
 const callsignPattern: RegExp = /^[A-Za-z0-9/]{3,10}$/
 
@@ -298,7 +301,7 @@ const rules: FormRules<CardInputFormData> = {
           callback()
         }
       },
-      trigger: 'blur'
+      trigger: ['blur', 'change']
     }
   ],
   qty: [
@@ -436,12 +439,21 @@ const loadProjectCallsigns = async (projectId: string): Promise<void> => {
     return
   }
 
+  // 递增请求计数器，标记这次请求
+  const requestId = ++callsignLoadCounter
+
   try {
     const callsigns = await invoke<string[]>('get_project_callsigns_cmd', { projectId })
-    projectCallsigns.value = new Set(callsigns)
+    // 只有当这是最新的请求时才更新数据
+    if (requestId === callsignLoadCounter) {
+      projectCallsigns.value = new Set(callsigns)
+    }
   } catch (error) {
     console.error('加载项目呼号失败:', error)
-    projectCallsigns.value = new Set()
+    // 只有当这是最新的请求时才清空数据
+    if (requestId === callsignLoadCounter) {
+      projectCallsigns.value = new Set()
+    }
   }
 }
 

@@ -105,27 +105,10 @@ async function copyRemarks(id: string, text: string) {
               >
                 代领人：{{ item.distribution.proxy_callsign }}
               </p>
-              <div v-else-if="item.distribution?.remarks" class="remarks-row">
-                <p class="remarks">{{ item.distribution.remarks }}</p>
-                <button
-                  class="copy-btn"
-                  :class="{ copied: copiedId === item.id }"
-                  @click="copyRemarks(item.id, item.distribution.remarks!)"
-                  :title="copiedId === item.id ? '已复制' : '复制备注'"
-                >
-                  <svg v-if="copiedId === item.id" class="copy-icon" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                  </svg>
-                  <svg v-else class="copy-icon" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
-                    <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
-                  </svg>
-                </button>
-              </div>
             </div>
           </div>
           <div
-            v-else-if="item.distribution?.remarks"
+            v-if="item.status === 'distributed' && item.distribution?.remarks"
             class="remarks-row"
           >
             <p class="remarks">{{ item.distribution.remarks }}</p>
