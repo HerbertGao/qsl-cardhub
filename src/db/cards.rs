@@ -56,6 +56,21 @@ pub fn create_card(project_id: String, callsign: String, qty: i32, serial: Optio
         )));
     }
 
+    // 检查同项目下呼号是否已存在
+    let callsign_exists: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM cards WHERE project_id = ?1 AND callsign = ?2)",
+            [&project_id, &callsign],
+            |row| row.get(0),
+        )
+        .map_err(|e| AppError::Other(format!("查询呼号失败: {}", e)))?;
+
+    if callsign_exists {
+        return Err(AppError::InvalidParameter(
+            "该呼号已在此项目中录入".to_string(),
+        ));
+    }
+
     // 创建卡片
     let card = Card::new(project_id, callsign, qty, serial);
 

@@ -35,7 +35,7 @@ export interface CardInputConfirmData {
 
 // 卡片输入对话框组件实例
 export interface CardInputDialogInstance {
-  resetForContinuous: () => Promise<void>
+  resetForContinuous: (enteredCallsign?: string) => Promise<void>
 }
 
 // 卡片分发对话框

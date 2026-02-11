@@ -7,20 +7,14 @@ import MathCaptcha from './components/MathCaptcha.vue'
 import { buildSignedUrl } from './utils/sign'
 
 interface CardItem {
-  id: number
-  project_id: number
+  id: string
   project_name: string | null
-  callsign: string
-  qty: number
-  serial: string | null
   status: string
-  metadata: {
-    distribution?: {
-      remarks?: string
-    }
+  distribution: {
+    method?: string
+    proxy_callsign?: string
+    remarks?: string
   } | null
-  created_at: string
-  updated_at: string
 }
 
 interface QueryResponse {

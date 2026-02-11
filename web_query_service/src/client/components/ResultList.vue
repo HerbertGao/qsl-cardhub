@@ -2,20 +2,14 @@
 import { ref } from 'vue'
 
 interface CardItem {
-  id: number
-  project_id: number
+  id: string
   project_name: string | null
-  callsign: string
-  qty: number
-  serial: string | null
   status: string
-  metadata: {
-    distribution?: {
-      remarks?: string
-    }
+  distribution: {
+    method?: string
+    proxy_callsign?: string
+    remarks?: string
   } | null
-  created_at: string
-  updated_at: string
 }
 
 defineProps<{
@@ -23,7 +17,7 @@ defineProps<{
   items: CardItem[]
 }>()
 
-const copiedId = ref<number | null>(null)
+const copiedId = ref<string | null>(null)
 
 function getStatusLabel(status: string): string {
   const map: Record<string, string> = {
@@ -41,7 +35,7 @@ function getStatusClass(status: string): string {
   return 'badge-pending'
 }
 
-async function copyRemarks(id: number, text: string) {
+async function copyRemarks(id: string, text: string) {
   try {
     await navigator.clipboard.writeText(text)
     copiedId.value = id
@@ -89,13 +83,56 @@ async function copyRemarks(id: number, text: string) {
             {{ getStatusLabel(item.status) }}
           </span>
         </div>
-        <div v-if="item.metadata?.distribution?.remarks" class="card-body">
-          <div class="remarks-row">
-            <p class="remarks">{{ item.metadata.distribution.remarks }}</p>
+        <div
+          v-if="
+            item.distribution?.remarks ||
+            (item.status === 'distributed' && item.distribution?.method)
+          "
+          class="card-body"
+        >
+          <div
+            v-if="item.status === 'distributed' && item.distribution?.method"
+            class="distribution-row"
+          >
+            <span class="method-tag">{{ item.distribution.method }}</span>
+            <div class="distribution-detail">
+              <p
+                v-if="
+                  item.distribution?.method === '代领' &&
+                  item.distribution?.proxy_callsign
+                "
+                class="detail-text"
+              >
+                代领人：{{ item.distribution.proxy_callsign }}
+              </p>
+              <div v-else-if="item.distribution?.remarks" class="remarks-row">
+                <p class="remarks">{{ item.distribution.remarks }}</p>
+                <button
+                  class="copy-btn"
+                  :class="{ copied: copiedId === item.id }"
+                  @click="copyRemarks(item.id, item.distribution.remarks!)"
+                  :title="copiedId === item.id ? '已复制' : '复制备注'"
+                >
+                  <svg v-if="copiedId === item.id" class="copy-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                  </svg>
+                  <svg v-else class="copy-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+                    <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div
+            v-else-if="item.distribution?.remarks"
+            class="remarks-row"
+          >
+            <p class="remarks">{{ item.distribution.remarks }}</p>
             <button
               class="copy-btn"
               :class="{ copied: copiedId === item.id }"
-              @click="copyRemarks(item.id, item.metadata.distribution.remarks!)"
+              @click="copyRemarks(item.id, item.distribution.remarks!)"
               :title="copiedId === item.id ? '已复制' : '复制备注'"
             >
               <svg v-if="copiedId === item.id" class="copy-icon" viewBox="0 0 20 20" fill="currentColor">
@@ -198,10 +235,52 @@ async function copyRemarks(id: number, text: string) {
   border-top: 1px solid var(--border);
 }
 
-.remarks-row {
+.distribution-row {
+  margin: 0 0 0.625rem;
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
+}
+
+.method-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #0f766e;
+  background: #ccfbf1;
+}
+
+.distribution-detail {
+  margin-left: auto;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.detail-text {
+  margin: 0;
+  text-align: right;
+  font-family: 'SF Mono', 'Menlo', monospace;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 0.125rem 0.5rem;
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.remarks-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  max-width: 100%;
 }
 
 .remarks {
