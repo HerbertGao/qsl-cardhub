@@ -41,7 +41,7 @@
 
 - **当** 查询结果中的某条记录 `status = returned`
 - **那么** 结果页必须在分发方式位置显示退卡处理方式（如"查无此人"、"呼号无效"、"拒收"、"其他"）
-- **并且** 当 `return_info.remarks` 存在时，结果页必须显示退卡备注并提供复制按钮
+- **并且** 当 `return.remarks` 存在时，结果页必须显示退卡备注并提供复制按钮
 - **并且** 结果页禁止显示"自取/代领/代领人"分发方式扩展文案
 
 - **当** 查询结果中的某条记录 `status` 既非 `distributed` 也非 `returned`
@@ -59,7 +59,7 @@
     - `method`: 分发方式（如自取、代领、邮寄等）
     - `proxy_callsign`: 代领呼号（仅代领时存在）
     - `remarks`: 分发备注
-  - `return_info`: 退卡信息对象（仅当已退卡时存在），包含：
+  - `return`: 退卡信息对象（仅当已退卡时存在），包含：
     - `method`: 退卡处理方式（NOT FOUND / CALLSIGN INVALID / REFUSED / OTHER）
     - `remarks`: 退卡备注
 - **并且** 禁止返回以下字段：`project_id`、`callsign`（冗余）、`qty`、`serial`、`created_at`、`updated_at`、`metadata`（完整对象）、分发地址、退卡时间

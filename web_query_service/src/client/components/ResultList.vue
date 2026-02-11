@@ -10,7 +10,7 @@ interface CardItem {
     proxy_callsign?: string
     remarks?: string
   } | null
-  return_info: {
+  return: {
     method?: string
     remarks?: string
   } | null
@@ -99,9 +99,9 @@ async function copyRemarks(id: string, text: string) {
         <div
           v-if="
             (item.status === 'distributed' && item.distribution?.method) ||
-            (item.status === 'returned' && item.return_info?.method) ||
+            (item.status === 'returned' && item.return?.method) ||
             (item.status === 'distributed' && item.distribution?.remarks) ||
-            (item.status === 'returned' && item.return_info?.remarks)
+            (item.status === 'returned' && item.return?.remarks)
           "
           class="card-body"
         >
@@ -123,10 +123,10 @@ async function copyRemarks(id: string, text: string) {
             </div>
           </div>
           <div
-            v-else-if="item.status === 'returned' && item.return_info?.method"
+            v-else-if="item.status === 'returned' && item.return?.method"
             class="distribution-row"
           >
-            <span class="method-tag return-tag">{{ getReturnMethodLabel(item.return_info.method) }}</span>
+            <span class="method-tag return-tag">{{ getReturnMethodLabel(item.return.method) }}</span>
           </div>
           <div
             v-if="item.status === 'distributed' && item.distribution?.remarks"
@@ -149,14 +149,14 @@ async function copyRemarks(id: string, text: string) {
             </button>
           </div>
           <div
-            v-else-if="item.status === 'returned' && item.return_info?.remarks"
+            v-else-if="item.status === 'returned' && item.return?.remarks"
             class="remarks-row"
           >
-            <p class="remarks">{{ item.return_info.remarks }}</p>
+            <p class="remarks">{{ item.return.remarks }}</p>
             <button
               class="copy-btn"
               :class="{ copied: copiedId === item.id }"
-              @click="copyRemarks(item.id, item.return_info.remarks!)"
+              @click="copyRemarks(item.id, item.return.remarks!)"
               :title="copiedId === item.id ? '已复制' : '复制备注'"
             >
               <svg v-if="copiedId === item.id" class="copy-icon" viewBox="0 0 20 20" fill="currentColor">

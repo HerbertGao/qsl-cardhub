@@ -434,16 +434,15 @@ const handleResetSerial = (): void => {
 
 // 加载项目下已有呼号集合
 const loadProjectCallsigns = async (projectId: string): Promise<void> => {
-  if (!projectId) {
-    projectCallsigns.value = new Set()
-    return
-  }
+  // 递增请求计数器，使之前的慢请求失效
+  const requestId = ++callsignLoadCounter
 
-  // 立即清空旧数据，避免异步加载期间用旧项目的数据校验
+  // 立即清空旧数据
   projectCallsigns.value = new Set()
 
-  // 递增请求计数器，标记这次请求
-  const requestId = ++callsignLoadCounter
+  if (!projectId) {
+    return
+  }
 
   try {
     const callsigns = await invoke<string[]>('get_project_callsigns_cmd', { projectId })

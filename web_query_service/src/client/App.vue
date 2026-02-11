@@ -15,7 +15,7 @@ interface CardItem {
     proxy_callsign?: string
     remarks?: string
   } | null
-  return_info: {
+  return: {
     method?: string
     remarks?: string
   } | null

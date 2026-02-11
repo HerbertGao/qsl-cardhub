@@ -457,7 +457,7 @@ export default {
         const items = (rows.results || []).map((r) => {
           const metadata = r.metadata ? (typeof r.metadata === 'string' ? JSON.parse(r.metadata) : r.metadata) : null;
           const dist = metadata?.distribution;
-          const ret = metadata?.return_info;
+          const ret = metadata?.return;
           return {
             id: r.id,
             project_name: r.project_name || null,
@@ -467,7 +467,7 @@ export default {
               proxy_callsign: dist.proxy_callsign || null,
               remarks: dist.remarks || null,
             } : null,
-            return_info: ret ? {
+            return: ret ? {
               method: ret.method || null,
               remarks: ret.remarks || null,
             } : null,
