@@ -91,7 +91,11 @@ fn extract_qrz_cache_columns(card: &CardWithProject) -> (String, String, String)
         return (qrz_cn_chinese, qrz_cn_english, qrz_com_english);
     };
 
-    if let Some(entry) = cache.iter().find(|entry| entry.source == "qrz.cn") {
+    if let Some(entry) = cache
+        .iter()
+        .filter(|entry| entry.source == "qrz.cn")
+        .max_by(|a, b| a.cached_at.cmp(&b.cached_at))
+    {
         if let Some(value) = entry.chinese_address.as_ref() {
             qrz_cn_chinese = value.clone();
         }
@@ -100,7 +104,11 @@ fn extract_qrz_cache_columns(card: &CardWithProject) -> (String, String, String)
         }
     }
 
-    if let Some(entry) = cache.iter().find(|entry| entry.source == "qrz.com") {
+    if let Some(entry) = cache
+        .iter()
+        .filter(|entry| entry.source == "qrz.com")
+        .max_by(|a, b| a.cached_at.cmp(&b.cached_at))
+    {
         if let Some(value) = entry.english_address.as_ref() {
             qrz_com_english = value.clone();
         }
