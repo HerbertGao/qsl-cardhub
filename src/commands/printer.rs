@@ -5,6 +5,7 @@
 use crate::config::template::{OutputConfig, TemplateConfig};
 use crate::config::models::TsplPrintConfig;
 use crate::commands::profile::ProfileState;
+use crate::commands::tspl_config::normalize_tspl_print_config;
 use crate::printer::backend::ImagePrintConfig;
 use crate::printer::backend::PdfBackend;
 use crate::printer::backend::PrinterBackend;
@@ -101,7 +102,6 @@ fn load_address_template_config() -> Result<TemplateConfig, String> {
 
 /// 读取并校验全局 TSPL 参数
 fn load_tspl_print_config(profile_state: &State<'_, ProfileState>) -> Result<TsplPrintConfig, String> {
-    let defaults = TsplPrintConfig::default();
     let manager = profile_state
         .manager
         .lock()
@@ -110,51 +110,11 @@ fn load_tspl_print_config(profile_state: &State<'_, ProfileState>) -> Result<Tsp
         .get_printer_config()
         .map_err(|e| format!("读取打印机配置失败: {}", e))?
         .tspl;
-
-    let gap_mm = if (0.0..=10.0).contains(&raw.gap_mm) {
-        raw.gap_mm
-    } else {
-        log::warn!(
-            "TSPL参数回退: gap_mm={} 超出范围 [0,10]，回退为 {}",
-            raw.gap_mm,
-            defaults.gap_mm
-        );
-        defaults.gap_mm
-    };
-    let gap_offset_mm = if (0.0..=10.0).contains(&raw.gap_offset_mm) {
-        raw.gap_offset_mm
-    } else {
-        log::warn!(
-            "TSPL参数回退: gap_offset_mm={} 超出范围 [0,10]，回退为 {}",
-            raw.gap_offset_mm,
-            defaults.gap_offset_mm
-        );
-        defaults.gap_offset_mm
-    };
-    let direction = {
-        let trimmed = raw.direction.trim();
-        let valid = matches!(
-            trimmed,
-            "0" | "1" | "2" | "3" | "0,0" | "0,1" | "1,0" | "1,1" | "2,0" | "2,1" | "3,0"
-                | "3,1"
-        );
-        if valid {
-            trimmed.to_string()
-        } else {
-            log::warn!(
-                "TSPL参数回退: direction=\"{}\" 非法，回退为 {}",
-                raw.direction,
-                defaults.direction
-            );
-            defaults.direction
-        }
-    };
-
-    Ok(TsplPrintConfig {
-        gap_mm,
-        gap_offset_mm,
-        direction,
-    })
+    let (normalized, warnings) = normalize_tspl_print_config(&raw);
+    for warning in warnings {
+        log::warn!("TSPL参数回退: {}", warning);
+    }
+    Ok(normalized)
 }
 
 /// 打印机管理器状态

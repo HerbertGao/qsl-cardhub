@@ -5,11 +5,9 @@
 // 2. 验证全局 TSPL 参数（GAP / DIRECTION）能够生效到最终 TSPL 头部
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use image::DynamicImage;
 use qsl_cardhub::printer::tspl::TSPLGenerator;
 use qsl_cardhub::sf_express::pdf_renderer::WaybillSize;
 use qsl_cardhub::sf_express::PdfRenderer;
-use std::path::Path;
 
 fn build_minimal_test_pdf() -> Vec<u8> {
     let stream_content = b"BT /F1 18 Tf 36 300 Td (SF WAYBILL TEST) Tj ET";
@@ -112,31 +110,4 @@ fn test_sf_waybill_two_step_applies_global_tspl_options() {
 
     assert!(tspl_custom_text.contains("GAP 3 mm, 1 mm"));
     assert!(tspl_custom_text.contains("DIRECTION 0,0"));
-}
-
-#[test]
-fn test_local_png_waybill_tspl_options() {
-    let local_png = Path::new("/Users/herbertgao/Downloads/print_20260125_221736.png");
-    if !local_png.exists() {
-        eprintln!(
-            "跳过本机 PNG 测试：未找到文件 {}",
-            local_png.display()
-        );
-        return;
-    }
-
-    let image = image::open(local_png).expect("加载本机 PNG 失败");
-    let gray = match image {
-        DynamicImage::ImageLuma8(img) => img,
-        _ => image.to_luma8(),
-    };
-
-    let generator = TSPLGenerator::new();
-    let tspl = generator
-        .generate_from_image_with_options(&gray, 76.0, 130.0, 2.0, 0.0, "1,0")
-        .expect("从本机 PNG 生成 TSPL 失败");
-    let tspl_text = String::from_utf8_lossy(&tspl);
-
-    assert!(tspl_text.contains("GAP 2 mm, 0 mm"));
-    assert!(tspl_text.contains("DIRECTION 1,0"));
 }

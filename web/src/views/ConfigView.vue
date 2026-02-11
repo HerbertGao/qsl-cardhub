@@ -58,7 +58,20 @@
           </div>
         </el-form-item>
 
-        <el-form-item label="GAP (mm)">
+        <el-form-item>
+          <template #label>
+            <span>GAP (mm)</span>
+            <el-tooltip placement="right">
+              <el-icon style="margin-left: 6px; color: #909399; cursor: help">
+                <QuestionFilled />
+              </el-icon>
+              <template #content>
+                GAP 控制每张标签之间的间隙。<br>
+                左侧是 `gap_mm`（间隙宽度），右侧是 `gap_offset_mm`（间隙偏移补偿）。<br>
+                默认建议：`2.0` 和 `0.0`。
+              </template>
+            </el-tooltip>
+          </template>
           <div style="display: flex; gap: 8px; width: 100%">
             <el-input-number
               v-model="config.tspl.gap_mm"
@@ -79,19 +92,45 @@
           </div>
         </el-form-item>
 
-        <el-form-item label="DIRECTION">
+        <el-form-item>
+          <template #label>
+            <span>DIRECTION</span>
+            <el-tooltip placement="right">
+              <el-icon style="margin-left: 6px; color: #909399; cursor: help">
+                <QuestionFilled />
+              </el-icon>
+              <template #content>
+                DIRECTION 控制打印方向与镜像。<br>
+                `1,0` / `1`：旋转 180°，不镜像；`0,0` / `0`：正常方向，不镜像。<br>
+                `2,0`：旋转 180° 且镜像；`3,0`：正常方向且镜像。<br>
+                打印内容倒置或左右反向时，按设备切换对应方向参数。
+              </template>
+            </el-tooltip>
+          </template>
           <el-select
             v-model="config.tspl.direction"
             placeholder="请选择 DIRECTION"
             style="width: 100%"
           >
-            <el-option label="1,0 (推荐)" value="1,0" />
-            <el-option label="1" value="1" />
-            <el-option label="0,0" value="0,0" />
-            <el-option label="0" value="0" />
-            <el-option label="2,0" value="2,0" />
-            <el-option label="3,0" value="3,0" />
+            <el-option label="旋转 180°，不镜像（1,0）" value="1,0" />
+            <el-option label="旋转 180°，不镜像（兼容写法，1）" value="1" />
+            <el-option label="正常方向，不镜像（0,0）" value="0,0" />
+            <el-option label="正常方向，不镜像（兼容写法，0）" value="0" />
+            <el-option label="旋转 180°，镜像（2,0）" value="2,0" />
+            <el-option label="正常方向，镜像（3,0）" value="3,0" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="命令预览">
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+          >
+            <template #title>
+              GAP {{ config.tspl.gap_mm }} mm, {{ config.tspl.gap_offset_mm }} mm
+              / DIRECTION {{ config.tspl.direction }}
+            </template>
+          </el-alert>
         </el-form-item>
 
         <el-divider />
@@ -113,7 +152,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh } from '@element-plus/icons-vue'
+import { QuestionFilled, Refresh } from '@element-plus/icons-vue'
 import { invoke } from '@tauri-apps/api/core'
 import type { SinglePrinterConfig, PlatformInfo } from '@/types/models'
 
