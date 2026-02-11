@@ -4,75 +4,29 @@ on:
   # PR 到 master 分支时触发
   pull_request:
     branches: [master]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/workflows/README.md'
 
   # 手动触发
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   RUST_BACKTRACE: 1
   CARGO_TERM_COLOR: always
 
 jobs:
-  # 前端代码检查
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
-
-      - name: 安装 Linux 系统依赖
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-
-      - name: 安装 Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: 安装 pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: 安装 Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-          cache-dependency-path: web/pnpm-lock.yaml
-
-      - name: 安装依赖
-        working-directory: web
-        run: pnpm install --frozen-lockfile
-
-      - name: 生成占位配置文件
-        run: |
-          cat > config/sf_express_default.toml << TOML
-          enabled = false
-          partner_id = ""
-          checkword_sandbox = ""
-          checkword_prod = ""
-          TOML
-
-      - name: 验证 TypeScript 类型同步
-        run: |
-          cargo test export_bindings --features ts-rs
-          if ! git diff --exit-code web/src/types/generated/; then
-            echo "::error::生成的 TypeScript 类型与 Rust 定义不同步。请运行 'cargo test export_bindings --features ts-rs' 并提交更新后的文件。"
-            exit 1
-          fi
-
-      - name: TypeScript 类型检查
-        working-directory: web
-        run: pnpm run type-check
-
-      - name: ESLint 检查
-        working-directory: web
-        run: pnpm run lint
+  quality-checks:
+    name: Quality Checks
+    uses: ./.github/workflows/reusable-quality-checks.yml
 
   build:
     name: Build ${{ matrix.platform }}
-    needs: lint
     runs-on: ${{ matrix.os }}
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -147,10 +101,6 @@ jobs:
         working-directory: web
         run: pnpm install --frozen-lockfile
 
-      - name: 构建前端
-        working-directory: web
-        run: pnpm run build
-
       - name: 生成顺丰速运默认配置
         shell: bash
         run: |
@@ -181,16 +131,18 @@ jobs:
 
   build-summary:
     name: 构建总结
-    needs: build
+    needs: [build, quality-checks]
     runs-on: ubuntu-latest
     if: always()
     steps:
       - name: 检查构建状态
         run: |
-          if [ "${{ needs.build.result }}" == "success" ]; then
-            echo "✅ 所有平台构建成功"
+          if [ "${{ needs.build.result }}" == "success" ] && [ "${{ needs.quality-checks.result }}" == "success" ]; then
+            echo "✅ 构建与检查全部成功"
             exit 0
           else
-            echo "❌ 部分平台构建失败"
+            echo "❌ 构建或检查存在失败"
+            echo "build: ${{ needs.build.result }}"
+            echo "quality-checks: ${{ needs.quality-checks.result }}"
             exit 1
           fi
