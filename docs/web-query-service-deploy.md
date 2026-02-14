@@ -44,4 +44,4 @@
 - **云端 API 规范**（GET /ping、POST /sync 请求/响应格式）见：  
   [cloud-sync-api-spec.md](cloud-sync-api-spec.md)。
 
-- **顺丰路由推送** 请求/响应格式见 [sf-route-push-service.md](sf-route-push-service.md)。服务端提供两条路径：正式 `POST /api/sf/route-push`、沙箱 `POST /api/sf/route-push/sandbox`；沙箱触发的用户推送内容带「【沙箱】」标记。
+- **顺丰路由推送**：服务端提供两条路径：正式 `POST /api/sf/route-push`、沙箱 `POST /api/sf/route-push/sandbox`；沙箱触发的用户推送内容带「【沙箱】」标记。请求/响应格式详见 OpenSpec 规范 `openspec/specs/sf-route-push-receiver/spec.md`。

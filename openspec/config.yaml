@@ -1,20 +1,196 @@
 schema: spec-driven
 
-# 项目上下文（可选）
-# 在创建工件时向 AI 显示此信息。
-# 添加您的技术栈、约定、风格指南、领域知识等。
-# 示例：
-#   context: |
-#     技术栈：TypeScript, React, Node.js
-#     我们使用约定式提交
-#     领域：电商平台
+context: |
+  # qsl-cardhub — QSL 分卡助手
 
-# 每个工件的规则（可选）
-# 为特定工件添加自定义规则。
-# 示例：
-#   rules:
-#     proposal:
-#       - 保持提案在500字以内
-#       - 始终包含"非目标"部分
-#     tasks:
-#       - 将任务分解为最多2小时的块
+  业余无线电 QSL 卡片管理桌面工具。为业余无线电爱好者提供卡片录入、分发、标签打印、
+  快递集成和地址查询的一站式管理方案。当前版本 v0.6.12。
+
+  ## 技术栈
+
+  后端：Rust (Edition 2024) + Tauri 2
+  前端：Vue 3 + TypeScript + Element Plus + Vite 5
+  数据库：SQLite (rusqlite 0.38, bundled)
+  打印：TSPL 协议直发系统打印队列
+  包管理：Cargo (Rust) + pnpm (前端)
+  目标平台：Windows x64/ARM64 (Win32 Print API), macOS Intel/ARM64 (CUPS)
+
+  关键 Rust 依赖：
+    tauri 2, serde/serde_json, toml 0.9, tokio, reqwest 0.13 (HTTP),
+    ab_glyph/rusttype (字体渲染), barcoders (条形码), image/imageproc,
+    aes-gcm/pbkdf2 (加密), pdfium-render (PDF), rust_xlsxwriter (Excel),
+    ts-rs (TypeScript 类型生成, 可选 feature)
+
+  前端依赖：
+    vue 3.4+, element-plus 2.5+, @tauri-apps/api 2.x,
+    markdown-it + dompurify (Markdown 渲染), unplugin-icons
+
+  ## 项目结构
+
+  ```
+  /                         # 项目根目录（也是 Cargo 项目根目录）
+  ├── src/                  # Rust 源码
+  │   ├── main.rs           # Tauri 应用入口
+  │   ├── lib.rs            # 库入口
+  │   ├── api.rs            # API 定义
+  │   ├── commands/         # Tauri Commands（前端调用的后端 API）
+  │   │   ├── cards.rs      # 卡片管理
+  │   │   ├── projects.rs   # 项目管理
+  │   │   ├── printer.rs    # 打印
+  │   │   ├── profile.rs    # Profile 配置
+  │   │   ├── tspl_config.rs# TSPL 配置
+  │   │   ├── sf_express.rs # 顺丰快递
+  │   │   ├── qrz_cn.rs     # QRZ.cn
+  │   │   ├── qrz_com.rs    # QRZ.com
+  │   │   ├── qrz_herbertgao.rs # QRZ.herbertgao.me
+  │   │   ├── security.rs   # 凭据管理
+  │   │   ├── data_transfer.rs # 数据导入导出
+  │   │   ├── export.rs     # Excel 导出
+  │   │   ├── factory_reset.rs # 恢复出厂设置
+  │   │   ├── sync.rs       # 数据同步
+  │   │   ├── logger.rs     # 日志
+  │   │   └── platform.rs   # 平台信息
+  │   ├── db/               # 数据库层
+  │   │   ├── sqlite.rs     # SQLite 连接与迁移管理
+  │   │   ├── models.rs     # 数据模型
+  │   │   ├── projects.rs   # 项目 CRUD
+  │   │   ├── cards.rs      # 卡片 CRUD + 地址缓存
+  │   │   ├── sf_express.rs # 顺丰订单/寄件人
+  │   │   ├── export.rs     # 数据导出
+  │   │   └── import.rs     # 数据导入
+  │   ├── printer/          # 打印服务
+  │   │   ├── tspl.rs       # TSPL 指令生成
+  │   │   ├── template_engine.rs # 模板引擎
+  │   │   ├── layout_engine.rs   # 布局引擎
+  │   │   ├── render_pipeline.rs # 渲染管线
+  │   │   ├── text_renderer.rs   # 文本渲染
+  │   │   ├── barcode_renderer.rs# 条形码渲染
+  │   │   ├── font_loader.rs     # 字体加载
+  │   │   └── backend/      # 打印后端抽象
+  │   │       ├── windows.rs # Win32 打印
+  │   │       ├── cups.rs    # CUPS 打印 (macOS)
+  │   │       └── pdf.rs     # PDF 虚拟打印（预览）
+  │   ├── config/           # 配置管理
+  │   │   ├── profile_manager.rs # Profile 管理
+  │   │   ├── template.rs   # 模板配置
+  │   │   └── models.rs     # 配置模型
+  │   ├── qrz/              # QRZ 集成
+  │   │   ├── qrz_cn_client.rs / qrz_cn_parser.rs
+  │   │   ├── qrz_com_client.rs / qrz_com_parser.rs
+  │   │   └── qrz_herbertgao_client.rs
+  │   ├── sf_express/       # 顺丰快递集成
+  │   │   ├── client.rs     # API 客户端
+  │   │   ├── models.rs     # 数据模型
+  │   │   └── pdf_renderer.rs # 面单 PDF 渲染
+  │   ├── security/         # 安全模块
+  │   │   ├── credentials.rs # 凭据管理
+  │   │   └── encryption.rs  # AES-256-GCM 加密
+  │   ├── sync/             # 数据同步
+  │   ├── logger/           # 日志系统（环形缓冲区）
+  │   └── error/            # 错误类型
+  ├── web/                  # 前端 (Vue 3 + TypeScript)
+  │   └── src/
+  │       ├── App.vue / main.ts
+  │       ├── views/        # 页面视图
+  │       │   ├── CardManagementView.vue  # 卡片管理（主页面）
+  │       │   ├── ConfigView.vue          # 配置管理
+  │       │   ├── TemplateView.vue        # 模板配置
+  │       │   ├── DataTransferView.vue    # 数据导入导出
+  │       │   ├── SFExpressConfigView.vue # 顺丰配置
+  │       │   ├── SFOrderListView.vue     # 顺丰订单
+  │       │   ├── QRZConfigView.vue       # QRZ.cn 配置
+  │       │   ├── QRZComConfigView.vue    # QRZ.com 配置
+  │       │   ├── LogView.vue             # 日志查看
+  │       │   └── AboutView.vue           # 关于（含更新）
+  │       ├── components/   # 组件
+  │       │   ├── cards/    # 卡片相关组件
+  │       │   ├── projects/ # 项目相关组件
+  │       │   ├── sf-express/ # 顺丰相关组件
+  │       │   └── common/   # 通用组件
+  │       ├── types/        # TypeScript 类型
+  │       │   ├── tauri.ts  # Tauri 命令参数类型
+  │       │   ├── models.ts / components.ts
+  │       │   └── generated/ # ts-rs 自动生成的类型
+  │       ├── stores/       # 状态管理
+  │       ├── composables/  # 组合式函数
+  │       ├── services/     # 服务层
+  │       └── utils/        # 工具函数
+  ├── config/               # 运行时配置文件
+  │   ├── templates/        # 打印模板 (TOML)
+  │   └── sf_express_default.toml # 顺丰默认配置
+  ├── tauri.conf.json       # Tauri 配置
+  ├── Cargo.toml            # Rust 依赖
+  └── openspec/             # OpenSpec 规范
+  ```
+
+  ## 数据库结构
+
+  SQLite 数据库路径：~/.config/qsl-cardhub/cards.db (macOS) / %APPDATA%\qsl-cardhub\cards.db (Windows)
+  使用版本化迁移系统 (db/sqlite.rs 管理)。
+
+  核心表：
+    - projects: id(UUID), name(唯一), created_at, updated_at
+    - cards: id(UUID), project_id(FK), callsign, qty, serial(可选),
+             status(pending/distributed/returned), metadata(JSON), created_at, updated_at
+    - address_cache: card_id(FK), source, callsign, chinese_address, english_address,
+                     name, mail_method, created_at, updated_at
+    - sf_senders: 顺丰寄件人信息
+    - sf_orders: 顺丰订单信息
+
+  ## 领域知识
+
+  业余无线电（Amateur Radio）：
+    - 呼号 (Callsign)：业余无线电爱好者唯一标识，如 BG7XYZ、BD1ABC
+    - QSL 卡片：确认双向通联的明信片/标签，记录通联日期、频率、信号报告
+    - 分卡系统：批量处理和分发 QSL 卡片
+
+  TSPL 打印协议（TSC Printer Language）：
+    - 热敏打印机命令语言，类似 ZPL/EPL
+    - 坐标基于 DPI（203dpi 时 1mm ≈ 8 dots）
+    - 关键指令：SIZE(标签尺寸), TEXT, BARCODE, BOX/BAR, PRINT
+    - 目标打印机：Deli DL-888C（203dpi, 76mm×130mm 纸张, USB 连接）
+    - RAW 模式：绕过图形驱动直接发送 TSPL 指令
+
+  ## 代码约定
+
+  Rust：
+    - rustfmt 格式化，snake_case 函数/变量，PascalCase 类型，SCREAMING_SNAKE_CASE 常量
+    - 中文文档注释（/// 和 //!），仅复杂逻辑处添加注释
+    - Result<T, E> + anyhow/thiserror 错误处理
+
+  前端：
+    - Vue 3 Composition API，ESLint + Prettier
+    - camelCase 函数/变量，PascalCase 组件，UPPER_SNAKE_CASE 常量
+
+  Tauri Commands 参数：
+    - Rust 后端用 snake_case，前端调用用 camelCase（Tauri 2 自动转换）
+    - 类型定义 (web/src/types/tauri.ts) 用 snake_case（与 Rust 一致）
+    - 无需 rename_all 配置
+
+  Git：
+    - 分支：master(主), develop(开发), feature/*, fix/*
+    - 提交：中文，格式 "类型: 描述"（feat/fix/docs/refactor/test/chore）
+
+  TypeScript 类型生成：
+    - 使用 ts-rs crate，运行 `cargo test export_bindings --features ts-rs` 生成
+    - 生成目标：web/src/types/generated/
+
+  ## 构建命令
+
+  开发：cargo tauri dev（自动启动前端 pnpm dev）
+  构建：cargo tauri build
+  测试：cargo test
+  前端类型检查：cd web && pnpm run type-check
+  前端 Lint：cd web && pnpm run lint
+
+  ## 关键约束
+
+  - 跨平台：必须同时支持 Windows (x64/ARM64) 和 macOS (Intel/ARM64)
+  - 静默打印：不弹出系统打印对话框，直接 RAW 发送到打印队列
+  - TSPL 字符安全：字符串需转义双引号、换行符等
+  - 无运行时依赖：编译为单一可执行文件
+  - 数据库迁移：必须支持版本管理和自动迁移
+  - 模板配置：TOML 格式，不支持可视化拖拽编辑
+  - 输入校验：呼号 3-10 字符、数量 1-9999 为必填，序列号可选
+  - 凭据安全：使用本地加密存储（AES-256-GCM + PBKDF2），不依赖系统钥匙串
+  - 自动更新：阿里云 CDN（主） + GitHub Releases（备用），签名验证

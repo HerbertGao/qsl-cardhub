@@ -6,7 +6,7 @@
 
 #### 场景：接收 JSON 格式路由推送
 
-- **当** 顺丰系统向配置的 URL 发送 POST 请求，Content-Type 为 `application/json; charset=UTF-8`，请求体为 `{ "Body": { "WaybillRoute": [ { "mailno", "orderid", "acceptTime", "remark", "opCode", "id", ... } ] } }`（参见 `docs/sf-route-push-service.md`）
+- **当** 顺丰系统向配置的 URL 发送 POST 请求，Content-Type 为 `application/json; charset=UTF-8`，请求体为 `{ "Body": { "WaybillRoute": [ { "mailno", "orderid", "acceptTime", "remark", "opCode", "id", ... } ] } }`（参见顺丰丰桥 RoutePushService 接口规范）
 - **那么** 服务端必须解析 Body.WaybillRoute 数组
 - **并且** 在顺丰要求的响应时间内返回 JSON：成功时 `{ "return_code": "0000", "return_msg": "成功" }`，失败时 `{ "return_code": "1000", "return_msg": "..." }`
 - **并且** 对同一运单同一路由节点（如以 id 或 mailno+opCode+id 去重）不重复处理，避免重复写入与重复推送
