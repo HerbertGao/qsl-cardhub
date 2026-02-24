@@ -79,6 +79,15 @@ CREATE INDEX IF NOT EXISTS idx_sf_orders_order_id ON sf_orders(order_id);
 CREATE INDEX IF NOT EXISTS idx_sf_orders_waybill_no ON sf_orders(waybill_no);
 CREATE INDEX IF NOT EXISTS idx_sf_orders_card_id ON sf_orders(card_id);
 
+-- 全局配置项表（含 client_id 隔离）
+CREATE TABLE IF NOT EXISTS app_settings (
+    client_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (client_id, key)
+);
+CREATE INDEX IF NOT EXISTS idx_app_settings_client ON app_settings(client_id);
+
 -- 呼号–微信 openid 绑定表（订阅收卡后写入；顺丰推送时按呼号查 openid 发模板消息）
 CREATE TABLE IF NOT EXISTS callsign_openid_bindings (
     callsign TEXT NOT NULL,

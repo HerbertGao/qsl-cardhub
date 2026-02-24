@@ -88,11 +88,13 @@ impl ExportDataV1_0 {
             db_version_display: self.db_version_display,
             app_version: self.app_version,
             exported_at: self.exported_at,
+            client_id: None,
             tables: ExportTables {
                 projects: self.tables.projects,
                 cards: self.tables.cards,
                 sf_senders: self.tables.sf_senders,
                 sf_orders,
+                app_settings: None,
             },
         })
     }
@@ -277,14 +279,15 @@ pub fn execute_import<P: AsRef<Path>>(file_path: P) -> Result<ExportStats, AppEr
             .map(|m| serde_json::to_string(m).unwrap_or_default());
 
         tx.execute(
-            "INSERT INTO cards (id, project_id, creator_id, callsign, qty, status, metadata, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO cards (id, project_id, creator_id, callsign, qty, serial, status, metadata, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             rusqlite::params![
                 &card.id,
                 &card.project_id,
                 &card.creator_id,
                 &card.callsign,
                 card.qty,
+                card.serial,
                 card.status.as_str(),
                 metadata_json,
                 &card.created_at,
@@ -347,10 +350,55 @@ pub fn execute_import<P: AsRef<Path>>(file_path: P) -> Result<ExportStats, AppEr
     }
     log::info!("📦 导入 {} 个订单", data.tables.sf_orders.len());
 
+    // 导入全局配置（如果存在）
+    if let Some(ref settings) = data.tables.app_settings {
+        tx.execute("DELETE FROM app_settings", [])
+            .map_err(|e| AppError::Other(format!("清空配置表失败: {}", e)))?;
+
+        for setting in settings {
+            tx.execute(
+                "INSERT INTO app_settings (key, value) VALUES (?1, ?2)",
+                rusqlite::params![&setting.key, &setting.value],
+            )
+            .map_err(|e| AppError::Other(format!("导入配置失败 ({}): {}", setting.key, e)))?;
+        }
+        log::info!("📦 导入 {} 个配置项", settings.len());
+    } else {
+        log::info!("📦 导入文件不含配置项，保留现有配置");
+    }
+
     // 提交事务
     tx.commit().map_err(|e| {
         AppError::Other(format!("提交事务失败: {}", e))
     })?;
+
+    // 恢复 client_id 到同步配置
+    if let Some(client_id) = data.client_id.as_deref().filter(|s| !s.is_empty()) {
+        log::info!("🔄 恢复同步 client_id: {}", client_id);
+        match crate::sync::config::load_sync_config() {
+            Ok(Some(mut config)) => {
+                config.client_id = client_id.to_string();
+                if let Err(e) = crate::sync::config::save_sync_config(&config) {
+                    log::warn!("恢复 client_id 失败: {}", e);
+                }
+            }
+            Ok(None) => {
+                // sync.toml 不存在，创建一个仅含 client_id 的默认配置
+                let config = crate::sync::config::SyncConfig {
+                    client_id: client_id.to_string(),
+                    ..Default::default()
+                };
+                if let Err(e) = crate::sync::config::save_sync_config(&config) {
+                    log::warn!("创建同步配置失败: {}", e);
+                }
+            }
+            Err(e) => {
+                log::warn!("加载同步配置失败，跳过 client_id 恢复: {}", e);
+            }
+        }
+    } else {
+        log::info!("📦 导入文件不含 client_id，跳过同步身份恢复");
+    }
 
     log::info!("✅ 数据导入完成");
 

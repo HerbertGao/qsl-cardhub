@@ -193,13 +193,27 @@ TBD - created by archiving change fix-border-text-alignment. Update Purpose afte
 - **并且** 可选择性提供 tooltip 说明字段作用和推荐值
 
 ### 需求：配置变更生效
-用户修改并保存的模板配置必须在后续打印操作中立即生效。
+用户修改并保存的模板配置必须在后续打印操作中立即生效。打印时，模板 `title` 元素的固定文字必须优先从 `app_settings` 数据库表读取，而非使用模板文件中的硬编码值。
 
 #### 场景：配置变更应用到打印
 - **当** 用户修改并保存模板配置后
 - **那么** 下次调用 `print_qsl` 或 `preview_qsl` 时
 - **并且** 系统必须重新加载模板文件（模板热重载已在之前的变更中实现）
 - **并且** 使用最新的配置参数进行布局和渲染
+
+#### 场景：打印时从数据库覆盖标题文字
+- **当** 执行 `print_qsl` 或 `preview_qsl` 命令
+- **并且** 模板包含 `id = "title"` 且 `source = "fixed"` 的元素
+- **并且** `app_settings` 表中存在 `label_title` 键
+- **那么** 必须将该元素的 `source` 改为 `input`、`key` 设为 `label_title`
+- **并且** 将 `app_settings` 中 `label_title` 的值注入到运行时数据 HashMap 中
+- **并且** 模板文件本身禁止被修改
+
+#### 场景：数据库无标题配置时使用模板默认值
+- **当** 执行打印命令
+- **并且** `app_settings` 表中不存在 `label_title` 键
+- **那么** 必须使用模板文件中 `title` 元素的原始 `fixed` 值
+- **并且** 不修改模板元素的 `source` 类型
 
 ### 需求：地址模板配置
 系统必须支持地址模板配置，用于打印地址信息。

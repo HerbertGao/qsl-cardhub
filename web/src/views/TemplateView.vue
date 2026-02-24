@@ -236,8 +236,20 @@
 
                   <!-- Text 元素 -->
                   <template v-if="element.type === 'text'">
+                    <!-- title 元素的固定文本可编辑（从数据库加载） -->
                     <el-form-item
-                      v-if="element.value !== undefined"
+                      v-if="element.id === 'title' && templateType === 'callsign'"
+                      label="标题文本"
+                    >
+                      <el-input
+                        v-model="labelTitle"
+                        placeholder="请输入标签标题"
+                        @change="handleLabelTitleChange"
+                      />
+                    </el-form-item>
+
+                    <el-form-item
+                      v-else-if="element.value !== undefined"
                       label="文本内容"
                     >
                       <el-input
@@ -494,6 +506,7 @@ const previewLoading = ref<boolean>(false)
 const previewImageUrl = ref<string>('')
 const saveStatus = ref<SaveStatus | null>(null)
 const activeCollapse = ref<string[]>(['page', 'layout']) // 默认展开的折叠面板
+const labelTitle = ref<string>('')
 
 // 立即保存（不使用防抖）
 const saveImmediately = async (): Promise<void> => {
@@ -639,9 +652,33 @@ const handleRefreshPreview = async (silent: boolean = false): Promise<void> => {
   }
 }
 
+// 保存标签标题到数据库
+const handleLabelTitleChange = async (value: string): Promise<void> => {
+  try {
+    await invoke('set_app_setting_cmd', { key: 'label_title', value })
+    ElMessage.success('标题已保存')
+  } catch (error) {
+    ElMessage.error(`保存标题失败: ${error}`)
+    console.error('保存标题失败:', error)
+  }
+}
+
+// 从数据库加载标签标题
+const loadLabelTitle = async (): Promise<void> => {
+  try {
+    const value = await invoke<string | null>('get_app_setting_cmd', { key: 'label_title' })
+    if (value) {
+      labelTitle.value = value
+    }
+  } catch (error) {
+    console.warn('加载标签标题失败:', error)
+  }
+}
+
 // 组件挂载时加载配置并自动执行预览
 onMounted((): void => {
   loadTemplateConfig(true)
+  loadLabelTitle()
 })
 </script>
 

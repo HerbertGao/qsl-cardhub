@@ -2,8 +2,8 @@
 //
 // 将本地数据库导出为 JSON 格式文件
 
-use crate::db::models::{Card, Project};
-use crate::db::sqlite::{get_connection, get_db_version, format_version};
+use crate::db::models::{AppSetting, Card, Project};
+use crate::db::sqlite::{format_version, get_connection, get_db_version};
 use crate::error::AppError;
 use crate::sf_express::{RecipientInfo, SFOrder, SenderInfo};
 use serde::{Deserialize, Serialize};
@@ -28,6 +28,9 @@ pub struct ExportData {
     pub app_version: String,
     /// 导出时间戳（ISO 8601 格式）
     pub exported_at: String,
+    /// 云端同步客户端标识（可选）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_id: Option<String>,
     /// 表数据
     pub tables: ExportTables,
 }
@@ -43,6 +46,9 @@ pub struct ExportTables {
     pub sf_senders: Vec<SenderInfo>,
     /// 顺丰订单列表
     pub sf_orders: Vec<SFOrder>,
+    /// 全局配置项列表（可选，向后兼容）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_settings: Option<Vec<AppSetting>>,
 }
 
 /// 导出统计
@@ -84,12 +90,22 @@ pub fn export_database() -> Result<ExportData, AppError> {
     // 导出所有订单
     let sf_orders = export_orders(&conn)?;
 
+    // 导出全局配置
+    let app_settings = Some(crate::db::app_settings::get_all_settings()?);
+
+    // 读取同步配置中的 client_id
+    let client_id = crate::sync::config::load_sync_config()
+        .ok()
+        .flatten()
+        .map(|c| c.client_id);
+
     log::info!(
-        "📦 导出数据完成: {} 个项目, {} 张卡片, {} 个寄件人, {} 个订单",
+        "📦 导出数据完成: {} 个项目, {} 张卡片, {} 个寄件人, {} 个订单, {} 个配置项",
         projects.len(),
         cards.len(),
         sf_senders.len(),
-        sf_orders.len()
+        sf_orders.len(),
+        app_settings.as_ref().map_or(0, |s| s.len())
     );
 
     Ok(ExportData {
@@ -98,11 +114,13 @@ pub fn export_database() -> Result<ExportData, AppError> {
         db_version_display,
         app_version,
         exported_at,
+        client_id,
         tables: ExportTables {
             projects,
             cards,
             sf_senders,
             sf_orders,
+            app_settings,
         },
     })
 }
@@ -211,18 +229,21 @@ fn export_orders(conn: &rusqlite::Connection) -> Result<Vec<SFOrder>, AppError> 
             let sender_info_json: String = row.get(7)?;
             let recipient_info_json: String = row.get(8)?;
 
-            let sender_info: SenderInfo = serde_json::from_str(&sender_info_json)
-                .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+            let sender_info: SenderInfo = serde_json::from_str(&sender_info_json).map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
                     7,
                     rusqlite::types::Type::Text,
                     Box::new(e),
-                ))?;
+                )
+            })?;
             let recipient_info: RecipientInfo = serde_json::from_str(&recipient_info_json)
-                .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
-                    8,
-                    rusqlite::types::Type::Text,
-                    Box::new(e),
-                ))?;
+                .map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        8,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
+                })?;
 
             Ok(SFOrder {
                 id: row.get(0)?,

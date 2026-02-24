@@ -17,6 +17,7 @@ mod sync;
 mod utils;
 
 use commands::{
+    app_settings::{get_all_app_settings_cmd, get_app_setting_cmd, set_app_setting_cmd},
     cards::{
         create_card_cmd, delete_card_cmd, distribute_card_cmd, get_card_cmd, get_max_serial_cmd,
         get_project_callsigns_cmd, list_cards_cmd, return_card_cmd, save_card_address_cmd,
@@ -220,6 +221,10 @@ fn main() {
             sf_get_order_by_card_id,
             sf_delete_order,
             sf_mark_order_printed,
+            // 全局配置
+            get_app_setting_cmd,
+            set_app_setting_cmd,
+            get_all_app_settings_cmd,
             // 数据导出导入
             export_data,
             preview_import_data,

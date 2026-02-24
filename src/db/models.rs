@@ -452,6 +452,17 @@ pub struct PagedCards {
     pub total_pages: u32,
 }
 
+/// 全局配置项
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
+pub struct AppSetting {
+    /// 配置键
+    pub key: String,
+    /// 配置值
+    pub value: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

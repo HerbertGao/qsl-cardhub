@@ -27,6 +27,35 @@ use crate::printer::backend::WindowsBackend;
 #[cfg(target_family = "unix")]
 use crate::printer::backend::CupsBackend;
 
+/// 将模板中 title 元素的固定值替换为数据库中的 label_title 配置
+///
+/// 从 app_settings 读取 label_title，如果存在，则：
+/// 1. 将 title 元素的 source 从 "fixed" 改为 "input"，并设置 key = "label_title"
+/// 2. 将 label_title 值注入到运行时数据 HashMap 中
+fn inject_label_title(config: &mut TemplateConfig, data: &mut HashMap<String, String>) {
+    match crate::db::app_settings::get_setting("label_title") {
+        Ok(Some(title)) if !title.is_empty() => {
+            // 将 title 元素从 fixed 改为 input
+            for element in &mut config.elements {
+                if element.id == "title" && element.source == "fixed" {
+                    element.source = "input".to_string();
+                    element.key = Some("label_title".to_string());
+                    element.value = None;
+                    log::info!("已将 title 元素切换为 input 模式，使用数据库配置值");
+                    break;
+                }
+            }
+            data.insert("label_title".to_string(), title);
+        }
+        Ok(Some(_)) | Ok(None) => {
+            log::debug!("数据库中无 label_title 配置或值为空，使用模板固定值");
+        }
+        Err(e) => {
+            log::warn!("读取 label_title 配置失败: {}，使用模板固定值", e);
+        }
+    }
+}
+
 /// 加载模板配置
 ///
 /// 优先级：
@@ -250,11 +279,15 @@ pub async fn preview_qsl(
     log::debug!("请求参数: {:?}", request);
 
     // 1. 加载模板配置
-    let config = load_template_config(request.template_path.as_ref())?;
+    let mut config = load_template_config(request.template_path.as_ref())?;
+
+    // 1.5 注入数据库中的 label_title 配置
+    let mut data = request.data;
+    inject_label_title(&mut config, &mut data);
 
     // 2. 模板解析
-    log::debug!("解析模板，数据: {:?}", request.data);
-    let resolved_elements = TemplateEngine::resolve(&config, &request.data)
+    log::debug!("解析模板，数据: {:?}", data);
+    let resolved_elements = TemplateEngine::resolve(&config, &data)
         .map_err(|e| format!("模板解析失败: {}", e))?;
     log::info!("✓ 解析 {} 个元素", resolved_elements.len());
 
@@ -417,10 +450,14 @@ pub async fn print_qsl(
     log::debug!("请求参数: {:?}", request);
 
     // 1. 加载模板配置
-    let config = load_template_config(request.template_path.as_ref())?;
+    let mut config = load_template_config(request.template_path.as_ref())?;
+
+    // 1.5 注入数据库中的 label_title 配置
+    let mut data = request.data;
+    inject_label_title(&mut config, &mut data);
 
     // 2. 模板解析
-    let resolved_elements = TemplateEngine::resolve(&config, &request.data)
+    let resolved_elements = TemplateEngine::resolve(&config, &data)
         .map_err(|e| format!("模板解析失败: {}", e))?;
 
     // 3. 布局计算
@@ -698,10 +735,14 @@ pub async fn generate_tspl(
     log::info!("生成 TSPL 指令");
 
     // 1. 加载模板配置（每次都重新从文件读取）
-    let config = load_template_config(request.template_path.as_ref())?;
+    let mut config = load_template_config(request.template_path.as_ref())?;
+
+    // 1.5 注入数据库中的 label_title 配置
+    let mut data = request.data;
+    inject_label_title(&mut config, &mut data);
 
     // 2. 模板解析 → 布局 → 渲染
-    let resolved_elements = TemplateEngine::resolve(&config, &request.data)
+    let resolved_elements = TemplateEngine::resolve(&config, &data)
         .map_err(|e| format!("模板解析失败: {}", e))?;
 
     let mut layout_engine = state

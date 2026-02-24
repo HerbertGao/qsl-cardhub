@@ -294,11 +294,54 @@ export default {
         const DB = env.DB;
         const received_at = serverTime();
 
+        // 确保所有业务表存在（兼容未执行最新 schema 的已部署 D1）
         await DB.batch([
-          DB.prepare('DELETE FROM projects WHERE client_id = ?').bind(client_id),
-          DB.prepare('DELETE FROM cards WHERE client_id = ?').bind(client_id),
-          DB.prepare('DELETE FROM sf_senders WHERE client_id = ?').bind(client_id),
-          DB.prepare('DELETE FROM sf_orders WHERE client_id = ?').bind(client_id),
+          DB.prepare(`CREATE TABLE IF NOT EXISTS sync_meta (
+            client_id TEXT PRIMARY KEY, sync_time TEXT, received_at TEXT
+          )`),
+          DB.prepare(`CREATE TABLE IF NOT EXISTS projects (
+            client_id TEXT NOT NULL, id TEXT NOT NULL, name TEXT NOT NULL,
+            created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+            PRIMARY KEY (client_id, id)
+          )`),
+          DB.prepare(`CREATE TABLE IF NOT EXISTS cards (
+            client_id TEXT NOT NULL, id TEXT NOT NULL, project_id TEXT NOT NULL,
+            creator_id TEXT, callsign TEXT NOT NULL,
+            qty INTEGER NOT NULL, serial INTEGER,
+            status TEXT NOT NULL DEFAULT 'pending', metadata TEXT,
+            created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+            PRIMARY KEY (client_id, id)
+          )`),
+          DB.prepare(`CREATE TABLE IF NOT EXISTS sf_senders (
+            client_id TEXT NOT NULL, id TEXT NOT NULL, name TEXT NOT NULL,
+            phone TEXT NOT NULL, mobile TEXT,
+            province TEXT NOT NULL, city TEXT NOT NULL, district TEXT NOT NULL, address TEXT NOT NULL,
+            is_default INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+            PRIMARY KEY (client_id, id)
+          )`),
+          DB.prepare(`CREATE TABLE IF NOT EXISTS sf_orders (
+            client_id TEXT NOT NULL, id TEXT NOT NULL, order_id TEXT NOT NULL,
+            waybill_no TEXT, card_id TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            pay_method INTEGER DEFAULT 1, cargo_name TEXT DEFAULT 'QSL卡片',
+            sender_info TEXT NOT NULL, recipient_info TEXT NOT NULL,
+            created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+            PRIMARY KEY (client_id, id)
+          )`),
+          DB.prepare(`CREATE TABLE IF NOT EXISTS app_settings (
+            client_id TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL,
+            PRIMARY KEY (client_id, key)
+          )`),
+        ]);
+
+        // 全量清除所有数据
+        await DB.batch([
+          DB.prepare('DELETE FROM projects'),
+          DB.prepare('DELETE FROM cards'),
+          DB.prepare('DELETE FROM sf_senders'),
+          DB.prepare('DELETE FROM sf_orders'),
+          DB.prepare('DELETE FROM app_settings'),
         ]);
 
         const projects = data.projects || [];
@@ -372,6 +415,15 @@ export default {
               o.created_at || received_at,
               o.updated_at || received_at
             )
+            .run();
+        }
+
+        const app_settings = data.app_settings || [];
+        for (const setting of app_settings) {
+          await DB.prepare(
+            'INSERT INTO app_settings (client_id, key, value) VALUES (?,?,?)'
+          )
+            .bind(client_id, setting.key, setting.value)
             .run();
         }
 

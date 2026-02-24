@@ -46,6 +46,10 @@
               <span>数据配置</span>
             </template>
 
+            <el-menu-item index="data-config-global-settings">
+              <span>全局配置</span>
+            </el-menu-item>
+
             <el-menu-item index="data-config-qrz-cn">
               <span>QRZ.cn</span>
             </el-menu-item>
@@ -121,6 +125,9 @@
         <!-- 卡片管理页面 -->
         <CardManagementView v-if="activeMenu === 'cards'" />
 
+        <!-- 全局配置页面 -->
+        <GlobalSettingsView v-if="activeMenu === 'data-config-global-settings'" />
+
         <!-- QRZ.cn 配置页面 -->
         <QRZConfigView v-if="activeMenu === 'data-config-qrz-cn'" />
 
@@ -154,6 +161,7 @@ import type { SinglePrinterConfig } from '@/types/models'
 import ConfigView from '@/views/ConfigView.vue'
 import TemplateView from '@/views/TemplateView.vue'
 import CardManagementView from '@/views/CardManagementView.vue'
+import GlobalSettingsView from '@/views/GlobalSettingsView.vue'
 import QRZConfigView from '@/views/QRZConfigView.vue'
 import QRZComConfigView from '@/views/QRZComConfigView.vue'
 import DataTransferView from '@/views/DataTransferView.vue'
