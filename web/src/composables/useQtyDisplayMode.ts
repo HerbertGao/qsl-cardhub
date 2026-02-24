@@ -22,17 +22,6 @@ async function initFromBackend() {
   if (initialized) return
   initialized = true
 
-  // 在独立的 scope 中设置 watch，确保 watcher 不会随组件卸载而停止
-  persistenceScope.run(() => {
-    watch(qtyDisplayMode, async (val) => {
-      try {
-        await invoke('set_app_setting_cmd', { key: DB_KEY, value: val })
-      } catch (e) {
-        console.warn('保存 qty_display_mode 失败', e)
-      }
-    })
-  })
-
   try {
     const dbValue = await invoke<string | null>('get_app_setting_cmd', { key: DB_KEY })
 
@@ -54,6 +43,17 @@ async function initFromBackend() {
   } catch (e) {
     console.warn('从后端加载 qty_display_mode 失败，使用默认值', e)
   }
+
+  // 在独立的 scope 中设置 watch，确保 watcher 不会随组件卸载而停止
+  persistenceScope.run(() => {
+    watch(qtyDisplayMode, async (val) => {
+      try {
+        await invoke('set_app_setting_cmd', { key: DB_KEY, value: val })
+      } catch (e) {
+        console.warn('保存 qty_display_mode 失败', e)
+      }
+    })
+  })
 }
 
 /**
