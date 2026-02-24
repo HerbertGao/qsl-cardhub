@@ -47,8 +47,8 @@ fn inject_label_title(config: &mut TemplateConfig, data: &mut HashMap<String, St
             }
             data.insert("label_title".to_string(), title);
         }
-        Ok(None) => {
-            log::debug!("数据库中无 label_title 配置，使用模板固定值");
+        Ok(Some(_)) | Ok(None) => {
+            log::debug!("数据库中无 label_title 配置或值为空，使用模板固定值");
         }
         Err(e) => {
             log::warn!("读取 label_title 配置失败: {}，使用模板固定值", e);
