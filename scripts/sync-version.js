@@ -23,18 +23,32 @@ console.log(`📦 检测到版本号: ${version}`);
 
 let updated = false;
 
-// 更新 web/package.json
-const packageJsonPath = path.join(__dirname, '../web/package.json');
-const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+// 需要同步版本号的 package.json 列表
+const packageJsonFiles = [
+  '../web/package.json',
+  '../web_query_service/package.json',
+];
 
-if (packageJson.version !== version) {
-  const oldVersion = packageJson.version;
-  packageJson.version = version;
-  fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n', 'utf-8');
-  console.log(`✅ 已更新 web/package.json 版本号: ${oldVersion} → ${version}`);
-  updated = true;
-} else {
-  console.log('✅ web/package.json 版本号已是最新');
+for (const relPath of packageJsonFiles) {
+  const pkgPath = path.join(__dirname, relPath);
+  const label = relPath.replace('../', '');
+
+  if (!fs.existsSync(pkgPath)) {
+    console.log(`⏭️  ${label} 不存在，跳过`);
+    continue;
+  }
+
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+
+  if (pkg.version !== version) {
+    const oldVersion = pkg.version;
+    pkg.version = version;
+    fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8');
+    console.log(`✅ 已更新 ${label} 版本号: ${oldVersion} → ${version}`);
+    updated = true;
+  } else {
+    console.log(`✅ ${label} 版本号已是最新`);
+  }
 }
 
 // 更新 tauri.conf.json

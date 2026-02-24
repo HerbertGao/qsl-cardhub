@@ -430,15 +430,6 @@
       :default-recipient="defaultRecipient"
       @success="handleSFOrderSuccess"
       @go-config="handleGoConfig"
-      @order-created="handleOrderCreated"
-    />
-
-    <!-- 顺丰订单确认弹窗 -->
-    <ConfirmOrderDialog
-      v-model:visible="confirmOrderDialogVisible"
-      :order-data="pendingOrderData"
-      @success="handleSFOrderSuccess"
-      @cancel="handleConfirmCancel"
     />
   </el-dialog>
 </template>
@@ -448,10 +439,9 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import type { CardWithProject, CardStatus, AddressEntry, SFOrder, RecipientInfo, CreateOrderResponse } from '@/types/models'
+import type { CardWithProject, CardStatus, AddressEntry, SFOrder, RecipientInfo } from '@/types/models'
 import WaybillPrintDialog from '@/components/cards/WaybillPrintDialog.vue'
 import CreateOrderDialog from '@/components/sf-express/CreateOrderDialog.vue'
-import ConfirmOrderDialog from '@/components/sf-express/ConfirmOrderDialog.vue'
 import IconSfExpress from '~icons/custom/sf-express'
 import { useLoading } from '@/composables/useLoading'
 import { useQtyDisplayMode } from '@/composables/useQtyDisplayMode'
@@ -516,10 +506,6 @@ const waybillPrintDialogVisible = ref<boolean>(false)
 // 顺丰下单弹窗
 const sfOrderDialogVisible = ref<boolean>(false)
 const defaultRecipient = ref<Partial<RecipientInfo> | null>(null)
-
-// 顺丰订单确认弹窗
-const confirmOrderDialogVisible = ref<boolean>(false)
-const pendingOrderData = ref<CreateOrderResponse | null>(null)
 
 // 地址查询状态
 const querying = ref<boolean>(false)
@@ -957,12 +943,6 @@ const handleCreateSFOrder = (): void => {
   sfOrderDialogVisible.value = true
 }
 
-// 顺丰订单创建成功（下单后打开确认对话框）
-const handleOrderCreated = (response: CreateOrderResponse): void => {
-  pendingOrderData.value = response
-  confirmOrderDialogVisible.value = true
-}
-
 // 静默保存运单号（不改变卡片状态，不关闭弹窗）
 const silentSaveWaybillNo = async (waybillNo: string): Promise<void> => {
   if (!props.card) return
@@ -983,24 +963,9 @@ const silentSaveWaybillNo = async (waybillNo: string): Promise<void> => {
 
 // 顺丰订单确认成功
 const handleSFOrderSuccess = async (order: SFOrder): Promise<void> => {
-  // 清空待确认订单数据
-  pendingOrderData.value = null
-
   // 将运单号填入备注并静默保存（不关闭弹窗）
   if (order.waybill_no) {
     await silentSaveWaybillNo(order.waybill_no)
-  }
-}
-
-// 取消确认订单（稍后确认）
-const handleConfirmCancel = async (): Promise<void> => {
-  // 将运单号填入备注并静默保存（即使未确认，运单号也已生成）
-  const waybillNo = pendingOrderData.value?.waybill_no_list[0]
-  pendingOrderData.value = null
-
-  if (waybillNo) {
-    await silentSaveWaybillNo(waybillNo)
-    ElMessage.info('请稍后在顺丰速运界面确认订单')
   }
 }
 

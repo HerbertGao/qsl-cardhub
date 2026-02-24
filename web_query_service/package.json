@@ -1,9 +1,10 @@
 {
   "name": "qsl-web-query-service",
-  "version": "0.1.0",
+  "version": "0.7.0",
+  "description": "QSL CardHub 云端同步、按呼号查询与顺丰/微信推送接收服务",
   "private": true,
   "type": "module",
-  "description": "QSL CardHub 云端同步、按呼号查询与顺丰/微信推送接收服务",
+  "packageManager": "pnpm@10.28.2",
   "scripts": {
     "dev": "concurrently \"pnpm run dev:worker\" \"pnpm run dev:client\"",
     "dev:worker": "wrangler dev",
@@ -24,6 +25,6 @@
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
     "vue-tsc": "^3.2.4",
-    "wrangler": "^4.62.0"
+    "wrangler": "^4.68.0"
   }
 }
