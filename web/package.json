@@ -3,6 +3,7 @@
   "version": "0.7.0",
   "description": "qsl-cardhub 前端项目",
   "type": "module",
+  "packageManager": "pnpm@10.28.2",
   "scripts": {
     "sync-version": "node ../scripts/sync-version.js",
     "generate:types": "cd .. && cargo test export_bindings --features ts-rs",

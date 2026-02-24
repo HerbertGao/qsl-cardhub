@@ -38,17 +38,15 @@ get_cargo_version() {
     grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/'
 }
 
-# 更新 tauri.conf.json 中的版本号
-update_tauri_version() {
+# 更新 JSON 文件中的版本号
+update_json_version() {
     local new_version=$1
+    local file=$2
 
-    # 使用 sed 更新版本号
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        # macOS
-        sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$new_version\"/" tauri.conf.json
+        sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$new_version\"/" "$file"
     else
-        # Linux
-        sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$new_version\"/" tauri.conf.json
+        sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$new_version\"/" "$file"
     fi
 }
 
@@ -90,18 +88,31 @@ main() {
 
     print_info "从 Cargo.toml 读取版本号: $CARGO_VERSION"
 
-    # 读取当前 tauri.conf.json 中的版本号
+    # 同步 tauri.conf.json
     TAURI_VERSION=$(grep '"version"' tauri.conf.json | sed 's/.*"version": "\(.*\)".*/\1/')
     print_info "tauri.conf.json 当前版本: $TAURI_VERSION"
 
-    # 更新版本号
     if [ "$CARGO_VERSION" = "$TAURI_VERSION" ]; then
-        print_success "版本号已一致，无需同步"
+        print_success "tauri.conf.json 版本号已一致，无需同步"
     else
         echo ""
         print_info "正在更新 tauri.conf.json..."
-        update_tauri_version "$CARGO_VERSION"
-        print_success "版本号已同步: $TAURI_VERSION → $CARGO_VERSION"
+        update_json_version "$CARGO_VERSION" "tauri.conf.json"
+        print_success "tauri.conf.json 版本号已同步: $TAURI_VERSION → $CARGO_VERSION"
+    fi
+
+    # 同步 web_query_service/package.json
+    if [ -f "web_query_service/package.json" ]; then
+        WQS_VERSION=$(grep '"version"' web_query_service/package.json | head -1 | sed 's/.*"version": "\([^"]*\)".*/\1/')
+        print_info "web_query_service/package.json 当前版本: $WQS_VERSION"
+
+        if [ "$CARGO_VERSION" = "$WQS_VERSION" ]; then
+            print_success "web_query_service/package.json 版本号已一致，无需同步"
+        else
+            print_info "正在更新 web_query_service/package.json..."
+            update_json_version "$CARGO_VERSION" "web_query_service/package.json"
+            print_success "web_query_service/package.json 版本号已同步: $WQS_VERSION → $CARGO_VERSION"
+        fi
     fi
 
     echo ""

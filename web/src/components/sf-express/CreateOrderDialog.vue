@@ -179,12 +179,23 @@
             label="详细地址"
             prop="address"
           >
-            <el-input
-              v-model="recipientForm.address"
-              type="textarea"
-              :rows="2"
-              placeholder="请输入详细地址（街道、门牌号等）"
-            />
+            <div style="width: 100%">
+              <el-input
+                v-model="recipientForm.address"
+                type="textarea"
+                :rows="2"
+                placeholder="粘贴完整收件信息可智能识别，如：张三 13812345678 广东省深圳市南山区科技园路1号"
+              />
+              <el-button
+                type="primary"
+                size="small"
+                link
+                style="margin-top: 4px"
+                @click="handleSmartParse"
+              >
+                智能识别
+              </el-button>
+            </div>
           </el-form-item>
         </el-form>
       </div>
@@ -200,7 +211,7 @@
         :disabled="!sender || !apiConfigured"
         @click="handleSubmit"
       >
-        提交订单
+        提交并确认订单
       </el-button>
     </template>
   </el-dialog>
@@ -209,11 +220,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import type { SenderInfo, RecipientInfo, CreateOrderResponse, SFOrder } from '@/types/models'
+import type { SenderInfo, RecipientInfo, CreateOrderResponse, ConfirmOrderResponse, SFOrder } from '@/types/models'
 import AddressSelector from './AddressSelector.vue'
 import { useLoading } from '@/composables/useLoading'
+import { parseAddress } from '@/utils/addressParser'
 
 const { withLoading } = useLoading()
 
@@ -227,7 +239,6 @@ interface Emits {
   (e: 'update:visible', value: boolean): void
   (e: 'success', order: SFOrder): void
   (e: 'go-config', tab?: string): void
-  (e: 'order-created', response: CreateOrderResponse): void
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -253,7 +264,7 @@ const CARGO_NAME_STORAGE_KEY = 'sf_last_cargo_name'
 const cargoName = ref(localStorage.getItem(CARGO_NAME_STORAGE_KEY) || 'QSL卡片')
 
 // 付款方式（1=寄方付, 2=收方付, 3=第三方付）
-const payMethod = ref(1)
+const payMethod = ref(2)
 
 // 收件人表单
 const recipientForm = reactive<RecipientInfo>({
@@ -364,6 +375,25 @@ function goToConfig(tab?: string): void {
   emit('go-config', tab)
 }
 
+// 智能识别地址（从详细地址框中的文本解析）
+function handleSmartParse(): void {
+  if (!recipientForm.address.trim()) {
+    ElMessage.warning('请先在详细地址框中输入地址文本')
+    return
+  }
+
+  const parsed = parseAddress(recipientForm.address)
+
+  if (parsed.name) recipientForm.name = parsed.name
+  if (parsed.phone) recipientForm.phone = parsed.phone
+  if (parsed.province) recipientForm.province = parsed.province
+  if (parsed.city) recipientForm.city = parsed.city
+  if (parsed.district) recipientForm.district = parsed.district
+  recipientForm.address = parsed.address
+
+  formRef.value?.clearValidate()
+}
+
 // 关闭对话框
 function handleClose(): void {
   // 重置表单
@@ -377,11 +407,11 @@ function handleClose(): void {
     address: ''
   })
   cargoName.value = localStorage.getItem(CARGO_NAME_STORAGE_KEY) || 'QSL卡片'
-  payMethod.value = 1
+  payMethod.value = 2
   formRef.value?.clearValidate()
 }
 
-// 提交订单
+// 提交并确认订单
 async function handleSubmit(): Promise<void> {
   if (!formRef.value || !sender.value) return
 
@@ -404,7 +434,8 @@ async function handleSubmit(): Promise<void> {
   submitting.value = true
 
   try {
-    const result = await withLoading(async () => await invoke<CreateOrderResponse>('sf_create_order', {
+    // 1. 创建订单
+    const createResult = await withLoading(async () => await invoke<CreateOrderResponse>('sf_create_order', {
         params: {
           sender_id: sender.value!.id,
           recipient: {
@@ -428,13 +459,63 @@ async function handleSubmit(): Promise<void> {
       localStorage.setItem(CARGO_NAME_STORAGE_KEY, trimmedCargoName)
     }
 
-    ElMessage.success('订单创建成功')
+    // 2. 检查 filter_result 并确认订单
+    const filterResult = createResult.filter_result
+    if (filterResult === 3) {
+      ElMessage.error('该地区不可收派，订单已保留为待确认状态')
+      dialogVisible.value = false
+      return
+    }
 
-    // 发出订单创建事件，由调用方打开确认对话框
-    emit('order-created', result)
+    if (filterResult === 1) {
+      try {
+        await ElMessageBox.confirm(
+          '该地区需要人工确认，是否继续确认订单？',
+          '提示',
+          { confirmButtonText: '继续确认', cancelButtonText: '稍后确认', type: 'warning' }
+        )
+      } catch {
+        // 用户选择稍后确认
+        ElMessage.info('订单已创建，请稍后在订单列表中确认')
+        dialogVisible.value = false
+        return
+      }
+    }
+
+    const confirmResult = await withLoading(async () => await invoke<ConfirmOrderResponse>('sf_confirm_order', {
+        orderId: createResult.order_id
+      }), '正在确认订单...')
+
+    const waybillNo = confirmResult.waybill_no_list[0]
+
+    // 3. 自动打印面单
+    try {
+      const printerConfig = await invoke<{ printer: { name: string } }>('get_printer_config')
+      const printerName = printerConfig.printer.name
+
+      if (printerName) {
+        const fetchResult = await withLoading(async () => await invoke<{ pdf_data: string; waybill_no: string }>('sf_fetch_waybill', {
+            waybillNo
+          }), '正在获取面单...')
+
+        await withLoading(async () => await invoke<string>('sf_print_waybill', {
+            pdfData: fetchResult.pdf_data,
+            printerName
+          }), '正在打印面单...')
+
+        ElMessage.success(`订单已确认并打印，运单号: ${waybillNo}`)
+      } else {
+        ElMessage.success(`订单已确认，运单号: ${waybillNo}。请配置打印机后手动打印面单`)
+      }
+    } catch (printError) {
+      console.error('自动打印失败:', printError)
+      ElMessage.warning(`订单已确认（运单号: ${waybillNo}），但打印失败: ${printError}`)
+    }
+
+    emit('success', confirmResult.local_order)
     dialogVisible.value = false
   } catch (error) {
-    ElMessage.error(`下单失败: ${error}`)
+    ElMessage.error(`操作失败: ${error}`)
   } finally {
     submitting.value = false
   }

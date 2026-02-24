@@ -73,17 +73,25 @@ update_tauri_version() {
     fi
 }
 
-# 更新 web/package.json 中的版本号
+# 更新指定 package.json 中的版本号
+update_single_package_version() {
+    local new_version=$1
+    local file=$2
+    if [ -f "$file" ]; then
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$new_version\"/" "$file"
+        else
+            sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$new_version\"/" "$file"
+        fi
+        print_success "已更新 $file"
+    fi
+}
+
+# 更新所有 package.json 中的版本号
 update_package_version() {
     local new_version=$1
-    if [ -f "web/package.json" ]; then
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$new_version\"/" web/package.json
-        else
-            sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$new_version\"/" web/package.json
-        fi
-        print_success "已更新 web/package.json"
-    fi
+    update_single_package_version "$new_version" "web/package.json"
+    update_single_package_version "$new_version" "web_query_service/package.json"
 }
 
 # 计算新版本号
@@ -125,11 +133,17 @@ check_versions() {
         package_version=$(grep '"version"' web/package.json | head -1 | sed 's/.*"version": "\([^"]*\)".*/\1/')
     fi
 
+    local wqs_package_version=""
+    if [ -f "web_query_service/package.json" ]; then
+        wqs_package_version=$(grep '"version"' web_query_service/package.json | head -1 | sed 's/.*"version": "\([^"]*\)".*/\1/')
+    fi
+
     echo ""
     echo "版本号检查："
-    echo "  Cargo.toml:      $cargo_version"
-    [ -n "$tauri_version" ] && echo "  tauri.conf.json: $tauri_version"
-    [ -n "$package_version" ] && echo "  package.json:    $package_version"
+    echo "  Cargo.toml:                      $cargo_version"
+    [ -n "$tauri_version" ] && echo "  tauri.conf.json:                 $tauri_version"
+    [ -n "$package_version" ] && echo "  web/package.json:                $package_version"
+    [ -n "$wqs_package_version" ] && echo "  web_query_service/package.json:  $wqs_package_version"
     echo ""
 
     if [ -n "$tauri_version" ] && [ "$cargo_version" != "$tauri_version" ]; then
@@ -137,6 +151,10 @@ check_versions() {
     fi
 
     if [ -n "$package_version" ] && [ "$cargo_version" != "$package_version" ]; then
+        all_match=false
+    fi
+
+    if [ -n "$wqs_package_version" ] && [ "$cargo_version" != "$wqs_package_version" ]; then
         all_match=false
     fi
 
