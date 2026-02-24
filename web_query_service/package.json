@@ -1,6 +1,6 @@
 {
   "name": "qsl-web-query-service",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "QSL CardHub 云端同步、按呼号查询与顺丰/微信推送接收服务",
   "private": true,
   "type": "module",
