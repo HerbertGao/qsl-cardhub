@@ -389,7 +389,7 @@ function handleSmartParse(): void {
   if (parsed.province) recipientForm.province = parsed.province
   if (parsed.city) recipientForm.city = parsed.city
   if (parsed.district) recipientForm.district = parsed.district
-  recipientForm.address = parsed.address
+  if (parsed.address) recipientForm.address = parsed.address
 
   formRef.value?.clearValidate()
 }
@@ -475,8 +475,9 @@ async function handleSubmit(): Promise<void> {
           { confirmButtonText: '继续确认', cancelButtonText: '稍后确认', type: 'warning' }
         )
       } catch {
-        // 用户选择稍后确认
+        // 用户选择稍后确认 - 发出 success 事件以便保存运单号
         ElMessage.info('订单已创建，请稍后在订单列表中确认')
+        emit('success', createResult.local_order)
         dialogVisible.value = false
         return
       }

@@ -28,13 +28,18 @@ export function parseAddress(raw: string): ParsedAddress {
   let text = raw.trim()
 
   // 1. 提取手机号：1[3-9] 开头的 11 位数字，允许中间有横杠/空格
-  const phoneRegex = /1[3-9][\d\s-]{9,13}/g
-  const phoneMatch = text.match(phoneRegex)
-  if (phoneMatch) {
-    const cleaned = phoneMatch[0].replace(/[\s-]/g, '')
-    if (/^1[3-9]\d{9}$/.test(cleaned)) {
-      result.phone = cleaned
-      text = text.replace(phoneMatch[0], ' ')
+  const phoneRegex = /1[3-9][\d\s-]{9,}/g
+  const phoneMatches = text.match(phoneRegex)
+  if (phoneMatches) {
+    for (const match of phoneMatches) {
+      const cleaned = match.replace(/[\s-]/g, '')
+      // 如果清理后的字符串以有效手机号开头，提取恰好11位
+      const validPhone = cleaned.match(/^(1[3-9]\d{9})/)
+      if (validPhone) {
+        result.phone = validPhone[1]
+        text = text.replace(match, ' ')
+        break
+      }
     }
   }
 
