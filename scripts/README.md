@@ -389,7 +389,7 @@
 
 2. **提交更改**：
    ```bash
-   git add Cargo.toml tauri.conf.json web/package.json
+   git add Cargo.toml tauri.conf.json web/package.json web_query_service/package.json
    git commit -m "chore: bump version to 0.4.0"
    git push origin master
    ```

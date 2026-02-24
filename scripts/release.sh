@@ -175,6 +175,7 @@ create_version_commit() {
     [ -f "Cargo.lock" ] && git add Cargo.lock
     [ -f "tauri.conf.json" ] && git add tauri.conf.json
     [ -f "web/package.json" ] && git add web/package.json
+    [ -f "web_query_service/package.json" ] && git add web_query_service/package.json
 
     # 添加 lint:fix 修复的前端文件
     if [ -d "web/src" ]; then
