@@ -294,19 +294,13 @@ export default {
         const DB = env.DB;
         const received_at = serverTime();
 
-        // 清除当前 client_id 的数据 + 所有其他 client_id 的残留数据
+        // 全量清除所有数据
         await DB.batch([
-          DB.prepare('DELETE FROM projects WHERE client_id = ?').bind(client_id),
-          DB.prepare('DELETE FROM cards WHERE client_id = ?').bind(client_id),
-          DB.prepare('DELETE FROM sf_senders WHERE client_id = ?').bind(client_id),
-          DB.prepare('DELETE FROM sf_orders WHERE client_id = ?').bind(client_id),
-          DB.prepare('DELETE FROM app_settings WHERE client_id = ?').bind(client_id),
-          // 清除所有非当前 client_id 的记录，防止换设备/重装后旧 client_id 数据残留
-          DB.prepare('DELETE FROM projects WHERE client_id != ?').bind(client_id),
-          DB.prepare('DELETE FROM cards WHERE client_id != ?').bind(client_id),
-          DB.prepare('DELETE FROM sf_senders WHERE client_id != ?').bind(client_id),
-          DB.prepare('DELETE FROM sf_orders WHERE client_id != ?').bind(client_id),
-          DB.prepare('DELETE FROM app_settings WHERE client_id != ?').bind(client_id),
+          DB.prepare('DELETE FROM projects'),
+          DB.prepare('DELETE FROM cards'),
+          DB.prepare('DELETE FROM sf_senders'),
+          DB.prepare('DELETE FROM sf_orders'),
+          DB.prepare('DELETE FROM app_settings'),
         ]);
 
         const projects = data.projects || [];
