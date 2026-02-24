@@ -2,6 +2,7 @@
 //
 // 定义所有暴露给前端的 API
 
+pub mod app_settings;
 pub mod cards;
 pub mod data_transfer;
 pub mod export;

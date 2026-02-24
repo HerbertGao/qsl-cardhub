@@ -31,6 +31,8 @@ pub struct SyncData {
     pub sf_senders: Vec<crate::sf_express::SenderInfo>,
     /// 订单列表
     pub sf_orders: Vec<crate::sf_express::SFOrder>,
+    /// 全局配置项列表
+    pub app_settings: Vec<crate::db::models::AppSetting>,
 }
 
 /// 同步响应
@@ -166,6 +168,7 @@ pub async fn sync_data(config: &SyncConfig, api_key: &str) -> Result<(SyncRespon
             cards: export_data.tables.cards,
             sf_senders: export_data.tables.sf_senders,
             sf_orders: export_data.tables.sf_orders,
+            app_settings: export_data.tables.app_settings.unwrap_or_default(),
         },
     };
 
@@ -233,6 +236,7 @@ mod tests {
                 cards: vec![],
                 sf_senders: vec![],
                 sf_orders: vec![],
+                app_settings: vec![],
             },
         };
 

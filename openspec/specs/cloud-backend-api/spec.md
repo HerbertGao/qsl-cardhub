@@ -13,11 +13,27 @@
 
 #### 场景：全量同步 POST /sync
 
-- **当** 客户端发送 POST 请求到 `{api_url}/sync`，请求体包含 `client_id`、`sync_time`、`data`（projects、cards、sf_senders、sf_orders）
+- **当** 客户端发送 POST 请求到 `{api_url}/sync`，请求体包含 `client_id`、`sync_time`、`data`（projects、cards、sf_senders、sf_orders、app_settings）
 - **那么** 服务端必须校验 Bearer API Key
-- **并且** 按 `client_id` 隔离写入 D1（覆盖或按业务规则合并该 client 的同步数据）
+- **并且** 必须先删除所有业务表中的全部数据（包括当前 `client_id` 和其他 `client_id` 的记录）
+- **并且** 写入本次同步的全量数据（包括 app_settings 表）
 - **并且** 返回 200 与 JSON：`{ "success": true, "message": "同步成功", "received_at": "...", "stats": { "projects", "cards", "sf_senders", "sf_orders" } }`
 - **并且** 失败时返回非 200 或 `success: false` 及错误描述
+
+#### 场景：同步清除全部历史数据
+
+- **当** 客户端使用 client_id "BBB" 发起同步
+- **并且** 云端数据库中存在 client_id 为 "AAA" 和 "BBB" 的历史记录
+- **那么** 服务端在写入 "BBB" 的数据前，必须删除所有业务表（projects、cards、sf_senders、sf_orders、app_settings）中所有 client_id 的全部记录
+- **并且** 最终数据库中仅存在本次 client_id "BBB" 同步写入的数据
+
+#### 场景：云端 D1 app_settings 表结构
+
+- **当** 云端 D1 数据库初始化时
+- **那么** 必须创建 `app_settings` 表，包含 `client_id`（TEXT）、`key`（TEXT）、`value`（TEXT）三列
+- **并且** 主键为 `(client_id, key)` 组合键
+- **并且** `/sync` 端点 DELETE 阶段必须清除所有 `app_settings` 记录
+- **并且** INSERT 阶段必须写入请求体 `data.app_settings` 中的所有键值对（如果该字段存在）
 
 ---
 
