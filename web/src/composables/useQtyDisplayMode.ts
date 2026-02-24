@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue'
+import { ref, watch, effectScope } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 
 export type QtyDisplayMode = 'exact' | 'approximate'
@@ -12,6 +12,9 @@ const qtyDisplayMode = ref<QtyDisplayMode>('exact')
 // 标记是否已从后端加载过初始值
 let initialized = false
 
+// 创建独立的 effect scope，使 watcher 不与任何组件关联
+const persistenceScope = effectScope(true)
+
 /**
  * 从后端加载初始值，并执行 localStorage 迁移
  */
@@ -19,13 +22,15 @@ async function initFromBackend() {
   if (initialized) return
   initialized = true
 
-  // 立即设置 watch，确保在异步初始化期间的所有变更都能被持久化
-  watch(qtyDisplayMode, async (val) => {
-    try {
-      await invoke('set_app_setting_cmd', { key: DB_KEY, value: val })
-    } catch (e) {
-      console.warn('保存 qty_display_mode 失败', e)
-    }
+  // 在独立的 scope 中设置 watch，确保 watcher 不会随组件卸载而停止
+  persistenceScope.run(() => {
+    watch(qtyDisplayMode, async (val) => {
+      try {
+        await invoke('set_app_setting_cmd', { key: DB_KEY, value: val })
+      } catch (e) {
+        console.warn('保存 qty_display_mode 失败', e)
+      }
+    })
   })
 
   try {
