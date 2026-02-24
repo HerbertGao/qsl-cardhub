@@ -389,7 +389,7 @@ function handleSmartParse(): void {
   if (parsed.province) recipientForm.province = parsed.province
   if (parsed.city) recipientForm.city = parsed.city
   if (parsed.district) recipientForm.district = parsed.district
-  if (parsed.address) recipientForm.address = parsed.address
+  recipientForm.address = parsed.address
 
   formRef.value?.clearValidate()
 }
