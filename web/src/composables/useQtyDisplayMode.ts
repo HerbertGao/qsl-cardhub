@@ -19,6 +19,15 @@ async function initFromBackend() {
   if (initialized) return
   initialized = true
 
+  // 立即设置 watch，确保在异步初始化期间的所有变更都能被持久化
+  watch(qtyDisplayMode, async (val) => {
+    try {
+      await invoke('set_app_setting_cmd', { key: DB_KEY, value: val })
+    } catch (e) {
+      console.warn('保存 qty_display_mode 失败', e)
+    }
+  })
+
   try {
     const dbValue = await invoke<string | null>('get_app_setting_cmd', { key: DB_KEY })
 
@@ -40,15 +49,6 @@ async function initFromBackend() {
   } catch (e) {
     console.warn('从后端加载 qty_display_mode 失败，使用默认值', e)
   }
-
-  // 初始化完成后，开始监听变化并持久化到后端
-  watch(qtyDisplayMode, async (val) => {
-    try {
-      await invoke('set_app_setting_cmd', { key: DB_KEY, value: val })
-    } catch (e) {
-      console.warn('保存 qty_display_mode 失败', e)
-    }
-  })
 }
 
 /**
