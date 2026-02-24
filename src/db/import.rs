@@ -373,11 +373,11 @@ pub fn execute_import<P: AsRef<Path>>(file_path: P) -> Result<ExportStats, AppEr
     })?;
 
     // 恢复 client_id 到同步配置
-    if let Some(ref client_id) = data.client_id {
+    if let Some(client_id) = data.client_id.as_deref().filter(|s| !s.is_empty()) {
         log::info!("🔄 恢复同步 client_id: {}", client_id);
         match crate::sync::config::load_sync_config() {
             Ok(Some(mut config)) => {
-                config.client_id = client_id.clone();
+                config.client_id = client_id.to_string();
                 if let Err(e) = crate::sync::config::save_sync_config(&config) {
                     log::warn!("恢复 client_id 失败: {}", e);
                 }
@@ -385,7 +385,7 @@ pub fn execute_import<P: AsRef<Path>>(file_path: P) -> Result<ExportStats, AppEr
             Ok(None) => {
                 // sync.toml 不存在，创建一个仅含 client_id 的默认配置
                 let config = crate::sync::config::SyncConfig {
-                    client_id: client_id.clone(),
+                    client_id: client_id.to_string(),
                     ..Default::default()
                 };
                 if let Err(e) = crate::sync::config::save_sync_config(&config) {
