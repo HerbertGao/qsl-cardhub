@@ -15,10 +15,14 @@
             <el-input
               v-model="labelTitle"
               placeholder="请输入标签标题文本"
-              @input="debouncedSaveLabelTitle"
               style="flex: 1"
+              @input="debouncedSaveLabelTitle"
             />
-            <el-link type="primary" :underline="false" @click="goToTemplatePreview">
+            <el-link
+              type="primary"
+              :underline="false"
+              @click="goToTemplatePreview"
+            >
               前往模板配置预览 →
             </el-link>
           </div>
