@@ -34,7 +34,7 @@ use crate::printer::backend::CupsBackend;
 /// 2. 将 label_title 值注入到运行时数据 HashMap 中
 fn inject_label_title(config: &mut TemplateConfig, data: &mut HashMap<String, String>) {
     match crate::db::app_settings::get_setting("label_title") {
-        Ok(Some(title)) => {
+        Ok(Some(title)) if !title.is_empty() => {
             // 将 title 元素从 fixed 改为 input
             for element in &mut config.elements {
                 if element.id == "title" && element.source == "fixed" {
