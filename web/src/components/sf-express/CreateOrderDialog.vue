@@ -487,6 +487,13 @@ async function handleSubmit(): Promise<void> {
         orderId: createResult.order_id
       }), '正在确认订单...')
 
+    if (!confirmResult.waybill_no_list || confirmResult.waybill_no_list.length === 0) {
+      ElMessage.error('订单确认成功但未返回运单号')
+      emit('success', confirmResult.local_order)
+      dialogVisible.value = false
+      return
+    }
+
     const waybillNo = confirmResult.waybill_no_list[0]
 
     // 3. 自动打印面单
