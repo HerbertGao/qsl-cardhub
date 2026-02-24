@@ -3,7 +3,7 @@
 // 将本地数据库导出为 JSON 格式文件
 
 use crate::db::models::{AppSetting, Card, Project};
-use crate::db::sqlite::{get_connection, get_db_version, format_version};
+use crate::db::sqlite::{format_version, get_connection, get_db_version};
 use crate::error::AppError;
 use crate::sf_express::{RecipientInfo, SFOrder, SenderInfo};
 use serde::{Deserialize, Serialize};
@@ -91,9 +91,7 @@ pub fn export_database() -> Result<ExportData, AppError> {
     let sf_orders = export_orders(&conn)?;
 
     // 导出全局配置
-    let app_settings = crate::db::app_settings::get_all_settings()
-        .ok()
-        .filter(|s| !s.is_empty());
+    let app_settings = Some(crate::db::app_settings::get_all_settings()?);
 
     // 读取同步配置中的 client_id
     let client_id = crate::sync::config::load_sync_config()
@@ -231,18 +229,21 @@ fn export_orders(conn: &rusqlite::Connection) -> Result<Vec<SFOrder>, AppError> 
             let sender_info_json: String = row.get(7)?;
             let recipient_info_json: String = row.get(8)?;
 
-            let sender_info: SenderInfo = serde_json::from_str(&sender_info_json)
-                .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+            let sender_info: SenderInfo = serde_json::from_str(&sender_info_json).map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
                     7,
                     rusqlite::types::Type::Text,
                     Box::new(e),
-                ))?;
+                )
+            })?;
             let recipient_info: RecipientInfo = serde_json::from_str(&recipient_info_json)
-                .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
-                    8,
-                    rusqlite::types::Type::Text,
-                    Box::new(e),
-                ))?;
+                .map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        8,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
+                })?;
 
             Ok(SFOrder {
                 id: row.get(0)?,
