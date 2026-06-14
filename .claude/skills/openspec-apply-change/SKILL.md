@@ -2,11 +2,11 @@
 name: openspec-apply-change
 description: 实现 OpenSpec 变更中的任务。当用户想要开始实现、继续实现或处理任务时使用。
 license: MIT
-compatibility: 需要 openspec CLI。
+compatibility: 需要 openspec-cn CLI。
 metadata:
   author: openspec
   version: "1.0"
-  generatedBy: "1.1.1-1"
+  generatedBy: "1.4.1"
 ---
 
 实现 OpenSpec 变更中的任务。
@@ -20,16 +20,17 @@ metadata:
    如果提供了名称，使用它。否则：
    - 如果用户提到了某个变更，从对话上下文中推断
    - 如果只存在一个活动变更，自动选择
-   - 如果不明确，运行 `openspec list --json` 获取可用变更，并使用 **AskUserQuestion tool** 让用户选择
+   - 如果不明确，运行 `openspec-cn list --json` 获取可用变更，并使用 **AskUserQuestion tool** 让用户选择
 
-   始终宣布：“正在使用变更：<name>”以及如何覆盖（例如，`/opsx:apply <other>`）。
+   始终宣布："正在使用变更：<name>"以及如何覆盖（例如，`/opsx:apply <other>`）。
 
 2. **检查状态以了解 Schema**
    ```bash
    openspec-cn status --change "<name>" --json
    ```
    解析 JSON 以了解：
-   - `schemaName`：正在使用的工作流（例如："spec-driven"）
+   - `schemaName`：正在使用的工作流 Schema（例如："spec-driven"）
+   - `planningHome`、`changeRoot` 和 `actionContext`：规划范围和编辑约束
    - 哪个产出物包含任务（对于 spec-driven 通常是 "tasks"，检查其他产出物的状态）
 
 3. **获取应用指令**
@@ -39,19 +40,21 @@ metadata:
    ```
 
    这返回：
-   - 上下文文件路径（因 Schema 而异 - 可能是 proposal/specs/design/tasks 或 spec/tests/implementation/docs）
-   - 进度（总计，完成，剩余）
+   - `contextFiles`：产出物 ID -> 具体文件路径数组（因 Schema 而异，可能是 proposal/specs/design/tasks 或 spec/tests/implementation/docs）
+   - 进度（总计、完成、剩余）
    - 带有状态的任务列表
    - 基于当前状态的动态指令
 
    **处理状态：**
-   - 如果 `state: "blocked"`（缺少产出物）：显示消息，建议使用 openspec-continue-change
+   - 如果 `state: "blocked"`（缺少产出物）：显示消息，建议使用 `openspec-continue-change`
    - 如果 `state: "all_done"`：祝贺，建议归档
    - 否则：继续实现
 
+   **工作区保护：** 如果状态 JSON 报告 `actionContext.mode: "workspace-planning"` 且 `allowedEditRoots` 为空，说明完整的工作区应用在此切片中不受支持。将链接的仓库和文件夹视为只读上下文，要求用户通过显式实现工作流选择受影响区域，并在编辑文件之前停止。
+
 4. **阅读上下文文件**
 
-   阅读 apply instructions 输出中 `contextFiles` 列出的文件。
+   阅读 apply instructions 输出中 `contextFiles` 列出的每个文件路径。
    文件取决于正在使用的 Schema：
    - **spec-driven**: proposal, specs, design, tasks
    - 其他模式：遵循 CLI 输出中的 contextFiles
@@ -90,7 +93,7 @@ metadata:
 **实现期间的输出**
 
 ```
-## 正在实现：<change-name> (schema: <schema-name>)
+## 正在实现：<change-name>（Schema：<schema-name>）
 
 正在处理任务 3/7：<task description>
 [...正在进行实现...]
@@ -150,7 +153,7 @@ metadata:
 
 **流畅的工作流集成**
 
-此技能支持“变更上的操作”模型：
+此技能支持"变更上的操作"模型：
 
 - **可以随时调用**：在所有产出物完成之前（如果存在任务），部分实现之后，与其他操作交错
 - **允许产出物更新**：如果实现揭示了设计问题，建议更新产出物 - 不是阶段锁定的，流畅地工作
