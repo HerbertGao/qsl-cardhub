@@ -85,6 +85,8 @@
 
 > 前提：`sign_key` 必须从「`/api/config` 静态明文下发」改为「会话建立时动态下发、短时有效」，否则攻击者直接持公开 key 签名查询，绕过整套 PoW。
 
+> **前提（CDN 架构下的真实 IP）**：生产经**阿里云 CDN**（qsl.herbert-dev.cn）回源 Cloudflare（qsl.herbertgao.me），故 worker 的 `CF-Connecting-IP` 在 CDN 路径下是**阿里云 CDN 回源节点 IP、非真实用户**（实测确认：响应头含 kunlun 节点 / Tengine / Ali-Swift / eagleid + cf-ray 透传）。因此一切「同一 IP 限流 / 升难度」「按 IP 计 nonce/会话」**必须**改从**阿里云 CDN 注入的真实 IP 头**（如 `X-Forwarded-For` 首段）取，**并校验请求确来自阿里云 CDN 回源**（白名单 CDN 回源 IP 段，否则该头客户端可伪造）——「`CF-Connecting-IP` 不可伪造」在前置 CDN 下**不再成立**。此约束同样回头影响阶段 0 已加的 `/api/wechat/auth-callback` 限流（当前按 `CF-Connecting-IP`，CDN 路径下粒度失真，待此阶段一并修正）。
+
 ### 5. 租户分级
 
 | | ① 受认证租户 | ② 非认证租户 |
