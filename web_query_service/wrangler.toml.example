@@ -55,21 +55,34 @@ id = "<RUN_WRANGLER_KV_CREATE_AND_PASTE_ID_HERE>"
 # ============================================================
 # 启用验证码防护需配置以下环境变量：
 #
-# CLIENT_SIGN_KEY: 前端请求签名密钥（可公开，用于生成请求签名）
-#   - 建议使用随机字符串，如 UUID
-#   - 前端通过 /api/config 获取此密钥
+# CLIENT_SIGN_KEY: 前端请求签名密钥（用于生成前端请求签名）
+#   - 经 /api/config 明文下发，按设计属可公开值（仅抬高脚本门槛）
+#   - 但其真实值仍用 Secret 管理，避免写入版本控制：
+#       wrangler secret put CLIENT_SIGN_KEY
+#   - 不要写进本文件或 [vars]，本文件仅保留占位符/说明
+#   - 注：改用 Secret 不改变它经 /api/config 面向公网的可见性，
+#     也不提供查询签名绕过防护（真正闭合属后续阶段会话动态签名）
 #
 # CAPTCHA_SECRET: 验证码 token 签名密钥（仅服务端，不可公开）
 #   - 用于生成和验证验证码 token 的 HMAC 签名
-#   - 必须保密，建议使用 wrangler secret 配置
+#   - 必须保密，用 Secret 配置：
+#       wrangler secret put CAPTCHA_SECRET
 #
-# 配置方式：
-#   在下方 [vars] 中添加 CLIENT_SIGN_KEY（非敏感）
-#   wrangler secret put CAPTCHA_SECRET（敏感信息）
+# 配置方式（均用 Secret，禁止写入 [vars] 或本文件真实值）：
+#   wrangler secret put CLIENT_SIGN_KEY
+#   wrangler secret put CAPTCHA_SECRET
+
+# ============================================================
+# 配置卫生说明（签名密钥与服务凭据）
+# ============================================================
+# 本服务的签名密钥与各服务凭据均按「配置卫生」口径管理：真实值禁止写入
+# 纳入版本控制的文件（含本 .example、README 等），仅以占位符出现，靠
+# Cloudflare Secret 或部署期注入提供。
 #
-# 示例：
-# [vars]
-# CLIENT_SIGN_KEY = "your-random-sign-key-here"
+# 顺丰 checkword（config/sf_express_default.toml）与 CLIENT_SIGN_KEY
+# （wrangler.toml）处境对称——均被 .gitignore 忽略、真实值未进入 Git 历史、
+# 靠 CI/Secret 注入，统一按配置卫生项管理；CLIENT_SIGN_KEY 不因此被单独
+# 定性为已泄漏（其经 /api/config 下发本属可公开值）。
 
 # ============================================================
 # 网站备案信息配置（可选）

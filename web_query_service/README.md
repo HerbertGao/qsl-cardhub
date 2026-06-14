@@ -82,7 +82,7 @@ pnpm run db:migrate
 
 ## 环境变量与密钥
 
-在 `wrangler.toml` 的 `[vars]` 中可配置非敏感变量。敏感信息请用 Secret：
+在 `wrangler.toml` 的 `[vars]` 中可配置非敏感变量。签名密钥与各服务凭据的**真实值请一律用 Secret**（禁止写入 `wrangler.toml`/`[vars]` 等纳入版本控制的文件，仅以占位符出现）：
 
 ```bash
 # /ping、/sync 的 Bearer 校验（必设，否则不校验）
@@ -94,10 +94,15 @@ pnpm exec wrangler secret put WECHAT_SECRET
 pnpm exec wrangler secret put WECHAT_TEMPLATE_ID
 
 # 可选：验证码防护
-# CLIENT_SIGN_KEY 可在 [vars] 中配置（非敏感）
+# CLIENT_SIGN_KEY 用 Secret 管理（避免真实值写入版本控制）
+#   注：它经 /api/config 明文下发、按设计仍属可公开值，用 Secret 不改变
+#   其面向公网的可见性，也不提供查询签名绕过防护（属后续阶段）
+pnpm exec wrangler secret put CLIENT_SIGN_KEY
 # CAPTCHA_SECRET 需用 secret（敏感）
 pnpm exec wrangler secret put CAPTCHA_SECRET
 ```
+
+> 配置卫生口径：顺丰 checkword（`config/sf_express_default.toml`）与 `CLIENT_SIGN_KEY`（`wrangler.toml`）处境对称——均被 `.gitignore` 忽略、真实值未进入 Git 历史、靠 CI/Secret 注入，统一按「配置卫生」管理；`CLIENT_SIGN_KEY` 不因此被单独定性为已泄漏。
 
 **推荐：使用以下命令生成随机密钥**
 
@@ -108,9 +113,11 @@ openssl rand -hex 32
 # 生成 CAPTCHA_SECRET（32 字节 hex，64 字符）
 openssl rand -hex 32
 
-# 生成 CLIENT_SIGN_KEY（16 字节 hex，32 字符，非敏感可短一些）
+# 生成 CLIENT_SIGN_KEY（16 字节 hex，32 字符）
 openssl rand -hex 16
 ```
+
+> 上述生成的随机值请经 `wrangler secret put ...` 写入，不要粘贴进 `wrangler.toml`/`[vars]` 或本仓库任何纳入版本控制的文件。
 
 本地开发时在项目根目录创建 `web_query_service/.dev.vars`（不要提交）：
 
