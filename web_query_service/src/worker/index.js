@@ -48,15 +48,17 @@ function getClientIP(request) {
 
 /**
  * IP 限流检查
+ * @param {string} [bucket] 计数桶前缀，区分端点；缺省与查询端点共用 `ratelimit:${ip}`，
+ *   传入则用 `ratelimit:${bucket}:${ip}` 独立计数（如订阅回调用 'authcb'，不与查询挤占预算）。
  * @returns {Promise<{allowed: boolean, remaining: number, resetAt: number}>}
  */
-async function checkRateLimit(env, ip) {
+async function checkRateLimit(env, ip, bucket) {
   if (!env.RATE_LIMIT) {
-    // KV 未配置时跳过限流
+    // KV 未配置时跳过限流（fail-open，可用性优先；KV 为部署前置）
     return { allowed: true, remaining: RATE_LIMIT_MAX, resetAt: 0 };
   }
 
-  const key = `ratelimit:${ip}`;
+  const key = bucket ? `ratelimit:${bucket}:${ip}` : `ratelimit:${ip}`;
   const now = Math.floor(Date.now() / 1000);
   const windowStart = now - (now % RATE_LIMIT_WINDOW);
   const resetAt = windowStart + RATE_LIMIT_WINDOW;
@@ -205,47 +207,6 @@ async function generateCaptcha(env) {
   const token = btoa(JSON.stringify({ a: answer, e: expires, s: signature }));
 
   return { question, answer, token, expires };
-}
-
-/**
- * 校验验证码
- * @returns {{valid: boolean, error?: string}}
- */
-async function verifyCaptcha(env, token, userAnswer) {
-  if (!env.CAPTCHA_SECRET) {
-    // 未配置验证码密钥时跳过验证
-    return { valid: true };
-  }
-
-  if (!token || userAnswer === undefined || userAnswer === null) {
-    return { valid: false, error: '缺少验证码参数' };
-  }
-
-  try {
-    const decoded = JSON.parse(atob(token));
-    const { a: answer, e: expires, s: signature } = decoded;
-
-    // 1. 检查是否过期
-    if (Date.now() > expires) {
-      return { valid: false, error: '验证码已过期' };
-    }
-
-    // 2. 验证签名
-    const payload = `${answer}:${expires}`;
-    const expectedSig = await hmacSha256(payload, env.CAPTCHA_SECRET);
-    if (signature !== expectedSig) {
-      return { valid: false, error: '验证码无效' };
-    }
-
-    // 3. 验证答案
-    if (parseInt(userAnswer, 10) !== answer) {
-      return { valid: false, error: '验证码答案错误' };
-    }
-
-    return { valid: true };
-  } catch {
-    return { valid: false, error: '验证码格式错误' };
-  }
 }
 
 export default {
@@ -633,6 +594,14 @@ export default {
 
       // GET /api/wechat/auth-callback 微信网页授权回调（订阅收卡）：code + state(callsign) -> 换 openid -> 写入绑定表
       if (path === '/api/wechat/auth-callback' && method === 'GET') {
+        // IP 限流：独立计数桶 authcb（不与查询共桶、互不挤占预算），
+        // 计数 IP 取自 Cloudflare 注入、客户端不可伪造的 CF-Connecting-IP（非 X-Forwarded-For 回退）。
+        // checkRateLimit 在 RATE_LIMIT KV 未配置时 fail-open（可用性优先）→ KV 为部署前置。
+        const authcbIP = request.headers.get('CF-Connecting-IP') || 'unknown';
+        const authcbRate = await checkRateLimit(env, authcbIP, 'authcb');
+        if (!authcbRate.allowed) {
+          return new Response('请求过于频繁，请稍后再试', { status: 429, headers: CORS_HEADERS });
+        }
         const code = url.searchParams.get('code');
         const state = url.searchParams.get('state'); // callsign
         if (!code || !state) {
@@ -647,7 +616,9 @@ export default {
         const tokenData = await tokenRes.json();
         const openid = tokenData.openid;
         if (!openid) {
-          return new Response('微信授权失败：' + (tokenData.errmsg || JSON.stringify(tokenData)), {
+          // 脱敏：不回显上游原始 errcode/errmsg 或序列化响应体，仅落服务端日志。
+          console.error('WeChat oauth2 access_token failed', tokenData);
+          return new Response('微信授权失败', {
             status: 400,
             headers: CORS_HEADERS,
           });
@@ -665,6 +636,7 @@ export default {
       if (path === '/api/config' && method === 'GET') {
         const wechatSubscribeEnabled = !!(env.WECHAT_APPID && env.WECHAT_SECRET);
         const wechatPushEnabled = !!(env.WECHAT_APPID && env.WECHAT_SECRET && env.WECHAT_TEMPLATE_ID);
+        // 注意：captcha 仅为前端 UI，服务端不校验其 token；features.captcha 仍下发，客户端据此弹出的验证码无服务端校验作用
         const captchaEnabled = !!(env.CLIENT_SIGN_KEY && env.CAPTCHA_SECRET);
         let filing = null;
         if (env.SITE_FILING) {
@@ -697,8 +669,9 @@ export default {
 
       return json({ success: false, message: 'Not Found' }, 404);
     } catch (e) {
+      // 脱敏：不回显原始异常消息/内部实现细节，详细异常仅落服务端日志。
       console.error(e);
-      return json({ success: false, message: e.message || '服务器错误' }, 500);
+      return json({ success: false, message: '服务器错误' }, 500);
     }
   },
 };
