@@ -95,6 +95,61 @@ function isValidIPLiteral(value) {
 }
 
 /**
+ * 将合法 IPv6 字面量展开为 8 组各 4-hex（小写、零填充）。调用方须已确保 value 合法。
+ * 处理 `::` 压缩与内嵌 IPv4 末段。失败 → null。
+ * @param {string} value
+ * @returns {string[]|null}
+ */
+function expandIPv6(value) {
+  let v = value.toLowerCase();
+  // 内嵌 IPv4 末段 → 两个 hextet
+  const lastColon = v.lastIndexOf(':');
+  const tail = v.slice(lastColon + 1);
+  if (tail.includes('.')) {
+    const n = ipv4ToUint32(tail);
+    if (n === null) return null;
+    const h1 = ((n >>> 16) & 0xffff).toString(16);
+    const h2 = (n & 0xffff).toString(16);
+    v = v.slice(0, lastColon + 1) + h1 + ':' + h2;
+  }
+  let groups;
+  if (v.includes('::')) {
+    const [l, r] = v.split('::');
+    const lg = l === '' ? [] : l.split(':');
+    const rg = r === '' ? [] : r.split(':');
+    const missing = 8 - (lg.length + rg.length);
+    if (missing < 0) return null;
+    groups = [...lg, ...Array(missing).fill('0'), ...rg];
+  } else {
+    groups = v.split(':');
+    if (groups.length !== 8) return null;
+  }
+  return groups.map((g) => (g === '' ? '0' : g).padStart(4, '0'));
+}
+
+/**
+ * 单一 IP 归一键（client_binding_key）：统一全套按-IP 键（seed.challenge_ip、session.ip、
+ * powrate 桶、ratelimit:session 握手桶、兑换/查询时 IP 比对）的归桶口径。
+ * - IPv4 → 完整地址（/32，直通原值）
+ * - IPv6 → /64 前缀（取前 64 位归一，形如 `2001:0db8:0000:0001::/64`）——使同一 /64 内隐私地址
+ *   轮换归同一键（不误杀），且攻击者无法用 /64 内海量地址各建一次会话逃逸自适应难度
+ * - 'unknown' / 非法 → 'unknown'（直通独立桶，不污染具体 IP 桶）
+ * @param {string} ip getClientIP 的返回值
+ * @returns {string}
+ */
+export function clientBindingKey(ip) {
+  if (typeof ip !== 'string' || ip.length === 0) return 'unknown';
+  if (ip === 'unknown') return 'unknown';
+  if (ipv4ToUint32(ip) !== null) return ip; // IPv4 /32 直通
+  if (isValidIPv6(ip)) {
+    const groups = expandIPv6(ip);
+    if (!groups) return 'unknown';
+    return `${groups.slice(0, 4).join(':')}::/64`;
+  }
+  return 'unknown'; // 非法字面量兜底
+}
+
+/**
  * 受信真实 IP 头值运行时校验（纯函数）。
  * 采信前校验为**单值、合法 IP 字面量、不含逗号**；多值/含逗号/非法 → false（覆写假设失效信号，调用方落 'unknown'）。
  * **实现禁止** split(',') 取段再校验——对原始返回值整体判定（含逗号即多值即 false），

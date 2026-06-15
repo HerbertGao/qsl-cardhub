@@ -22,9 +22,13 @@ binding = "DB"
 database_name = "qsl-sync"
 database_id = "<RUN_WRANGLER_D1_CREATE_AND_PASTE_ID_HERE>"
 
-# KV 命名空间绑定（用于限流计数和 nonce 去重）
+# KV 命名空间绑定（限流计数 + nonce 去重 + 防爬会话/PoW 存储）
 # 创建命令：npx wrangler kv namespace create "RATE_LIMIT"
 # 将返回的 id 填入下方
+#
+# 【硬部署前置】会话/PoW/配额/防重放依赖此 KV——与纯 IP 限流（KV 缺失 fail-open）不同，
+# 会话相关端点在 KV 未绑定时 fail-closed（/api/session* 返 503、无有效会话的查询被拒），
+# 绝不因缺 KV 静默放行无会话查询。务必绑定。
 [[kv_namespaces]]
 binding = "RATE_LIMIT"
 id = "<RUN_WRANGLER_KV_CREATE_AND_PASTE_ID_HERE>"
@@ -51,26 +55,23 @@ id = "<RUN_WRANGLER_KV_CREATE_AND_PASTE_ID_HERE>"
 #   wrangler secret put WECHAT_TEMPLATE_ID
 
 # ============================================================
-# 验证码防护配置（可选）
+# 防爬会话 / PoW 配置（query-antibot-session）
 # ============================================================
-# 启用验证码防护需配置以下环境变量：
+# 查询侧防爬：PoW 门票 + 短时会话（绑真实 IP+UA）+ 会话配额 + 会话专属动态签名。
+# 需配置以下 Secret：
 #
-# CLIENT_SIGN_KEY: 前端请求签名密钥（用于生成前端请求签名）
-#   - 经 /api/config 明文下发，按设计属可公开值（仅抬高脚本门槛）
-#   - 但其真实值仍用 Secret 管理，避免写入版本控制：
-#       wrangler secret put CLIENT_SIGN_KEY
-#   - 不要写进本文件或 [vars]，本文件仅保留占位符/说明
-#   - 注：改用 Secret 不改变它经 /api/config 面向公网的可见性，
-#     也不提供查询签名绕过防护（真正闭合属后续阶段会话动态签名）
+# SESSION_SECRET: 会话 token 的 HMAC-SHA256 密钥（仅服务端，必须保密）
+#   - 生成：openssl rand -hex 32
+#   - 仅经 Secret 注入，禁写入本文件 / [vars] / 任何版本控制文件：
+#       wrangler secret put SESSION_SECRET
+#   - 未配置 → 会话功能 fail-closed（/api/session* 与查询会话校验返 503）。
+#   - 泄漏可伪造 token，但仍受「KV 必命中 session + IP/UA 绑定 + 配额」三重约束；
+#     可轮换（轮换瞬间在途会话失效、客户端自动重走 PoW）。
 #
-# CAPTCHA_SECRET: 验证码 token 签名密钥（仅服务端，不可公开）
-#   - 用于生成和验证验证码 token 的 HMAC 签名
-#   - 必须保密，用 Secret 配置：
-#       wrangler secret put CAPTCHA_SECRET
-#
-# 配置方式（均用 Secret，禁止写入 [vars] 或本文件真实值）：
-#   wrangler secret put CLIENT_SIGN_KEY
-#   wrangler secret put CAPTCHA_SECRET
+# 已退役（不再使用，可清理残留 Secret）：
+#   - CLIENT_SIGN_KEY：静态查询签名密钥，经 /api/config 明文下发=可公开值、对防爬零收益，
+#     已由会话专属 sk 取代；/api/config 不再下发 sign_key。
+#   - CAPTCHA_SECRET：算术验证码已移除（PoW 取代），不再需要。
 
 # ============================================================
 # 配置卫生说明（签名密钥与服务凭据）
@@ -79,10 +80,10 @@ id = "<RUN_WRANGLER_KV_CREATE_AND_PASTE_ID_HERE>"
 # 纳入版本控制的文件（含本 .example、README 等），仅以占位符出现，靠
 # Cloudflare Secret 或部署期注入提供。
 #
-# 顺丰 checkword（config/sf_express_default.toml）与 CLIENT_SIGN_KEY
-# （wrangler.toml）处境对称——均被 .gitignore 忽略、真实值未进入 Git 历史、
-# 靠 CI/Secret 注入，统一按配置卫生项管理；CLIENT_SIGN_KEY 不因此被单独
-# 定性为已泄漏（其经 /api/config 下发本属可公开值）。
+# 顺丰 checkword（config/sf_express_default.toml）、SESSION_SECRET、CDN_ORIGIN_SECRET
+# 处境对称——均被 .gitignore 忽略、真实值未进入 Git 历史、靠 CI/Secret 注入，
+# 统一按配置卫生项管理。查询签名密钥已改为会话专属、短时的 sk（经 POST /api/session
+# 响应下发），静态 CLIENT_SIGN_KEY 与 CAPTCHA_SECRET 已退役、不再下发。
 
 # ============================================================
 # CDN 真实客户端 IP 与限流配置（可选）
