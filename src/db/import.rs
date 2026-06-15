@@ -213,33 +213,31 @@ pub fn preview_import<P: AsRef<Path>>(file_path: P) -> Result<ImportPreview, App
     })
 }
 
-/// 执行导入
+/// `app_settings` 表的清空策略
 ///
-/// 清空现有数据并导入新数据（事务保证原子性）
-pub fn execute_import<P: AsRef<Path>>(file_path: P) -> Result<ExportStats, AppError> {
-    let file_path = file_path.as_ref();
+/// 文件导入与「从云端恢复」对 `app_settings` 的清空语义不同。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AppSettingsClearMode {
+    /// 条件清空：仅当 `data.tables.app_settings` 含值时才清空并写入（文件导入沿用此语义）
+    Conditional,
+    /// 无条件清空：始终清空全部配置后再写入快照（从云端恢复必须用此，避免空配置时旧配置幽灵残留）
+    Unconditional,
+}
 
-    // 读取文件内容
-    let content = fs::read_to_string(file_path).map_err(|e| {
-        AppError::Other(format!("无法读取文件: {}", e))
-    })?;
-
-    // 解析 JSON（支持多版本）
-    let data = parse_export_data(&content)?;
-
-    // 验证版本
-    let conn = get_connection()?;
-    let local_db_version = get_db_version(&conn)?;
-
-    if data.db_version > local_db_version {
-        return Err(AppError::Other(format!(
-            "导入文件的数据库版本（{}）高于本地版本（{}），请升级应用后再导入",
-            data.db_version_display, format_version(local_db_version)
-        )));
-    }
-
+/// 共用导入内核：在单个 rusqlite 事务内清空 5 张业务表并按 `ExportData` 重建
+///
+/// 文件导入与「从云端恢复」共用本内核，避免维护两份并行的 DELETE/INSERT。
+/// 注意：本内核**不**处理 `client_id` 恢复（该逻辑只属文件导入侧，见 `execute_import`）。
+///
+/// `app_settings` 的清空策略由 `app_settings_mode` 决定：
+/// - `Conditional`：仅当快照含 `app_settings` 字段时才清空+写入（保留现有配置）
+/// - `Unconditional`：无条件清空全部配置后写入快照（云端恢复语义，空快照也清空本地旧配置）
+pub fn import_from_export_data(
+    conn: &mut rusqlite::Connection,
+    data: &ExportData,
+    app_settings_mode: AppSettingsClearMode,
+) -> Result<(), AppError> {
     // 开始事务
-    let mut conn = get_connection()?;
     let tx = conn.transaction().map_err(|e| {
         AppError::Other(format!("无法开始事务: {}", e))
     })?;
@@ -350,27 +348,79 @@ pub fn execute_import<P: AsRef<Path>>(file_path: P) -> Result<ExportStats, AppEr
     }
     log::info!("📦 导入 {} 个订单", data.tables.sf_orders.len());
 
-    // 导入全局配置（如果存在）
-    if let Some(ref settings) = data.tables.app_settings {
-        tx.execute("DELETE FROM app_settings", [])
-            .map_err(|e| AppError::Other(format!("清空配置表失败: {}", e)))?;
+    // 导入全局配置
+    match app_settings_mode {
+        AppSettingsClearMode::Conditional => {
+            // 文件导入：仅当快照含 app_settings 字段时才清空并写入，否则保留现有配置
+            if let Some(ref settings) = data.tables.app_settings {
+                tx.execute("DELETE FROM app_settings", [])
+                    .map_err(|e| AppError::Other(format!("清空配置表失败: {}", e)))?;
 
-        for setting in settings {
-            tx.execute(
-                "INSERT INTO app_settings (key, value) VALUES (?1, ?2)",
-                rusqlite::params![&setting.key, &setting.value],
-            )
-            .map_err(|e| AppError::Other(format!("导入配置失败 ({}): {}", setting.key, e)))?;
+                for setting in settings {
+                    tx.execute(
+                        "INSERT INTO app_settings (key, value) VALUES (?1, ?2)",
+                        rusqlite::params![&setting.key, &setting.value],
+                    )
+                    .map_err(|e| AppError::Other(format!("导入配置失败 ({}): {}", setting.key, e)))?;
+                }
+                log::info!("📦 导入 {} 个配置项", settings.len());
+            } else {
+                log::info!("📦 导入文件不含配置项，保留现有配置");
+            }
         }
-        log::info!("📦 导入 {} 个配置项", settings.len());
-    } else {
-        log::info!("📦 导入文件不含配置项，保留现有配置");
+        AppSettingsClearMode::Unconditional => {
+            // 从云端恢复：无条件清空全部配置后写入快照（即便快照为空也清空本地旧配置）
+            tx.execute("DELETE FROM app_settings", [])
+                .map_err(|e| AppError::Other(format!("清空配置表失败: {}", e)))?;
+
+            let settings = data.tables.app_settings.as_deref().unwrap_or(&[]);
+            for setting in settings {
+                tx.execute(
+                    "INSERT INTO app_settings (key, value) VALUES (?1, ?2)",
+                    rusqlite::params![&setting.key, &setting.value],
+                )
+                .map_err(|e| AppError::Other(format!("导入配置失败 ({}): {}", setting.key, e)))?;
+            }
+            log::info!("📦 无条件清空并导入 {} 个配置项", settings.len());
+        }
     }
 
     // 提交事务
     tx.commit().map_err(|e| {
         AppError::Other(format!("提交事务失败: {}", e))
     })?;
+
+    Ok(())
+}
+
+/// 执行导入
+///
+/// 清空现有数据并导入新数据（事务保证原子性）
+pub fn execute_import<P: AsRef<Path>>(file_path: P) -> Result<ExportStats, AppError> {
+    let file_path = file_path.as_ref();
+
+    // 读取文件内容
+    let content = fs::read_to_string(file_path).map_err(|e| {
+        AppError::Other(format!("无法读取文件: {}", e))
+    })?;
+
+    // 解析 JSON（支持多版本）
+    let data = parse_export_data(&content)?;
+
+    // 验证版本
+    let conn = get_connection()?;
+    let local_db_version = get_db_version(&conn)?;
+
+    if data.db_version > local_db_version {
+        return Err(AppError::Other(format!(
+            "导入文件的数据库版本（{}）高于本地版本（{}），请升级应用后再导入",
+            data.db_version_display, format_version(local_db_version)
+        )));
+    }
+
+    // 复用共用导入内核（文件导入侧 app_settings 沿用条件清空语义）
+    let mut conn = get_connection()?;
+    import_from_export_data(&mut conn, &data, AppSettingsClearMode::Conditional)?;
 
     // 恢复 client_id 到同步配置
     if let Some(client_id) = data.client_id.as_deref().filter(|s| !s.is_empty()) {
@@ -413,10 +463,232 @@ pub fn execute_import<P: AsRef<Path>>(file_path: P) -> Result<ExportStats, AppEr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::models::{AppSetting, CardStatus};
+    use rusqlite::Connection;
 
     #[test]
     fn test_import_preview_file_not_found() {
         let result = preview_import("/nonexistent/file.qslhub");
         assert!(result.is_err());
+    }
+
+    /// 创建一个含 5 张业务表的内存库（schema 与迁移一致）
+    fn setup_test_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            r#"
+            CREATE TABLE projects (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE cards (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                creator_id TEXT,
+                callsign TEXT NOT NULL,
+                qty INTEGER NOT NULL,
+                serial INTEGER,
+                status TEXT NOT NULL DEFAULT 'pending',
+                metadata TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE sf_senders (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                phone TEXT NOT NULL,
+                mobile TEXT,
+                province TEXT NOT NULL,
+                city TEXT NOT NULL,
+                district TEXT NOT NULL,
+                address TEXT NOT NULL,
+                is_default INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE sf_orders (
+                id TEXT PRIMARY KEY,
+                order_id TEXT NOT NULL UNIQUE,
+                waybill_no TEXT,
+                card_id TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                pay_method INTEGER DEFAULT 1,
+                cargo_name TEXT,
+                sender_info TEXT NOT NULL,
+                recipient_info TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+            "#,
+        )
+        .unwrap();
+        conn
+    }
+
+    /// 计算全部业务表的内容指纹（用于回滚不变量断言）
+    fn fingerprint(conn: &Connection) -> String {
+        let mut parts = Vec::new();
+        for (table, sql) in [
+            ("projects", "SELECT group_concat(id||'|'||name||'|'||created_at||'|'||updated_at, ';') FROM (SELECT * FROM projects ORDER BY id)"),
+            ("cards", "SELECT group_concat(id||'|'||callsign||'|'||qty||'|'||IFNULL(serial,'')||'|'||status||'|'||IFNULL(metadata,''), ';') FROM (SELECT * FROM cards ORDER BY id)"),
+            ("sf_senders", "SELECT group_concat(id||'|'||name||'|'||is_default||'|'||address, ';') FROM (SELECT * FROM sf_senders ORDER BY id)"),
+            ("sf_orders", "SELECT group_concat(id||'|'||order_id||'|'||sender_info||'|'||recipient_info, ';') FROM (SELECT * FROM sf_orders ORDER BY id)"),
+            ("app_settings", "SELECT group_concat(key||'|'||value, ';') FROM (SELECT * FROM app_settings ORDER BY key)"),
+        ] {
+            let v: Option<String> = conn.query_row(sql, [], |r| r.get(0)).unwrap();
+            parts.push(format!("{}=[{}]", table, v.unwrap_or_default()));
+        }
+        parts.join("\n")
+    }
+
+    fn make_export_data(app_settings: Option<Vec<AppSetting>>) -> ExportData {
+        ExportData {
+            version: EXPORT_FORMAT_VERSION.to_string(),
+            db_version: 0,
+            db_version_display: String::new(),
+            app_version: "test".to_string(),
+            exported_at: "2026-01-01T00:00:00+08:00".to_string(),
+            client_id: None,
+            tables: ExportTables {
+                projects: vec![Project {
+                    id: "p1".to_string(),
+                    name: "项目1".to_string(),
+                    created_at: "2026-01-01T00:00:00+08:00".to_string(),
+                    updated_at: "2026-01-01T00:00:00+08:00".to_string(),
+                }],
+                cards: vec![Card {
+                    id: "c1".to_string(),
+                    project_id: "p1".to_string(),
+                    creator_id: None,
+                    callsign: "BH2RO".to_string(),
+                    qty: 1,
+                    serial: Some(1),
+                    status: CardStatus::Pending,
+                    metadata: None,
+                    created_at: "2026-01-01T00:00:00+08:00".to_string(),
+                    updated_at: "2026-01-01T00:00:00+08:00".to_string(),
+                }],
+                sf_senders: vec![],
+                sf_orders: vec![],
+                app_settings,
+            },
+        }
+    }
+
+    /// 4.2：恢复路径（Unconditional）即使快照 app_settings 为空也必须清空本地旧配置
+    #[test]
+    fn test_unconditional_clears_app_settings_even_when_empty() {
+        let mut conn = setup_test_db();
+        conn.execute(
+            "INSERT INTO app_settings (key, value) VALUES ('old_key', 'old_value')",
+            [],
+        )
+        .unwrap();
+
+        // 快照不含 app_settings（None） + Unconditional → 本地旧配置必须被清空
+        let data = make_export_data(None);
+        import_from_export_data(&mut conn, &data, AppSettingsClearMode::Unconditional).unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM app_settings", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 0, "Unconditional 应清空 app_settings，不留幽灵配置");
+    }
+
+    /// 4.2：文件导入路径（Conditional）快照不含 app_settings 时保留本地旧配置
+    #[test]
+    fn test_conditional_keeps_app_settings_when_absent() {
+        let mut conn = setup_test_db();
+        conn.execute(
+            "INSERT INTO app_settings (key, value) VALUES ('old_key', 'old_value')",
+            [],
+        )
+        .unwrap();
+
+        let data = make_export_data(None);
+        import_from_export_data(&mut conn, &data, AppSettingsClearMode::Conditional).unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM app_settings", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1, "Conditional 在快照无 app_settings 时应保留现有配置");
+    }
+
+    /// 6.4：导入内核事务失败时必须回滚，回滚后本地表内容指纹 == 恢复前
+    #[test]
+    fn test_kernel_rollback_preserves_fingerprint_on_failure() {
+        let mut conn = setup_test_db();
+        // 预置原始数据
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at, updated_at) VALUES ('orig_p', '原始项目', '2026-01-01T00:00:00+08:00', '2026-01-01T00:00:00+08:00')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO app_settings (key, value) VALUES ('keep', 'me')",
+            [],
+        )
+        .unwrap();
+
+        let before = fingerprint(&conn);
+
+        // 构造会触发 INSERT 失败的数据：两张卡片同 id（PRIMARY KEY 冲突）→ 第二条 INSERT 报错 → 事务回滚
+        let mut data = make_export_data(Some(vec![AppSetting {
+            key: "new".to_string(),
+            value: "x".to_string(),
+        }]));
+        let dup = data.tables.cards[0].clone();
+        data.tables.cards.push(dup); // 重复主键 c1
+
+        let result = import_from_export_data(&mut conn, &data, AppSettingsClearMode::Unconditional);
+        assert!(result.is_err(), "重复主键应导致导入失败");
+
+        let after = fingerprint(&conn);
+        assert_eq!(
+            before, after,
+            "事务失败回滚后本地表内容指纹必须与恢复前一致（不得留下已删未写中间态）"
+        );
+    }
+
+    /// 多异构行逐字段相等（独立证伪绑定列错序）
+    #[test]
+    fn test_unconditional_roundtrip_multiple_heterogeneous_rows() {
+        let mut conn = setup_test_db();
+        let mut data = make_export_data(Some(vec![AppSetting {
+            key: "theme".to_string(),
+            value: "dark".to_string(),
+        }]));
+        // 追加第二张异构卡片
+        data.tables.cards.push(Card {
+            id: "c2".to_string(),
+            project_id: "p1".to_string(),
+            creator_id: None,
+            callsign: "BG2ABC".to_string(),
+            qty: 5,
+            serial: Some(42),
+            status: CardStatus::Distributed,
+            metadata: None,
+            created_at: "2026-01-02T00:00:00+08:00".to_string(),
+            updated_at: "2026-01-02T00:00:00+08:00".to_string(),
+        });
+
+        import_from_export_data(&mut conn, &data, AppSettingsClearMode::Unconditional).unwrap();
+
+        let (callsign, qty, serial): (String, i64, i64) = conn
+            .query_row(
+                "SELECT callsign, qty, serial FROM cards WHERE id = 'c2'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(callsign, "BG2ABC");
+        assert_eq!(qty, 5);
+        assert_eq!(serial, 42);
     }
 }

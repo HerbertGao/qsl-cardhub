@@ -63,8 +63,8 @@ use commands::{
         sf_delete_order, sf_mark_order_printed,
     },
     sync::{
-        clear_sync_config_cmd, execute_sync_cmd, load_sync_config_cmd, save_sync_config_cmd,
-        test_sync_connection_cmd,
+        clear_sync_config_cmd, execute_sync_cmd, load_sync_config_cmd, restore_from_cloud,
+        save_sync_config_cmd, test_sync_connection_cmd,
     },
 };
 use config::ProfileManager;
@@ -237,6 +237,7 @@ fn main() {
             clear_sync_config_cmd,
             test_sync_connection_cmd,
             execute_sync_cmd,
+            restore_from_cloud,
             // 恢复出厂设置
             factory_reset,
         ])

@@ -159,10 +159,19 @@
               type="success"
               :loading="syncLoading"
               :disabled="!syncConfig?.has_api_key || !syncForm.api_url"
-              @click="handleSync"
+              @click="handleSync(false)"
             >
               <el-icon><Refresh /></el-icon>
               <span style="margin-left: 4px">立即同步</span>
+            </el-button>
+            <el-button
+              type="warning"
+              :loading="restoreLoading"
+              :disabled="!syncConfig?.has_api_key || !syncForm.api_url"
+              @click="handleRestoreFromCloud"
+            >
+              <el-icon><Download /></el-icon>
+              <span style="margin-left: 4px">从云端恢复</span>
             </el-button>
           </el-button-group>
           <el-button
@@ -322,6 +331,8 @@ Content-Type: application/json
 {
   "client_id": "uuid",
   "sync_time": "2026-01-23T14:30:00+08:00",
+  "base_version": 41,        // 可选，整数，本地基线版本
+  "force": false,            // 可选，布尔，强制覆盖云端
   "data": {
     "projects": [...],
     "cards": [...],
@@ -335,11 +346,37 @@ Content-Type: application/json
   "success": true,
   "message": "同步成功",
   "received_at": "2026-01-23T14:30:01+08:00",
+  "server_version": 42,
   "stats": {
     "projects": 10,
     "cards": 500,
     "sf_senders": 5,
     "sf_orders": 100
+  }
+}
+
+响应（409，基线陈旧时返回）：
+{
+  "success": false,
+  "server_version": 42       // 云端当前版本
+}</pre>
+
+        <h4>3. 拉取全量快照</h4>
+        <pre>
+GET /pull
+Authorization: Bearer {api_key}
+
+按写入 Key 拉回全量快照 + server_version，用于换机/恢复。
+
+响应（200）：
+{
+  "success": true,
+  "server_version": 42,
+  "data": {
+    "projects": [...],
+    "cards": [...],
+    "sf_senders": [...],
+    "sf_orders": [...]
   }
 }</pre>
 
@@ -352,7 +389,7 @@ Content-Type: application/json
 
         <h3>实现建议</h3>
         <ul>
-          <li>按 client_id 隔离不同客户端数据</li>
+          <li>按写入 Key 解析租户归属，client_id 仅作设备溯源、不决定归属</li>
           <li>实现请求频率限制</li>
           <li>使用 HTTPS</li>
           <li>验证 API Key 有效性</li>
@@ -401,6 +438,25 @@ interface SyncConfigResponse {
   client_id: string
   last_sync_at: string | null
   has_api_key: boolean
+  base_version: number | null
+}
+
+// 同步命令三态结果（与后端 SyncCmdResult 对齐）
+type SyncCmdResult =
+  | {
+      status: 'success'
+      response: { success: boolean; message: string }
+      stats: ExportStats
+      sync_time: string
+      server_version: number | null
+    }
+  | { status: 'auth_failed' }
+  | { status: 'conflict'; server_version: number | null }
+
+// 从云端恢复结果（与后端 RestoreResult 对齐）
+interface RestoreResult {
+  server_version: number
+  stats: ExportStats
 }
 
 // 状态
@@ -420,8 +476,11 @@ const syncConfig = ref<SyncConfigResponse>({
   api_url: '',
   client_id: '',
   last_sync_at: null,
-  has_api_key: false
+  has_api_key: false,
+  base_version: null
 })
+
+const restoreLoading = ref(false)
 
 const syncForm = reactive({
   api_url: '',
@@ -585,27 +644,114 @@ async function handleTestConnection() {
   }
 }
 
-// 执行同步
-async function handleSync() {
+// 执行同步（force 为 true 时走强制覆盖逃生门）
+async function handleSync(force = false) {
   try {
     syncLoading.value = true
-    const result = await invoke<{
-      response: { success: boolean; message: string }
-      stats: ExportStats
-      sync_time: string
-    }>('execute_sync_cmd')
+    const result = await invoke<SyncCmdResult>('execute_sync_cmd', { force })
 
-    syncConfig.value.last_sync_at = result.sync_time
-    ElMessage.success(
-      `同步成功：${result.stats.projects} 个项目，${result.stats.cards} 张卡片，${result.stats.sf_senders} 个寄件人，${result.stats.sf_orders} 个订单`
-    )
-    logger.info('[同步] 同步完成')
+    switch (result.status) {
+      case 'success': {
+        syncConfig.value.last_sync_at = result.sync_time
+        syncConfig.value.base_version = result.server_version
+        ElMessage.success(
+          `同步成功：${result.stats.projects} 个项目，${result.stats.cards} 张卡片，${result.stats.sf_senders} 个寄件人，${result.stats.sf_orders} 个订单`
+        )
+        logger.info('[同步] 同步完成')
+        break
+      }
+      case 'auth_failed': {
+        ElMessage.error('认证失败，请检查 API Key')
+        logger.error('[同步] 认证失败')
+        break
+      }
+      case 'conflict': {
+        logger.warn(`[同步] 版本冲突，云端版本: ${result.server_version}`)
+        await handleSyncConflict(result.server_version)
+        break
+      }
+      default: {
+        logger.warn(`[同步] 未知结果状态: ${(result as { status: string }).status}`)
+        ElMessage.error('同步返回未知状态')
+        break
+      }
+    }
   } catch (error) {
     ElMessage.error(`同步失败：${error}`)
     logger.error(`[同步] 失败: ${error}`)
   } finally {
     syncLoading.value = false
   }
+}
+
+// 处理版本冲突（409）：引导用户下载云端最新或强制覆盖
+async function handleSyncConflict(serverVersion: number | null) {
+  const versionText =
+    serverVersion !== null && serverVersion !== undefined
+      ? `云端当前版本：${serverVersion}。`
+      : '无法获取云端当前版本。'
+
+  try {
+    // 三个动作：下载云端最新（confirm）/ 强制覆盖（cancel）/ 关闭（不处理）
+    await ElMessageBox.confirm(
+      `${versionText}本地基线落后于云端（其他设备已先同步）。请选择处理方式：<br><br>· <strong>下载云端最新</strong>：用云端数据覆盖本地，丢失本地未上传改动<br>· <strong>强制覆盖</strong>：用本机数据无条件覆盖云端`,
+      '版本冲突',
+      {
+        confirmButtonText: '下载云端最新',
+        cancelButtonText: '强制覆盖',
+        distinguishCancelAndClose: true,
+        dangerouslyUseHTMLString: true,
+        type: 'warning'
+      }
+    )
+    // 用户选择「下载云端最新」→ 走从云端恢复
+    await restoreFromCloud()
+  } catch (action) {
+    if (action === 'cancel') {
+      // 用户选择「强制覆盖」→ force=true 重发 /sync
+      await handleSync(true)
+    }
+    // action === 'close'（点 X 或按 ESC）→ 不做处理
+  }
+}
+
+// 从云端恢复（核心逻辑，供冲突引导与「从云端恢复」按钮共用）
+async function restoreFromCloud() {
+  try {
+    restoreLoading.value = true
+    const result = await invoke<RestoreResult>('restore_from_cloud')
+
+    syncConfig.value.base_version = result.server_version
+    ElMessage.success(
+      `恢复成功：${result.stats.projects} 个项目，${result.stats.cards} 张卡片，${result.stats.sf_senders} 个寄件人，${result.stats.sf_orders} 个订单`
+    )
+    logger.info('[从云端恢复] 恢复完成')
+  } catch (error) {
+    ElMessage.error(String(error))
+    logger.error(`[从云端恢复] 失败: ${error}`)
+  } finally {
+    restoreLoading.value = false
+  }
+}
+
+// 从云端恢复（按钮入口，前置二次确认）
+async function handleRestoreFromCloud() {
+  try {
+    await ElMessageBox.confirm(
+      '确定要从云端恢复吗？此操作将用云端数据覆盖本地，丢失本地未上传的改动，不可逆！',
+      '确认从云端恢复',
+      {
+        confirmButtonText: '确认恢复',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+  } catch {
+    // 用户取消
+    return
+  }
+
+  await restoreFromCloud()
 }
 
 // 清除配置
@@ -627,7 +773,8 @@ async function handleClearConfig() {
       api_url: '',
       client_id: syncConfig.value.client_id,
       last_sync_at: null,
-      has_api_key: false
+      has_api_key: false,
+      base_version: null
     }
     syncForm.api_url = ''
     syncForm.api_key = ''

@@ -156,6 +156,24 @@ const editingProject = ref<ProjectWithStats | null>(null)
 const syncConfigured = ref<boolean>(false)
 const syncing = ref<boolean>(false)
 
+// 同步命令三态结果（与后端 SyncCmdResult 对齐）
+type SyncCmdResult =
+  | {
+      status: 'success'
+      response: { success: boolean; message: string }
+      stats: { projects: number; cards: number; sf_senders: number; sf_orders: number }
+      sync_time: string
+      server_version: number | null
+    }
+  | { status: 'auth_failed' }
+  | { status: 'conflict'; server_version: number | null }
+
+// 从云端恢复结果（与后端 RestoreResult 对齐）
+interface RestoreResult {
+  server_version: number
+  stats: { projects: number; cards: number; sf_senders: number; sf_orders: number }
+}
+
 // ==================== 卡片相关状态 ====================
 const cards = ref<CardWithProject[]>([])
 const cardTotal = ref<number>(0)
@@ -249,21 +267,80 @@ const handleProjectDialogConfirm = async (data: { name: string }): Promise<void>
 }
 
 // ==================== 云端同步方法 ====================
-const handleSync = async (): Promise<void> => {
+// 执行同步（force 为 true 时走强制覆盖逃生门）
+const handleSync = async (force = false): Promise<void> => {
   syncing.value = true
   try {
-    const result = await invoke<{
-      response: { success: boolean; message: string }
-      stats: { projects: number; cards: number; sf_senders: number; sf_orders: number }
-      sync_time: string
-    }>('execute_sync_cmd')
-    ElMessage.success(
-      `同步成功：${result.stats.projects} 个项目，${result.stats.cards} 张卡片，${result.stats.sf_senders} 个寄件人，${result.stats.sf_orders} 个订单`
-    )
+    const result = await invoke<SyncCmdResult>('execute_sync_cmd', { force })
+
+    switch (result.status) {
+      case 'success': {
+        ElMessage.success(
+          `同步成功：${result.stats.projects} 个项目，${result.stats.cards} 张卡片，${result.stats.sf_senders} 个寄件人，${result.stats.sf_orders} 个订单`
+        )
+        break
+      }
+      case 'auth_failed': {
+        ElMessage.error('认证失败，请检查 API Key')
+        break
+      }
+      case 'conflict': {
+        await handleSyncConflict(result.server_version)
+        break
+      }
+      default: {
+        ElMessage.error('同步返回未知状态')
+        break
+      }
+    }
   } catch (error) {
     ElMessage.error(`同步失败：${error}`)
   } finally {
     syncing.value = false
+  }
+}
+
+// 处理版本冲突（409）：引导用户下载云端最新或强制覆盖
+const handleSyncConflict = async (serverVersion: number | null): Promise<void> => {
+  const versionText =
+    serverVersion !== null && serverVersion !== undefined
+      ? `云端当前版本：${serverVersion}。`
+      : '无法获取云端当前版本。'
+
+  try {
+    // 三个动作：下载云端最新（confirm）/ 强制覆盖（cancel）/ 关闭（不处理）
+    await ElMessageBox.confirm(
+      `${versionText}本地基线落后于云端（其他设备已先同步）。请选择处理方式：<br><br>· <strong>下载云端最新</strong>：用云端数据覆盖本地，丢失本地未上传改动<br>· <strong>强制覆盖</strong>：用本机数据无条件覆盖云端`,
+      '版本冲突',
+      {
+        confirmButtonText: '下载云端最新',
+        cancelButtonText: '强制覆盖',
+        distinguishCancelAndClose: true,
+        dangerouslyUseHTMLString: true,
+        type: 'warning'
+      }
+    )
+    // 用户选择「下载云端最新」→ 走从云端恢复
+    await restoreFromCloud()
+  } catch (action) {
+    if (action === 'cancel') {
+      // 用户选择「强制覆盖」→ force=true 重发 /sync
+      await handleSync(true)
+    }
+    // action === 'close'（点 X 或按 ESC）→ 不做处理
+  }
+}
+
+// 从云端恢复：用云端数据覆盖本地，恢复后刷新卡片列表
+const restoreFromCloud = async (): Promise<void> => {
+  try {
+    const result = await invoke<RestoreResult>('restore_from_cloud')
+    ElMessage.success(
+      `恢复成功：${result.stats.projects} 个项目，${result.stats.cards} 张卡片，${result.stats.sf_senders} 个寄件人，${result.stats.sf_orders} 个订单`
+    )
+    await loadCards()
+  } catch (error) {
+    ElMessage.error(String(error))
   }
 }
 

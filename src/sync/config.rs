@@ -22,6 +22,12 @@ pub struct SyncConfig {
     pub client_id: String,
     /// 上次同步时间（ISO 8601 格式）
     pub last_sync_at: Option<String>,
+    /// 本地持久化的云端基线版本（乐观并发护栏 base_version）
+    ///
+    /// `None` 表示从未与新协议同步过，首次同步走无条件覆盖路径；
+    /// 同步成功（200）后必须刷新为响应回传的 `server_version` 并落盘。
+    #[serde(default)]
+    pub base_version: Option<i64>,
 }
 
 impl Default for SyncConfig {
@@ -30,6 +36,7 @@ impl Default for SyncConfig {
             api_url: String::new(),
             client_id: Uuid::new_v4().to_string(),
             last_sync_at: None,
+            base_version: None,
         }
     }
 }
@@ -111,5 +118,19 @@ mod tests {
         assert!(config.api_url.is_empty());
         assert!(!config.client_id.is_empty());
         assert!(config.last_sync_at.is_none());
+        assert!(config.base_version.is_none());
+    }
+
+    #[test]
+    fn test_config_without_base_version_field_parses() {
+        // 旧 sync.toml 无 base_version 字段时，#[serde(default)] 应回退为 None
+        let toml_str = r#"
+api_url = "https://example.com"
+client_id = "test-client-id"
+"#;
+        let config: SyncConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.api_url, "https://example.com");
+        assert_eq!(config.client_id, "test-client-id");
+        assert!(config.base_version.is_none());
     }
 }
