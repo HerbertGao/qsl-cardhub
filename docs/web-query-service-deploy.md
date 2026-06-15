@@ -50,52 +50,61 @@
 
 生产经**阿里云 CDN**（`qsl.herbert-dev.cn`，备案域名、大陆入口）回源到 **Cloudflare 源站**（`qsl.herbertgao.me`）。经 CDN 路径时 Worker 收到的 `CF-Connecting-IP` 是**阿里云 CDN 回源节点 IP、不是真实用户 IP**；真实用户 IP 由阿里云 CDN 在回源请求头里注入。若仍按 `CF-Connecting-IP` 计数，成千上万真实用户会被**归并到少数 CDN 回源 IP 桶**，限流粒度失真。
 
-为此服务支持两项配置，让限流/防爬按真实用户 IP 计数。
+**信任信号 = 阿里云 CDN 注入的密钥回源头 `X-Origin-Auth`**，而非回源 IP 白名单。阿里云回源 IP **动态分配、官方明确不建议固定白名单**（"不建议在源站设置固定的回源 IP 列表，否则可能导致回源失败"），且查询回源 IP 的接口（`DescribeL2VipsByDomain`）有日峰值带宽 ≥1Gbps + 工单门槛——故本服务改用「CDN 注入、客户端伪造被覆盖、攻击者猜不到」的密钥头判定「确来自 CDN」。
 
-> **边界**：这两项配置的产物**仅**用作限流/防爬计数键（抬高自动化批量调用成本），**不**用作访问控制/鉴权判据。鉴权由 Bearer Key 与请求签名承担。IP 键被部分污染/坍缩，最坏是「成本抬升打折」，不构成鉴权绕过。
+> **边界**：本配置产物**仅**用作限流/防爬计数键（抬高自动化批量调用成本），**不**用作访问控制/鉴权判据。鉴权由 Bearer Key 与请求签名承担。IP 键被部分污染/坍缩，最坏是「成本抬升打折」，不构成鉴权绕过。
 
 ### 配置项含义
 
-- **`CDN_ORIGIN_CIDRS`** — 阿里云 CDN 回源 IP 段白名单，逗号/空白分隔的 CIDR 串。只有当请求的 `CF-Connecting-IP` 落在该白名单内，才认为「这一跳来自受信 CDN 回源」，进而进入采信注入头的判定。
-  - **仅接受全局可路由的公网单播 IPv4** CIDR；私网（`10/8`、`172.16/12`、`192.168/16`）、CGNAT（`100.64.0.0/10`）、loopback（`127/8`）、link-local（`169.254/16`）、组播（`224.0.0.0/4`）、保留（`240.0.0.0/4`、`0.0.0.0/8`）、`/0`、非法前缀/IP 会被解析阶段**一律丢弃**。这些落进回源白名单几乎一定是误配，会把大片来源当成可信 CDN。
-  - **禁止硬编码进代码**，由部署期经 `[vars]` 或 Secret 注入。
+- **`CDN_ORIGIN_SECRET`** — 期望的 `X-Origin-Auth` 密钥值（机密）。请求带正确密钥（worker 常量时间比对）即视为「确来自阿里云 CDN 回源」，进而采信受信真实 IP 头。
+  - 生成：`openssl rand -hex 32`。仅经 `wrangler secret put CDN_ORIGIN_SECRET` 注入；**禁写入仓库文件、禁经 `/api/config` 下发**（它与公开的 `CLIENT_SIGN_KEY` 是两个独立值：后者公开、前者机密）。
+  - 未配置/为空 → fail-safe：只信 `CF-Connecting-IP`、忽略一切注入头。
 - **`CDN_REAL_IP_HEADER`** — 受信真实 IP 头名，即阿里云 CDN 写入真实用户 IP 的请求头名。
-  - **无内置默认**。未配置即视为「未证实覆写」（安全态），解析 fail-safe 到 `CF-Connecting-IP`、不读任何注入头。
-  - 推荐值 `Ali-Cdn-Real-Ip`（阿里云官方语义：单值、由 CDN 节点按 TCP 层对端写入并**覆盖**客户端同名头）。但该「覆写而非透传」是单点信任根，**必须**经下文「证伪式抓包门」实证该头名确被 CDN 覆写之后，才由运营者显式填入。
-  - 采信时运行时还会校验该头为**单值、合法 IP 字面量、不含逗号**；多值/含逗号/非法（覆写假设失效信号）→ 落 `'unknown'` 惩罚桶，不退回 CDN 节点 IP。
+  - **无内置默认**。未配置即 fail-safe 到 `CF-Connecting-IP`、不读任何注入头。
+  - 推荐值 `Ali-Cdn-Real-Ip`：阿里云 CDN **默认携带**该头（无需配置），官方语义为「客户端与 CDN 节点建连时的真实 IP」、**正是为避免 `X-Forwarded-For` 被伪造**而设。但「覆写而非透传」须经下文「证伪式抓包门」实证后，才由运营者显式填入。
+  - 采信时运行时还会校验该头为**单值、合法 IP 字面量（IPv4/IPv6）、不含逗号**；多值/含逗号/非法（覆写假设失效信号）→ 落 `'unknown'` 惩罚桶，不退回 CDN 节点 IP。
+  - **绝不采信 `X-Forwarded-For`**：它是 append 语义，首段为客户端可伪造值。
 
-### 从阿里云获取回源 IP 段
+### 阿里云 CDN 配置（注入密钥头 + 真实 IP 头）
 
-阿里云回源 IP 段会随阿里云调整而变化，须从官方来源导出、不可猜测或硬编码：
+1. **修改出站请求头**：CDN 控制台 → 域名管理 → `qsl.herbert-dev.cn` → 回源配置 → **修改出站请求头** → 新增，头名 `X-Origin-Auth`、值 `<CDN_ORIGIN_SECRET>`。操作类型**首选「替换」**（或「增加」+「是否允许重复」选**「否」**），使 CDN 的值**覆盖**客户端伪造的同名头。**严禁选「允许重复=是」**——那会变成追加（多值），worker 侧合并后 ≠ 密钥 → 静默 fail-safe 到 CDN 节点桶（安全但限流粒度失真）。该误配会被下文证伪门抓到。
+2. **回源协议 = HTTPS**：CDN 控制台 → 回源配置 → 回源协议设为 **HTTPS**（或「跟随」+ 用户走 HTTPS），确保密钥头不在 CDN→Cloudflare 这一跳走明文。
+3. `Ali-Cdn-Real-Ip` 默认自动携带，无需在阿里云额外配置。
 
-- **OpenAPI**：调用 `DescribeCdnBackSourceIp` 获取当前回源节点 IP/IP 段。
-- **控制台**：CDN 控制台的「回源」/「回源 IP」相关页面也可查询导出。
+### 部署顺序
 
-把导出的公网单播 IPv4 CIDR 填入 `CDN_ORIGIN_CIDRS`。
+配置顺序是依赖序、不是并列——**密钥头注入须先于 worker 启用采信**：
 
-### 维护周期与纪律
+1. 阿里云配好上节的「修改出站请求头」（注入 `X-Origin-Auth`）+ 回源协议 HTTPS。
+2. 部署 Worker（此时 `CDN_ORIGIN_SECRET`/`CDN_REAL_IP_HEADER` 可先不配，解析对所有路径 fail-safe，行为安全）。
+3. `wrangler secret put CDN_ORIGIN_SECRET`（与阿里云注入值一致）。
+4. **跑证伪式抓包门**（见下）证实 `Ali-Cdn-Real-Ip` 确被 CDN 覆写。
+5. **仅在通过证伪门后**，才配 `CDN_REAL_IP_HEADER`（如 `Ali-Cdn-Real-Ip`）。
 
-- **定期校验并更新**白名单：阿里云回源段变更后及时同步。
-  - **缺失新段**：降级为按 CDN 节点 IP 计数（失真但不被绕过，fail-safe 兜底，非安全事故）。
-  - **保留废弃/过宽段**：= 安全洞，任意命中该段的请求都会被当作可信 CDN、采信其注入头。故须**宁缺勿宽 + 最小化**，及时移除废弃/过宽段。
-- **白名单与受信头名的任何变更需人工 sign-off**；`CDN_REAL_IP_HEADER` 的启用或 CDN 侧配置变更后**必须重跑下文证伪式抓包门**证实覆写仍成立。
+### 证伪式抓包门
 
-### 部署顺序硬约束（信任前置）
+临时给 worker 加一行 debug 日志，跑完即撤。**禁止明文打印密钥**：打印 `headers.get('X-Origin-Auth') === <期望密钥>` 的**布尔比对结果**（不打原值/不打期望值）、`headers.get('Ali-Cdn-Real-Ip')`、`resolveClientIP` 返回值。从**已知出口 IP 的测试机**经 `qsl.herbert-dev.cn` 发请求，故意带伪造头：
 
-源站 `qsl.herbertgao.me` **必须仅接受来自阿里云回源段 / Cloudflare 的回源**（Cloudflare WAF/Firewall Rules）。否则攻击者只要其真实源 IP 落在白名单段内（如在阿里云回源段内开 ECS，或白名单过宽/过期），即可直连源站——`CF-Connecting-IP` 命中白名单——再伪造注入头被采信。**白名单本身保证不了「请求真来自 CDN」。**
+```
+curl -s "https://qsl.herbert-dev.cn/api/config" \
+  -H "X-Origin-Auth: forged-garbage" \
+  -H "Ali-Cdn-Real-Ip: 8.8.8.8" \
+  -H "ali-cdn-real-ip: 7.7.7.7" \
+  -H "X-Forwarded-For: 9.9.9.9"
+```
 
-这条限制**必须先于**配置 `CDN_ORIGIN_CIDRS` / 启用采信头生效。**中间态比都不配更危险**：「配了白名单但没配源站回源限制」会让伪造头被采信，而「都不配」时 fail-safe 到 `CF-Connecting-IP`（不被伪造）。因此配置顺序是依赖序、不是并列：
+**唯一通过判据**：worker 收到的 `X-Origin-Auth` 布尔比对 = `true`（证 CDN 覆盖了客户端伪造的 `forged-garbage`），且 `Ali-Cdn-Real-Ip` = 该测试机真实出口 IP、≠ 任一伪造值、为单值（证 CDN 覆盖、客户端伪造无效）。任一不满足 = 门失败（头被透传/未覆写，须排查阿里云回源头/回源协议配置，保持 `CDN_REAL_IP_HEADER` 不配）。临时日志**禁止打印密钥原值**；可打印**本次测试机自身的出口 IP**（用于比对，非终端用户流量），但**禁止打印真实终端用户流量的 IP**；门通过后即移除（与 captcha-protection 主规范「不记录用户完整 IP」一致）。
 
-1. 部署 Worker（此时 `CDN_REAL_IP_HEADER` **不配**，解析对所有路径 fail-safe，行为安全）。
-2. **先**在 Cloudflare 配好「源站仅接受阿里云回源段 / CF 回源」（WAF/Firewall Rules）并使其**生效**。
-3. **再**配 `CDN_ORIGIN_CIDRS`（此时命中白名单但头名仍未配 → 仍 fail-safe 到 CF-IP，尚未采信任何注入头）。
-4. **跑证伪式抓包门**：从已知出口 IP 的测试机经 `qsl.herbert-dev.cn` 发请求，故意带伪造的目标头（含大小写变体，如 `Ali-Cdn-Real-Ip: 8.8.8.8` + `ali-cdn-real-ip: 7.7.7.7`）与伪造 `X-Forwarded-For: 9.9.9.9`，临时日志打印 (a) 该头原始值与 (b) 解析最终返回值。**唯一通过判据**：(b) = 该机器真实出口 IP、≠ 任一伪造值、且为单值（证实 CDN 对该头名做了覆写）。其余结果（(a) 含逗号/多值，或 (b) = 伪造值）皆为门失败 = 该头名被透传/未覆写、不可用，须排查 CDN 配置并保持头名未配。临时日志须用已知出口 IP 的测试机、禁止打印真实终端用户 IP、门通过后即移除。
-5. **仅在该头名通过证伪门后**，才显式配置 `CDN_REAL_IP_HEADER`（如 `Ali-Cdn-Real-Ip`）。
+### 维护与应急
+
+- **密钥保密**：`CDN_ORIGIN_SECRET` 只存阿里云 CDN 配置 + Cloudflare secret 两处，收紧控制台访问权限。
+- **应急轮换**（非定时；怀疑泄漏时）：阿里云改 `X-Origin-Auth` 新值 →（过渡期 worker 可临时同时接受新旧两值）→ `wrangler secret put CDN_ORIGIN_SECRET` 新值。
+- CDN 侧配置（出站头/回源协议）变更后**须重跑证伪门**确认覆写仍成立。
 
 ### 未配影响
 
-未配 `CDN_ORIGIN_CIDRS`（或解析为空）→ fail-safe：只信 `CF-Connecting-IP`、忽略一切注入头。此时 **CDN 路径下限流仍按 CDN 回源节点 IP 计数（粒度失真但不被绕过）**。配齐白名单 + 源站回源限制 + 经证实的受信头名后，才恢复按真实用户 IP 的限流粒度。
+未配 `CDN_ORIGIN_SECRET`（或为空）→ fail-safe：只信 `CF-Connecting-IP`、忽略一切注入头。此时 **CDN 路径下限流仍按 CDN 回源节点 IP 计数（粒度失真但不被绕过）**。配齐密钥头 + 经证实的受信真实 IP 头名后，才恢复按真实用户 IP 的限流粒度。
 
 ### 回滚
 
-Cloudflare dashboard 退回上一 Worker 版本 + 移除/还原配置项（尤其**清空 `CDN_REAL_IP_HEADER` → 立即 fail-safe**）。纯服务端逻辑，无 D1 迁移、桌面端/前端零改动。
+Cloudflare dashboard 退回上一 Worker 版本 + 移除/还原配置项（尤其**清空 `CDN_ORIGIN_SECRET` 或 `CDN_REAL_IP_HEADER` → 立即 fail-safe**）。纯服务端逻辑，无 D1 迁移、桌面端/前端零改动。
