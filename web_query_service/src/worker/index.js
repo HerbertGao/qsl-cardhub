@@ -7,6 +7,8 @@
  * - GET /query 按呼号查询页面（含订阅收卡入口）
  */
 
+import { getClientIP } from './client-ip.js';
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -36,15 +38,6 @@ function serverTime() {
 // ============================================================
 const RATE_LIMIT_MAX = 20; // 每分钟最大请求数
 const RATE_LIMIT_WINDOW = 60; // 窗口时间（秒）
-
-/**
- * 获取客户端 IP
- */
-function getClientIP(request) {
-  return request.headers.get('CF-Connecting-IP') ||
-    request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim() ||
-    'unknown';
-}
 
 /**
  * IP 限流检查
@@ -539,7 +532,7 @@ export default {
       // GET /api/captcha 生成算术验证码
       if (path === '/api/captcha' && method === 'GET') {
         // 应用 Layer 0: IP 限流
-        const clientIP = getClientIP(request);
+        const clientIP = getClientIP(request, env);
         const rateLimit = await checkRateLimit(env, clientIP);
         if (!rateLimit.allowed) {
           return json({
@@ -569,7 +562,7 @@ export default {
 
       if (callsign && method === 'GET' && (path.startsWith('/api/callsigns/') || path === '/api/query')) {
         // 应用 Layer 0: IP 限流
-        const clientIP = getClientIP(request);
+        const clientIP = getClientIP(request, env);
         const rateLimit = await checkRateLimit(env, clientIP);
         if (!rateLimit.allowed) {
           return json({
@@ -731,9 +724,9 @@ export default {
       // GET /api/wechat/auth-callback 微信网页授权回调（订阅收卡）：code + state(callsign) -> 换 openid -> 写入绑定表
       if (path === '/api/wechat/auth-callback' && method === 'GET') {
         // IP 限流：独立计数桶 authcb（不与查询共桶、互不挤占预算），
-        // 计数 IP 取自 Cloudflare 注入、客户端不可伪造的 CF-Connecting-IP（非 X-Forwarded-For 回退）。
+        // 计数 IP 取自可信真实客户端 IP 解析（见 client-ip.js / trusted-client-ip 规范）。
         // checkRateLimit 在 RATE_LIMIT KV 未配置时 fail-open（可用性优先）→ KV 为部署前置。
-        const authcbIP = request.headers.get('CF-Connecting-IP') || 'unknown';
+        const authcbIP = getClientIP(request, env);
         const authcbRate = await checkRateLimit(env, authcbIP, 'authcb');
         if (!authcbRate.allowed) {
           return new Response('请求过于频繁，请稍后再试', { status: 429, headers: CORS_HEADERS });
