@@ -24,7 +24,7 @@
 ## 5. 收尾（部署/阿里云/验收，用户或代理代执行）
 
 - [x] 5.1 `openspec-cn validate fix-cdn-real-ip --strict` 通过。
-- [ ] 5.2 阿里云 CDN：「修改出站请求头」以覆盖语义（增加+不允许重复 或 替换）注入 `X-Origin-Auth: <密钥>` + 回源协议 HTTPS（用户已做出站头注入，确认操作类型与回源协议）。
-- [ ] 5.3 部署 worker（`pnpm run deploy`）→ `wrangler secret put CDN_ORIGIN_SECRET`（与阿里云注入值一致）+ 记录新版本与回滚目标。
-- [ ] 5.4 **证伪式抓包门**：经 `qsl.herbert-dev.cn` 带伪造 `X-Origin-Auth` + 伪造 `Ali-Cdn-Real-Ip`（含大小写变体）+ 伪造 XFF，临时 log 断言 worker 收到的 `X-Origin-Auth`=真实密钥（覆写成立）、`Ali-Cdn-Real-Ip`=真实出口 IP 且≠伪造值且单值。通过后才 `wrangler secret put CDN_REAL_IP_HEADER`（=`Ali-Cdn-Real-Ip`）；撤临时 log。
-- [ ] 5.5 生产验收：限流按真实用户 IP 生效、伪造 XFF/伪造头/错误密钥不绕过（用户确认）→ `openspec-cn archive fix-cdn-real-ip`。
+- [x] 5.2 阿里云 CDN：「修改出站请求头」以覆盖语义（增加+不允许重复 或 替换）注入 `X-Origin-Auth: <密钥>` + 回源协议 HTTPS（用户已做出站头注入，确认操作类型与回源协议）。
+- [x] 5.3 部署 worker（`pnpm run deploy`）→ `wrangler secret put CDN_ORIGIN_SECRET`（与阿里云注入值一致）+ 记录新版本与回滚目标。
+- [x] 5.4 **证伪式抓包门**：经 `qsl.herbert-dev.cn` 带伪造 `X-Origin-Auth` + 伪造 `Ali-Cdn-Real-Ip`（含大小写变体）+ 伪造 XFF，临时 log 断言 worker 收到的 `X-Origin-Auth`=真实密钥（覆写成立）、`Ali-Cdn-Real-Ip`=真实出口 IP 且≠伪造值且单值。通过后才 `wrangler secret put CDN_REAL_IP_HEADER`（=`Ali-Cdn-Real-Ip`）；撤临时 log。
+- [x] 5.5 生产验收：限流按真实用户 IP 生效、伪造 XFF/伪造头/错误密钥不绕过（用户确认）→ `openspec-cn archive fix-cdn-real-ip`。
