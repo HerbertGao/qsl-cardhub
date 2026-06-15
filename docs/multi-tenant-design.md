@@ -37,6 +37,8 @@
 
 - 写入 Key 不再是单一全局值。D1 存凭据表，`sha256(key)` 比对，命中得 `tenant_id`。支持「多 Key → 同一租户」（便于按设备签发/吊销）。
 - 现有全局 API Key 的哈希登记为 `default` 的写凭据，现有桌面端零改动。
+- **「一个租户默认一个用户」是使用约束、非结构变化**：保留「多 Key → 同一租户」超集（一个用户的多台设备各持一把可独立吊销的 Key）；「一个用户」语义落在 UI/业务层（当前只开一个登录席位），不把模型收紧成「一租户一 Key」（否则用户加第二台设备就要扩表回去）。未来「一租户多席位」只需正交新增 `tenant_users` 表，不回迁、不触发已有表重建。
+- 桌面端「租户身份 + 专属写凭据」的配置改造落**阶段 4**（与「第二个真实租户上线」同属写入侧）。阶段 1 服务端先把凭据表与 Key→tenant 解析建好；第二个真实租户上线前，桌面端继续用全局 API Key 落 `default`。
 
 #### 2.2 同步模型 A：上传为主 + 按需下载 + 版本护栏
 
@@ -125,7 +127,7 @@ CREATE TABLE tenant_credentials (
   created_at  TEXT NOT NULL,
   last_used_at TEXT
 );
-CREATE INDEX idx_cred_hash ON tenant_credentials(key_hash) WHERE status='active';
+CREATE UNIQUE INDEX idx_cred_hash ON tenant_credentials(key_hash) WHERE status='active';  -- 唯一：防一把 Key 登记到两个租户的解析歧义
 
 CREATE TABLE tenant_routes (
   route_key TEXT PRIMARY KEY,            -- host 或 path 前缀
@@ -169,8 +171,14 @@ CREATE TABLE tenant_routes (
 - 验收（前提：`RATE_LIMIT` KV 已绑定，否则 `checkRateLimit` fail-open 不限流）：超额打订阅回调被独立桶限流且伪造 `X-Forwarded-For` 不绕过、内部异常/微信失败响应不含原始结构、仓库无明文密钥。回滚：各项独立，可单独还原。（「伪造顺丰回调被拒」随 route-push 鉴权移到「接顺丰路由推送」变更。）
 
 ### 阶段 1：多租户地基与写入隔离
-- 建 `tenants` / `tenant_credentials` / `tenant_routes`；业务表加 `tenant_id`（`DEFAULT 'default'`）→ 主键迁移 `(tenant_id, id)`、删 `client_id`（建新表 + `INSERT…SELECT` 回填 default + RENAME，单 batch；迁移前 `SELECT client_id,COUNT(*)…` 校验单一所有者）。
+- 建 `tenants` / `tenant_credentials` / `tenant_routes`；业务表加 `tenant_id`（`DEFAULT 'default'`）→ 主键迁移 `(tenant_id, id)`、删 `client_id`（建新表 + `INSERT…SELECT` 回填 default + DROP + RENAME，每表四步置于同一 batch 事务单元；本项目业务表间无真实外键，无需切换 FK）。
 - `/sync` 按 Key 解析 tenant + 单事务按租户全量替换；`/api/query` 注入 `tenant_id` 过滤；现有 API Key 哈希登记为 default 写凭据。
+- **迁移交付**：单一 SQL 文件走 `wrangler d1 execute --file --remote`，命令展示给用户在自己终端跑（不让 AI 跑生产迁移）。迁前 `wrangler d1 export` 全量备份 + `SELECT client_id,COUNT(*) … GROUP BY client_id` 校验单一所有者（历史若混进第二个 client_id，无脑回填 default 会撞 `(tenant_id,id)` 主键、迁移失败）。
+- **凭据校验**：表驱动为主（查 `tenant_credentials`）+ `env.API_KEY` 直比兜底一期；兜底路径打标记/日志，确认表驱动路径真命中后再撤兜底（避免「以为切表了其实一直走兜底」）。
+- **default 凭据 seed**：离线算 `sha256(API_KEY)` 写进迁移 SQL（AI 不碰 secret 明文，算 hash 命令也给用户自跑）；阶段 1 不加 pepper（留到有第二租户、需防拖库撞库时再加）；secret 尾随空白两侧对齐（worker 比对与算 hash 均对 `.trim()` 后的值）。
+- **现在就钉死、防二次迁表**：`(tenant_id, id)` 主键 + `(tenant_id, callsign COLLATE NOCASE)` 复合索引；`tenant_credentials.key_hash` 部分唯一索引（`UNIQUE … WHERE status='active'`）；`tenant_id` 字符集/长度约定（slug：小写字母数字 + 连字符 + 长度上限）；`sync_meta` 一次性建终态（PK=tenant_id + `last_client_id` + `server_version INTEGER NOT NULL DEFAULT 0`，本期只占列、OCC 逻辑留阶段 2）。
+- **worker 同步改**：删/改 `/sync` 内联 `CREATE TABLE`（旧 `client_id` schema 与迁移后新表打架，某表被手工 DROP 时会按旧结构重建）；DELETE + INSERT 合入单 `DB.batch` 按租户全量替换（实测 default 真实行数确认不撞 D1 单次语句数/绑定参数上限）。
+- **不在本期**：IP 来源修正（CDN 真实 IP 头 + 回源白名单，阶段 3）；桌面端租户身份配置（阶段 4）。
 - 验收：现有桌面端、现有移动端零改动继续工作（落 default）。回滚点：DROP+RENAME 前以 `wrangler d1 export` 兜底。
 
 ### 阶段 2：同步健壮性
@@ -186,6 +194,7 @@ CREATE TABLE tenant_routes (
 ### 阶段 4：多租户前端与分级
 - host/path → tenant 路由；`/api/config` 按 tenant 下发；`callsign_openid_bindings` 加 tenant + 微信 `state` 带 tenant + route-push 按 tenant 派生过滤。
 - 上线第二个真实租户（建 tenant + 凭据 + 路由 + 前端实例）；②非认证租户：明文自助 + 条款。
+- **桌面端租户身份**：把全局 API_KEY 配置项升级为「租户写凭据」配置（可填租户专属 Key；留空/旧值回退 default 行为）。与「上线第二个真实租户」是同一件事的写入侧——服务端发租户写 Key、桌面端配进去。「一个租户默认一个用户」为席位约束，落 UI/业务层、不改凭据模型（见 §2.1）。
 - 验收：新租户与 default 数据互不可见；现有移动端不受影响。
 
 ### 可选增强（独立项，按需排期）

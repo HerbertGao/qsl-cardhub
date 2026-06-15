@@ -209,6 +209,48 @@ async function generateCaptcha(env) {
   return { question, answer, token, expires };
 }
 
+/**
+ * 由写入 Key 解析租户（表驱动为主 + env.API_KEY 直比兜底，见 tenant-isolation 规范）。
+ * @returns {Promise<string|null>} 命中返回 tenant_id；不命中/env 空返回 null（调用方应 401）。
+ * @throws 兜底计数器写失败（表缺失 no such table 等）时抛错，使 /sync 返非 200、不静默吞。
+ */
+async function resolveTenant(env, key) {
+  const trimmedKey = (key || '').trim();
+  // 空/缺失 Bearer 永不鉴权：即便 sha256('') 被误 seed 成 active 凭据，也直接拒绝（defense-in-depth）
+  if (trimmedKey === '') return null;
+  // env.API_KEY「空」统一判据（纯空白经 trim 成空串也算空）
+  const apiKey = (env.API_KEY || '').trim();
+
+  // 表驱动为主：sha256(trim(key)) 查 tenant_credentials（status='active'）
+  const keyHash = await sha256(trimmedKey);
+  const cred = await env.DB.prepare(
+    "SELECT tenant_id FROM tenant_credentials WHERE key_hash = ? AND status = 'active' LIMIT 1"
+  )
+    .bind(keyHash)
+    .first();
+  if (cred && cred.tenant_id) {
+    return cred.tenant_id;
+  }
+
+  // env.API_KEY 直比兜底（过渡期）：未命中且 trim(key)===trim(env.API_KEY) 且 env.API_KEY 非空
+  if (apiKey !== '' && trimmedKey === apiKey) {
+    // 递增 D1 计数行（禁用 KV，KV fail-open 会吞递增致假绿）；
+    // 此 UPDATE 是独立 .run()、不进 /sync 数据 batch。
+    const result = await env.DB.prepare(
+      "UPDATE service_counters SET count = count + 1 WHERE name = 'auth_fallback'"
+    ).run();
+    // 写失败判据：result.meta.changes === 0（行缺失，漏 seed）或上面 .run() 抛错（表缺失）→ 视为写失败
+    if (!result || !result.meta || result.meta.changes === 0) {
+      throw new Error('auth_fallback counter row missing');
+    }
+    return 'default';
+  }
+
+  // env.API_KEY 未配置或仍不命中 → 不命中（调用方 401）；
+  // 禁止沿用「env.API_KEY 空即放行」。
+  return null;
+}
+
 export default {
   async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
@@ -223,7 +265,10 @@ export default {
       // GET /ping
       if (path === '/ping' && method === 'GET') {
         const token = getBearerToken(request);
-        if (env.API_KEY && token !== env.API_KEY) {
+        // 仅在 env.API_KEY 侧补 trim（token 侧 getBearerToken 已 trim）；
+        // env.API_KEY 空（含纯空白经 trim 后为空）时返回 401，与 /sync 一致，删除原 fail-open。
+        const apiKey = (env.API_KEY || '').trim();
+        if (apiKey === '' || token !== apiKey) {
           return json({ success: false, message: 'API Key 无效' }, 401);
         }
         return json({
@@ -236,7 +281,10 @@ export default {
       // POST /sync
       if (path === '/sync' && method === 'POST') {
         const token = getBearerToken(request);
-        if (env.API_KEY && token !== env.API_KEY) {
+        // 鉴权统一由 resolveTenant 命中决定（删除原 token!==env.API_KEY 前置门，
+        // 否则多 Key→同租户的表驱动凭据会被旧门 401 架空）。
+        const tenant_id = await resolveTenant(env, token);
+        if (!tenant_id) {
           return json({ success: false, message: '认证失败，请检查 API Key' }, 401);
         }
         let body;
@@ -245,86 +293,53 @@ export default {
         } catch {
           return json({ success: false, message: '请求体不是有效 JSON' }, 400);
         }
-        const client_id = body.client_id;
+        if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ success: false, message: '请求体格式不正确' }, 400);
         const sync_time = body.sync_time;
         const data = body.data;
-        if (!client_id || !data) {
+        // 保留 client_id 存在性校验作请求形态契约（缺失 400）；它只写入 sync_meta.last_client_id
+        // 溯源、不参与数据归属（归属仅由 Key 解析）。
+        if (!body.client_id || !data) {
           return json({ success: false, message: '缺少 client_id 或 data' }, 400);
         }
+        // client_id 是客户端可控字段，落 last_client_id 前长度归一 ≤128（超长截断，不拒绝），
+        // 防超长串污染溯源列。
+        const last_client_id = String(body.client_id).slice(0, 128);
 
         const DB = env.DB;
         const received_at = serverTime();
-
-        // 确保所有业务表存在（兼容未执行最新 schema 的已部署 D1）
-        await DB.batch([
-          DB.prepare(`CREATE TABLE IF NOT EXISTS sync_meta (
-            client_id TEXT PRIMARY KEY, sync_time TEXT, received_at TEXT
-          )`),
-          DB.prepare(`CREATE TABLE IF NOT EXISTS projects (
-            client_id TEXT NOT NULL, id TEXT NOT NULL, name TEXT NOT NULL,
-            created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-            PRIMARY KEY (client_id, id)
-          )`),
-          DB.prepare(`CREATE TABLE IF NOT EXISTS cards (
-            client_id TEXT NOT NULL, id TEXT NOT NULL, project_id TEXT NOT NULL,
-            creator_id TEXT, callsign TEXT NOT NULL,
-            qty INTEGER NOT NULL, serial INTEGER,
-            status TEXT NOT NULL DEFAULT 'pending', metadata TEXT,
-            created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-            PRIMARY KEY (client_id, id)
-          )`),
-          DB.prepare(`CREATE TABLE IF NOT EXISTS sf_senders (
-            client_id TEXT NOT NULL, id TEXT NOT NULL, name TEXT NOT NULL,
-            phone TEXT NOT NULL, mobile TEXT,
-            province TEXT NOT NULL, city TEXT NOT NULL, district TEXT NOT NULL, address TEXT NOT NULL,
-            is_default INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-            PRIMARY KEY (client_id, id)
-          )`),
-          DB.prepare(`CREATE TABLE IF NOT EXISTS sf_orders (
-            client_id TEXT NOT NULL, id TEXT NOT NULL, order_id TEXT NOT NULL,
-            waybill_no TEXT, card_id TEXT,
-            status TEXT NOT NULL DEFAULT 'pending',
-            pay_method INTEGER DEFAULT 1, cargo_name TEXT DEFAULT 'QSL卡片',
-            sender_info TEXT NOT NULL, recipient_info TEXT NOT NULL,
-            created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-            PRIMARY KEY (client_id, id)
-          )`),
-          DB.prepare(`CREATE TABLE IF NOT EXISTS app_settings (
-            client_id TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL,
-            PRIMARY KEY (client_id, key)
-          )`),
-        ]);
-
-        // 全量清除所有数据
-        await DB.batch([
-          DB.prepare('DELETE FROM projects'),
-          DB.prepare('DELETE FROM cards'),
-          DB.prepare('DELETE FROM sf_senders'),
-          DB.prepare('DELETE FROM sf_orders'),
-          DB.prepare('DELETE FROM app_settings'),
-        ]);
 
         const projects = data.projects || [];
         const cards = data.cards || [];
         const sf_senders = data.sf_senders || [];
         const sf_orders = data.sf_orders || [];
+        const app_settings = data.app_settings || [];
+
+        // 「删除该租户全量 + 重新写入 + sync_meta upsert」置于单个 DB.batch 原子执行，
+        // 中途失败不留已删未写空表。本期数据量小、且为 Paid 计划，预期单 batch 可容纳（见 design 风险段）。
+        const stmts = [
+          // DELETE 仅清除该 tenant_id 名下数据，禁止删其他租户
+          DB.prepare('DELETE FROM projects WHERE tenant_id = ?').bind(tenant_id),
+          DB.prepare('DELETE FROM cards WHERE tenant_id = ?').bind(tenant_id),
+          DB.prepare('DELETE FROM sf_senders WHERE tenant_id = ?').bind(tenant_id),
+          DB.prepare('DELETE FROM sf_orders WHERE tenant_id = ?').bind(tenant_id),
+          DB.prepare('DELETE FROM app_settings WHERE tenant_id = ?').bind(tenant_id),
+        ];
 
         for (const p of projects) {
-          await DB.prepare(
-            'INSERT INTO projects (client_id, id, name, created_at, updated_at) VALUES (?,?,?,?,?)'
-          )
-            .bind(client_id, p.id, p.name, p.created_at || received_at, p.updated_at || received_at)
-            .run();
+          stmts.push(
+            DB.prepare(
+              'INSERT INTO projects (tenant_id, id, name, created_at, updated_at) VALUES (?,?,?,?,?)'
+            ).bind(tenant_id, p.id, p.name, p.created_at || received_at, p.updated_at || received_at)
+          );
         }
         for (const c of cards) {
           const meta = c.metadata ? JSON.stringify(c.metadata) : null;
           const status = typeof c.status === 'string' ? c.status : (c.status && c.status.value) || 'pending';
-          await DB.prepare(
-            'INSERT INTO cards (client_id, id, project_id, creator_id, callsign, qty, serial, status, metadata, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)'
-          )
-            .bind(
-              client_id,
+          stmts.push(
+            DB.prepare(
+              'INSERT INTO cards (tenant_id, id, project_id, creator_id, callsign, qty, serial, status, metadata, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+            ).bind(
+              tenant_id,
               c.id,
               c.project_id,
               c.creator_id ?? null,
@@ -336,14 +351,14 @@ export default {
               c.created_at || received_at,
               c.updated_at || received_at
             )
-            .run();
+          );
         }
         for (const s of sf_senders) {
-          await DB.prepare(
-            'INSERT INTO sf_senders (client_id, id, name, phone, mobile, province, city, district, address, is_default, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
-          )
-            .bind(
-              client_id,
+          stmts.push(
+            DB.prepare(
+              'INSERT INTO sf_senders (tenant_id, id, name, phone, mobile, province, city, district, address, is_default, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+            ).bind(
+              tenant_id,
               s.id,
               s.name,
               s.phone,
@@ -356,14 +371,14 @@ export default {
               s.created_at || received_at,
               s.updated_at || received_at
             )
-            .run();
+          );
         }
         for (const o of sf_orders) {
-          await DB.prepare(
-            'INSERT INTO sf_orders (client_id, id, order_id, waybill_no, card_id, status, pay_method, cargo_name, sender_info, recipient_info, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
-          )
-            .bind(
-              client_id,
+          stmts.push(
+            DB.prepare(
+              'INSERT INTO sf_orders (tenant_id, id, order_id, waybill_no, card_id, status, pay_method, cargo_name, sender_info, recipient_info, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+            ).bind(
+              tenant_id,
               o.id,
               o.order_id,
               o.waybill_no ?? null,
@@ -376,23 +391,27 @@ export default {
               o.created_at || received_at,
               o.updated_at || received_at
             )
-            .run();
+          );
         }
-
-        const app_settings = data.app_settings || [];
         for (const setting of app_settings) {
-          await DB.prepare(
-            'INSERT INTO app_settings (client_id, key, value) VALUES (?,?,?)'
-          )
-            .bind(client_id, setting.key, setting.value)
-            .run();
+          stmts.push(
+            DB.prepare(
+              'INSERT INTO app_settings (tenant_id, key, value) VALUES (?,?,?)'
+            ).bind(tenant_id, setting.key, setting.value)
+          );
         }
 
-        await DB.prepare(
-          'INSERT OR REPLACE INTO sync_meta (client_id, sync_time, received_at) VALUES (?,?,?)'
-        )
-          .bind(client_id, sync_time || received_at, received_at)
-          .run();
+        // sync_meta 按 tenant_id upsert，落 last_client_id/sync_time/received_at
+        //（server_version 本期不改写，由 DEFAULT 保留）。
+        stmts.push(
+          DB.prepare(
+            'INSERT INTO sync_meta (tenant_id, last_client_id, sync_time, received_at) VALUES (?,?,?,?) ' +
+            'ON CONFLICT(tenant_id) DO UPDATE SET last_client_id = excluded.last_client_id, ' +
+            'sync_time = excluded.sync_time, received_at = excluded.received_at'
+          ).bind(tenant_id, last_client_id, sync_time || received_at, received_at)
+        );
+
+        await DB.batch(stmts);
 
         return json({
           success: true,
@@ -457,14 +476,17 @@ export default {
         }
 
         const DB = env.DB;
+        // 读取侧按服务端确定的 tenant_id 过滤（本期恒为常量 'default'，host/path 路由属阶段 4）；
+        // tenant_id 禁止取自前端参数。projects join 同时按 tenant_id 匹配，保留 LEFT JOIN 与 COLLATE NOCASE。
+        const tenant_id = 'default';
         const rows = await DB.prepare(
           `SELECT c.id, c.project_id, c.callsign, c.qty, c.serial, c.status, c.metadata, c.created_at, c.updated_at, p.name AS project_name
            FROM cards c
-           LEFT JOIN projects p ON p.client_id = c.client_id AND p.id = c.project_id
-           WHERE c.callsign = ? COLLATE NOCASE
+           LEFT JOIN projects p ON p.tenant_id = c.tenant_id AND p.id = c.project_id
+           WHERE c.tenant_id = ? AND c.callsign = ? COLLATE NOCASE
            ORDER BY c.created_at DESC`
         )
-          .bind(callsign.toUpperCase())
+          .bind(tenant_id, callsign.toUpperCase())
           .all();
 
         const items = (rows.results || []).map((r) => {
@@ -554,19 +576,23 @@ export default {
                 const orderid = r.orderid;
                 const mailno = r.mailno;
                 let callsign = null;
+                // route-push 是无凭据公开端点、无租户上下文，本期注入服务端常量 default；
+                // 按 order 派生确定租户属阶段 4。保留业务连接键 o.card_id = c.id（漏则退化笛卡尔积错号），
+                // 仅把隔离键 o.client_id=c.client_id 换为 o.tenant_id = c.tenant_id，并加 WHERE o.tenant_id = ?。
+                const tenant_id = 'default';
                 if (orderid) {
                   const row = await DB.prepare(
-                    'SELECT c.callsign FROM sf_orders o JOIN cards c ON o.client_id = c.client_id AND o.card_id = c.id WHERE o.order_id = ? LIMIT 1'
+                    'SELECT c.callsign FROM sf_orders o JOIN cards c ON o.tenant_id = c.tenant_id AND o.card_id = c.id WHERE o.tenant_id = ? AND o.order_id = ? LIMIT 1'
                   )
-                    .bind(orderid)
+                    .bind(tenant_id, orderid)
                     .first();
                   if (row) callsign = row.callsign;
                 }
                 if (!callsign && mailno) {
                   const row = await DB.prepare(
-                    'SELECT c.callsign FROM sf_orders o JOIN cards c ON o.client_id = c.client_id AND o.card_id = c.id WHERE o.waybill_no = ? LIMIT 1'
+                    'SELECT c.callsign FROM sf_orders o JOIN cards c ON o.tenant_id = c.tenant_id AND o.card_id = c.id WHERE o.tenant_id = ? AND o.waybill_no = ? LIMIT 1'
                   )
-                    .bind(mailno)
+                    .bind(tenant_id, mailno)
                     .first();
                   if (row) callsign = row.callsign;
                 }
