@@ -305,6 +305,13 @@ export default {
         // 防超长串污染溯源列。
         const last_client_id = String(body.client_id).slice(0, 128);
 
+        // base_version 严格判整数（禁 parseInt：防 "5abc" 部分解析、"5"/5.7/true 歧义）；
+        // 非整数视为「未携带」→ 降级走无条件路径。force 仅布尔 true 生效。
+        const base_version = Number.isInteger(body.base_version) ? body.base_version : null;
+        const force = body.force === true;
+        // 守卫路径 = 携带有效 base_version 且非 force；否则走无条件路径（force 或缺 base_version）。
+        const guarded = base_version !== null && !force;
+
         const DB = env.DB;
         const received_at = serverTime();
 
@@ -314,115 +321,218 @@ export default {
         const sf_orders = data.sf_orders || [];
         const app_settings = data.app_settings || [];
 
-        // 「删除该租户全量 + 重新写入 + sync_meta upsert」置于单个 DB.batch 原子执行，
-        // 中途失败不留已删未写空表。本期数据量小、且为 Paid 计划，预期单 batch 可容纳（见 design 风险段）。
-        const stmts = [
-          // DELETE 仅清除该 tenant_id 名下数据，禁止删其他租户
-          DB.prepare('DELETE FROM projects WHERE tenant_id = ?').bind(tenant_id),
-          DB.prepare('DELETE FROM cards WHERE tenant_id = ?').bind(tenant_id),
-          DB.prepare('DELETE FROM sf_senders WHERE tenant_id = ?').bind(tenant_id),
-          DB.prepare('DELETE FROM sf_orders WHERE tenant_id = ?').bind(tenant_id),
-          DB.prepare('DELETE FROM app_settings WHERE tenant_id = ?').bind(tenant_id),
-        ];
-
-        for (const p of projects) {
-          stmts.push(
-            DB.prepare(
-              'INSERT INTO projects (tenant_id, id, name, created_at, updated_at) VALUES (?,?,?,?,?)'
-            ).bind(tenant_id, p.id, p.name, p.created_at || received_at, p.updated_at || received_at)
-          );
-        }
-        for (const c of cards) {
+        // 每行 INSERT 的列值数组（不含 tenant_id 占位顺序差异，按路径分别拼 SQL）。
+        // tenant_id 入库注入服务端解析值；JSON/布尔形态归一与原逻辑一致。
+        const rowProjects = projects.map((p) => [tenant_id, p.id, p.name, p.created_at || received_at, p.updated_at || received_at]);
+        const rowCards = cards.map((c) => {
           const meta = c.metadata ? JSON.stringify(c.metadata) : null;
           const status = typeof c.status === 'string' ? c.status : (c.status && c.status.value) || 'pending';
+          return [tenant_id, c.id, c.project_id, c.creator_id ?? null, c.callsign, c.qty, c.serial ?? null, status, meta, c.created_at || received_at, c.updated_at || received_at];
+        });
+        const rowSenders = sf_senders.map((s) => [tenant_id, s.id, s.name, s.phone, s.mobile ?? null, s.province, s.city, s.district, s.address, s.is_default ? 1 : 0, s.created_at || received_at, s.updated_at || received_at]);
+        const rowOrders = sf_orders.map((o) => [
+          tenant_id,
+          o.id,
+          o.order_id,
+          o.waybill_no ?? null,
+          o.card_id ?? null,
+          o.status || 'pending',
+          o.pay_method ?? 1,
+          o.cargo_name ?? 'QSL卡片',
+          typeof o.sender_info === 'object' ? JSON.stringify(o.sender_info) : (o.sender_info || '{}'),
+          typeof o.recipient_info === 'object' ? JSON.stringify(o.recipient_info) : (o.recipient_info || '{}'),
+          o.created_at || received_at,
+          o.updated_at || received_at,
+        ]);
+        const rowSettings = app_settings.map((setting) => [tenant_id, setting.key, setting.value ?? '']);
+
+        // 各业务表「列名清单 / 占位符模板」——占位符一律位置匿名 ?，.bind() 顺序绑定。
+        const TABLE_INSERTS = [
+          { table: 'projects', cols: 'tenant_id, id, name, created_at, updated_at', ph: '?,?,?,?,?', rows: rowProjects },
+          { table: 'cards', cols: 'tenant_id, id, project_id, creator_id, callsign, qty, serial, status, metadata, created_at, updated_at', ph: '?,?,?,?,?,?,?,?,?,?,?', rows: rowCards },
+          { table: 'sf_senders', cols: 'tenant_id, id, name, phone, mobile, province, city, district, address, is_default, created_at, updated_at', ph: '?,?,?,?,?,?,?,?,?,?,?,?', rows: rowSenders },
+          { table: 'sf_orders', cols: 'tenant_id, id, order_id, waybill_no, card_id, status, pay_method, cargo_name, sender_info, recipient_info, created_at, updated_at', ph: '?,?,?,?,?,?,?,?,?,?,?,?', rows: rowOrders },
+          { table: 'app_settings', cols: 'tenant_id, key, value', ph: '?,?,?', rows: rowSettings },
+        ];
+        const TABLES = ['projects', 'cards', 'sf_senders', 'sf_orders', 'app_settings'];
+
+        const stats = {
+          projects: projects.length,
+          cards: cards.length,
+          sf_senders: sf_senders.length,
+          sf_orders: sf_orders.length,
+        };
+
+        if (guarded) {
+          // ── 守卫路径（OCC compare-and-swap）──────────────────────────────
+          // 单 DB.batch：DELETE×5（带版本守卫）→ INSERT×N（INSERT…SELECT…WHERE 守卫）→ 末条 CAS。
+          // 占位符一律位置匿名 ? + 顺序 .bind()，禁混用 ?1/?2。
+          // 语句条数 = 6 + N（5 DELETE + N INSERT + 1 CAS）；409 分支再 +1 次 batch 后 SELECT；
+          // + resolveTenant 1~2 次查询，远低于 D1 Paid 1000 上限（见 design 约束 5）。
+          const stmts = [];
+          for (const t of TABLES) {
+            stmts.push(
+              DB.prepare(
+                `DELETE FROM ${t} WHERE tenant_id = ? AND (SELECT server_version FROM sync_meta WHERE tenant_id = ?) = ?`
+              ).bind(tenant_id, tenant_id, base_version)
+            );
+          }
+          for (const ti of TABLE_INSERTS) {
+            for (const r of ti.rows) {
+              stmts.push(
+                DB.prepare(
+                  `INSERT INTO ${ti.table} (${ti.cols}) SELECT ${ti.ph} WHERE (SELECT server_version FROM sync_meta WHERE tenant_id = ?) = ?`
+                ).bind(...r, tenant_id, base_version)
+              );
+            }
+          }
+          // 末条：CAS 递增版本（放 batch 末尾，使前面所有守卫都看到原始 base_version）。
+          const casIndex = stmts.length;
           stmts.push(
             DB.prepare(
-              'INSERT INTO cards (tenant_id, id, project_id, creator_id, callsign, qty, serial, status, metadata, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)'
-            ).bind(
-              tenant_id,
-              c.id,
-              c.project_id,
-              c.creator_id ?? null,
-              c.callsign,
-              c.qty,
-              c.serial ?? null,
-              status,
-              meta,
-              c.created_at || received_at,
-              c.updated_at || received_at
-            )
+              'UPDATE sync_meta SET server_version = server_version + 1, last_client_id = ?, sync_time = ?, received_at = ? WHERE tenant_id = ? AND server_version = ?'
+            ).bind(last_client_id, sync_time || received_at, received_at, tenant_id, base_version)
           );
-        }
-        for (const s of sf_senders) {
-          stmts.push(
-            DB.prepare(
-              'INSERT INTO sf_senders (tenant_id, id, name, phone, mobile, province, city, district, address, is_default, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
-            ).bind(
-              tenant_id,
-              s.id,
-              s.name,
-              s.phone,
-              s.mobile ?? null,
-              s.province,
-              s.city,
-              s.district,
-              s.address,
-              s.is_default ? 1 : 0,
-              s.created_at || received_at,
-              s.updated_at || received_at
-            )
-          );
-        }
-        for (const o of sf_orders) {
-          stmts.push(
-            DB.prepare(
-              'INSERT INTO sf_orders (tenant_id, id, order_id, waybill_no, card_id, status, pay_method, cargo_name, sender_info, recipient_info, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
-            ).bind(
-              tenant_id,
-              o.id,
-              o.order_id,
-              o.waybill_no ?? null,
-              o.card_id ?? null,
-              o.status || 'pending',
-              o.pay_method ?? 1,
-              o.cargo_name ?? 'QSL卡片',
-              typeof o.sender_info === 'object' ? JSON.stringify(o.sender_info) : (o.sender_info || '{}'),
-              typeof o.recipient_info === 'object' ? JSON.stringify(o.recipient_info) : (o.recipient_info || '{}'),
-              o.created_at || received_at,
-              o.updated_at || received_at
-            )
-          );
-        }
-        for (const setting of app_settings) {
-          stmts.push(
-            DB.prepare(
-              'INSERT INTO app_settings (tenant_id, key, value) VALUES (?,?,?)'
-            ).bind(tenant_id, setting.key, setting.value)
-          );
+
+          const results = await DB.batch(stmts);
+          // 按记录的 casIndex 取 CAS 那条结果（禁 results[results.length-1] 共用 helper）。
+          const casChanges = results[casIndex]?.meta?.changes;
+          if (casChanges === 1) {
+            // 命中：版本确定为 base_version + 1，无需读回。
+            return json({
+              success: true,
+              message: '同步成功',
+              received_at,
+              server_version: base_version + 1,
+              stats,
+            });
+          }
+          // 409：守卫保证零改动（DELETE/INSERT 守卫全落空、CAS changes==0）。
+          // CAS 只给 changes、不给当前版本值，故补一次读取云端当前 server_version。
+          // 行不存在时 .first() 返 null → row?.server_version ?? null（禁 row.server_version 抛错）。
+          const cur = await DB.prepare('SELECT server_version FROM sync_meta WHERE tenant_id = ?').bind(tenant_id).first();
+          return json({
+            success: false,
+            message: '云端数据已更新，本地基线已陈旧',
+            server_version: cur?.server_version ?? null,
+          }, 409);
         }
 
-        // sync_meta 按 tenant_id upsert，落 last_client_id/sync_time/received_at
-        //（server_version 本期不改写，由 DEFAULT 保留）。
+        // ── 无条件路径（force=true 或未携带 base_version）──────────────────
+        // 单 DB.batch：DELETE×5（仅 WHERE tenant_id=?）→ INSERT×N（无守卫）→ upsert →
+        // 末条读回 SELECT。语句条数 = 7 + N；永远成功、不判 409。
+        const stmts = [];
+        for (const t of TABLES) {
+          stmts.push(DB.prepare(`DELETE FROM ${t} WHERE tenant_id = ?`).bind(tenant_id));
+        }
+        for (const ti of TABLE_INSERTS) {
+          for (const r of ti.rows) {
+            stmts.push(DB.prepare(`INSERT INTO ${ti.table} (${ti.cols}) VALUES (${ti.ph})`).bind(...r));
+          }
+        }
+        // upsert：server_version 单调 +1（行不存在则建行置 1）。非数组末元素。
         stmts.push(
           DB.prepare(
-            'INSERT INTO sync_meta (tenant_id, last_client_id, sync_time, received_at) VALUES (?,?,?,?) ' +
-            'ON CONFLICT(tenant_id) DO UPDATE SET last_client_id = excluded.last_client_id, ' +
-            'sync_time = excluded.sync_time, received_at = excluded.received_at'
+            'INSERT INTO sync_meta (tenant_id, server_version, last_client_id, sync_time, received_at) VALUES (?,1,?,?,?) ' +
+            'ON CONFLICT(tenant_id) DO UPDATE SET server_version = sync_meta.server_version + 1, ' +
+            'last_client_id = excluded.last_client_id, sync_time = excluded.sync_time, received_at = excluded.received_at'
           ).bind(tenant_id, last_client_id, sync_time || received_at, received_at)
         );
+        // 末条读回 SELECT：同事务 read-your-writes 取确定新版本，消除 batch 外再读的竞态。
+        const readbackIndex = stmts.length;
+        stmts.push(DB.prepare('SELECT server_version FROM sync_meta WHERE tenant_id = ?').bind(tenant_id));
 
-        await DB.batch(stmts);
+        const results = await DB.batch(stmts);
+        // 按记录的 readbackIndex 取读回 SELECT 结果（禁共用「读末元素」helper）。
+        const newVersion = results[readbackIndex]?.results?.[0]?.server_version ?? null;
 
         return json({
           success: true,
           message: '同步成功',
           received_at,
-          stats: {
-            projects: projects.length,
-            cards: cards.length,
-            sf_senders: sf_senders.length,
-            sf_orders: sf_orders.length,
+          server_version: newVersion,
+          stats,
+        });
+      }
+
+      // GET /pull 按写入 Key 拉回该租户全量快照 + 当前 server_version
+      if (path === '/pull' && method === 'GET') {
+        const token = getBearerToken(request);
+        const tenant_id = await resolveTenant(env, token);
+        if (!tenant_id) {
+          return json({ success: false, message: '认证失败，请检查 API Key' }, 401);
+        }
+
+        const DB = env.DB;
+        // 6 条 SELECT（5 业务表显式业务列、排除 tenant_id；1 条 sync_meta），各计 1 次查询；
+        // tenant_id 一律注入服务端解析值（WHERE tenant_id = ?），无字段取自请求参数。
+        const [projRes, cardRes, senderRes, orderRes, settingRes, metaRow] = await DB.batch([
+          DB.prepare('SELECT id, name, created_at, updated_at FROM projects WHERE tenant_id = ?').bind(tenant_id),
+          DB.prepare('SELECT id, project_id, creator_id, callsign, qty, serial, status, metadata, created_at, updated_at FROM cards WHERE tenant_id = ?').bind(tenant_id),
+          DB.prepare('SELECT id, name, phone, mobile, province, city, district, address, is_default, created_at, updated_at FROM sf_senders WHERE tenant_id = ?').bind(tenant_id),
+          DB.prepare('SELECT id, order_id, waybill_no, card_id, status, pay_method, cargo_name, sender_info, recipient_info, created_at, updated_at FROM sf_orders WHERE tenant_id = ?').bind(tenant_id),
+          DB.prepare('SELECT key, value FROM app_settings WHERE tenant_id = ?').bind(tenant_id),
+          DB.prepare('SELECT server_version, last_client_id, sync_time FROM sync_meta WHERE tenant_id = ?').bind(tenant_id),
+        ]);
+
+        // 形态还原：metadata/sender_info/recipient_info 入库为 JSON 字符串、is_default 为整数；
+        // 读出后逐字段还原为对象/布尔以匹配桌面端 export_database()。任一行 JSON.parse 抛错 →
+        // 落顶层 catch → fail-closed 500（脱敏），禁静默跳过/返回半快照。
+        const projectsOut = (projRes.results || []).map((r) => ({
+          id: r.id, name: r.name, created_at: r.created_at, updated_at: r.updated_at,
+        }));
+        const cardsOut = (cardRes.results || []).map((r) => ({
+          id: r.id,
+          project_id: r.project_id,
+          creator_id: r.creator_id ?? null,
+          callsign: r.callsign,
+          qty: r.qty,
+          serial: r.serial ?? null,
+          status: r.status,
+          metadata: (r.metadata == null || r.metadata === '') ? null : JSON.parse(r.metadata),
+          created_at: r.created_at,
+          updated_at: r.updated_at,
+        }));
+        const sendersOut = (senderRes.results || []).map((r) => ({
+          id: r.id,
+          name: r.name,
+          phone: r.phone,
+          mobile: r.mobile ?? null,
+          province: r.province,
+          city: r.city,
+          district: r.district,
+          address: r.address,
+          is_default: !!r.is_default,
+          created_at: r.created_at,
+          updated_at: r.updated_at,
+        }));
+        const ordersOut = (orderRes.results || []).map((r) => ({
+          id: r.id,
+          order_id: r.order_id,
+          waybill_no: r.waybill_no ?? null,
+          card_id: r.card_id ?? null,
+          status: r.status,
+          pay_method: r.pay_method,
+          cargo_name: r.cargo_name,
+          sender_info: r.sender_info ? JSON.parse(r.sender_info) : {},
+          recipient_info: r.recipient_info ? JSON.parse(r.recipient_info) : {},
+          created_at: r.created_at,
+          updated_at: r.updated_at,
+        }));
+        const settingsOut = (settingRes.results || []).map((r) => ({ key: r.key, value: r.value }));
+
+        return json({
+          success: true,
+          server_version: metaRow?.results?.[0]?.server_version ?? null,
+          data: {
+            projects: projectsOut,
+            cards: cardsOut,
+            sf_senders: sendersOut,
+            sf_orders: ordersOut,
+            app_settings: settingsOut,
           },
+          last_client_id: metaRow?.results?.[0]?.last_client_id ?? null,
+          sync_time: metaRow?.results?.[0]?.sync_time ?? null,
         });
       }
 

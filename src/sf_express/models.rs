@@ -385,7 +385,8 @@ pub struct ApiBusinessResponse<T> {
 // ==================== 寄件人信息模型 ====================
 
 /// 寄件人信息（本地存储）
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct SenderInfo {
@@ -414,7 +415,8 @@ pub struct SenderInfo {
 }
 
 /// 收件人信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 #[cfg_attr(feature = "ts-rs", derive(TS))]
 #[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct RecipientInfo {

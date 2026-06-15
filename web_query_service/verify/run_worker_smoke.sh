@@ -28,6 +28,35 @@ start(){ # $1 = API_KEY value
   echo "server failed to start; see /tmp/qsl_smoke_dev.log"; exit 1
 }
 code(){ curl -s -m 8 -o /dev/null -w '%{http_code}' "$@"; }
+body(){ curl -s -m 8 "$@"; }                       # 返回响应体（用于断言 server_version / data 形态）
+# 从 JSON 字符串取一个点路径字段（缺失返回空串）；--raw 输出原始值（字符串不带引号），否则 JSON.stringify。
+# 用法：echo "$RESP" | jget server_version   /   echo "$RESP" | jget data.cards.0.metadata.foo --raw
+jget(){ node -e '
+  let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+    let o; try{o=JSON.parse(s)}catch{process.stdout.write("");return}
+    let raw=process.argv[2]==="--raw";
+    let cur=o; for(const k of (process.argv[1]||"").split(".")){ if(cur==null){cur=undefined;break} cur=cur[k]; }
+    if(cur===undefined){process.stdout.write("");return}
+    process.stdout.write(raw && (typeof cur!=="object") ? String(cur) : JSON.stringify(cur));
+  });' "$1" "${2:-}"; }
+# 断言响应体某字段的 JS typeof（区分 object/boolean/string/number），用于 2.3a 形态契约。
+jtypeof(){ node -e '
+  let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+    let o; try{o=JSON.parse(s)}catch{process.stdout.write("parse-error");return}
+    let cur=o; for(const k of (process.argv[1]||"").split(".")){ if(cur==null){cur=undefined;break} cur=cur[k]; }
+    process.stdout.write(cur===null?"null":Array.isArray(cur)?"array":typeof cur);
+  });' "$1"; }
+# 5 张业务表全行内容指纹：各表 group_concat(全部业务字段拼接 ORDER BY pk)，逐字节比对（不仅 COUNT/单列）。
+# 拼接用 '|' 分隔、coalesce 兜空，ORDER BY 表主键非 tenant_id（同租户内 pk 唯一）。
+fp(){ d1json "
+  SELECT
+   (SELECT coalesce(group_concat(coalesce(id,'')||'~'||coalesce(name,'')||'~'||coalesce(created_at,'')||'~'||coalesce(updated_at,''),'|'),'') FROM (SELECT * FROM projects WHERE tenant_id='$1' ORDER BY id)) AS projects,
+   (SELECT coalesce(group_concat(coalesce(id,'')||'~'||coalesce(project_id,'')||'~'||coalesce(creator_id,'')||'~'||coalesce(callsign,'')||'~'||coalesce(qty,'')||'~'||coalesce(serial,'')||'~'||coalesce(status,'')||'~'||coalesce(metadata,'')||'~'||coalesce(created_at,'')||'~'||coalesce(updated_at,''),'|'),'') FROM (SELECT * FROM cards WHERE tenant_id='$1' ORDER BY id)) AS cards,
+   (SELECT coalesce(group_concat(coalesce(id,'')||'~'||coalesce(name,'')||'~'||coalesce(phone,'')||'~'||coalesce(mobile,'')||'~'||coalesce(province,'')||'~'||coalesce(city,'')||'~'||coalesce(district,'')||'~'||coalesce(address,'')||'~'||coalesce(is_default,'')||'~'||coalesce(created_at,'')||'~'||coalesce(updated_at,''),'|'),'') FROM (SELECT * FROM sf_senders WHERE tenant_id='$1' ORDER BY id)) AS sf_senders,
+   (SELECT coalesce(group_concat(coalesce(id,'')||'~'||coalesce(order_id,'')||'~'||coalesce(waybill_no,'')||'~'||coalesce(card_id,'')||'~'||coalesce(status,'')||'~'||coalesce(pay_method,'')||'~'||coalesce(cargo_name,'')||'~'||coalesce(sender_info,'')||'~'||coalesce(recipient_info,'')||'~'||coalesce(created_at,'')||'~'||coalesce(updated_at,''),'|'),'') FROM (SELECT * FROM sf_orders WHERE tenant_id='$1' ORDER BY id)) AS sf_orders,
+   (SELECT coalesce(group_concat(coalesce(key,'')||'~'||coalesce(value,''),'|'),'') FROM (SELECT * FROM app_settings WHERE tenant_id='$1' ORDER BY key)) AS app_settings
+  "; }
+ver(){ d1json "SELECT server_version AS v FROM sync_meta WHERE tenant_id='$1'" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=JSON.parse(s);process.stdout.write(r.length?String(r[0].v):"")}catch{process.stdout.write("")}})'; }
 
 echo "== reset + seed local D1 =="
 # 幂等清场：杀掉上次中断残留的 wrangler dev（避免与 seed 争用本地 D1 的 WAL），
@@ -111,6 +140,148 @@ echo; echo "########## app_settings 按租户全量替换 round-trip（cloud-bac
 [ "$(code -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d '{"client_id":"as2","data":{"app_settings":[{"key":"lang","value":"en"}]}}' "$B/sync")" = 200 ] && ok "app_settings 次轮 /sync 200" || no "app_settings 次轮 /sync 非 200"
 [ "$(d1json "SELECT count(*) AS n FROM app_settings WHERE tenant_id='bh2ro'")" = '[{"n":1}]' ] && ok "app_settings 全量替换：旧 theme 被清、仅剩 1 行" || no "app_settings 次轮残留旧键"
 [ "$(d1json "SELECT value AS v FROM app_settings WHERE tenant_id='bh2ro' AND key='lang'")" = '[{"v":"en"}]' ] && ok "app_settings 全量替换：lang=en（DELETE+INSERT 生效）" || no "app_settings lang 未更新为 en"
+
+echo; echo "########## 6.1/6.2/6.3/2.3a OCC 乐观并发护栏 + /pull（add-sync-robustness）##########"
+# 本段全部走 bh2ro 租户；前置：用一次「无条件路径」/sync 建立确定基线（含一条富样本以喂 2.3a 形态契约）。
+# 富样本：cards 带嵌套 metadata（distribution/return 对象）、sf_orders 带嵌套 sender_info/recipient_info（对象）、sf_senders is_default=true。
+RICH_DATA='{"projects":[{"id":"rp1","name":"项目甲"}],
+  "cards":[{"id":"rc1","project_id":"rp1","callsign":"BG1OCC","qty":7,"serial":42,"status":"pending","metadata":{"distribution":{"method":"mail","proxy_callsign":"BA1XYZ","remarks":"r-dist"},"return":{"method":"self","remarks":"r-ret"}}}],
+  "sf_senders":[{"id":"rs1","name":"张三","phone":"010-1","mobile":"139","province":"京","city":"京","district":"海淀","address":"中关村","is_default":true}],
+  "sf_orders":[{"id":"ro1","order_id":"OID1","waybill_no":"WB1","card_id":"rc1","status":"pending","pay_method":1,"cargo_name":"QSL卡片","sender_info":{"name":"张三","phone":"010-1"},"recipient_info":{"name":"李四","phone":"020-2"}}],
+  "app_settings":[{"key":"lang","value":"zh"}]}'
+# ── 重置基线：无条件路径（不带 base_version）→ 200 且 server_version 单调推进 ──
+SEED_RESP=$(body -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d "{\"client_id\":\"seed\",\"data\":$RICH_DATA}" "$B/sync")
+V0=$(echo "$SEED_RESP" | jget server_version --raw)
+[ -n "$V0" ] && [ "$(echo "$SEED_RESP" | jget success --raw)" = true ] && ok "OCC 基线：无条件 /sync 200 且回传 server_version=$V0" || no "OCC 基线 /sync 未回传 server_version ($SEED_RESP)"
+
+echo; echo "## 6.1① 携带匹配 base_version -> 200 且 server_version 自增 ##"
+R1=$(body -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d "{\"client_id\":\"occ1\",\"base_version\":$V0,\"data\":$RICH_DATA}" "$B/sync")
+V1=$(echo "$R1" | jget server_version --raw)
+[ "$(echo "$R1" | jget success --raw)" = true ] && [ "$V1" = "$((V0+1))" ] && ok "6.1① 匹配 base_version /sync 200 且 server_version ${V0}->${V1}（=base+1）" || no "6.1① 匹配 base 未 200/版本未自增 ($R1)"
+[ "$(ver bh2ro)" = "$V1" ] && ok "6.1① 云端 sync_meta.server_version 落库 == $V1" || no "6.1① 云端版本未推进到 $V1"
+
+echo; echo "## 6.1② 陈旧 base_version -> 409 且数据未变（全行内容指纹逐字节一致）##"
+FP_BEFORE=$(fp bh2ro)
+# 陈旧 base = V0（云端已到 V1）；payload 故意改 callsign/metadata，若误覆盖则指纹必变 → 证伪「同行数假绿」。
+STALE_PAYLOAD='{"projects":[{"id":"rp1","name":"被篡改"}],"cards":[{"id":"rc1","project_id":"rp1","callsign":"HACKED","qty":1,"metadata":{"x":"y"}}]}'
+R2C=$(code -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d "{\"client_id\":\"occ2\",\"base_version\":$V0,\"data\":$STALE_PAYLOAD}" "$B/sync")
+R2=$(body -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d "{\"client_id\":\"occ2\",\"base_version\":$V0,\"data\":$STALE_PAYLOAD}" "$B/sync")
+[ "$R2C" = 409 ] && ok "6.1② 陈旧 base_version /sync 409" || no "6.1② 陈旧 base 未返 409 ($R2C)"
+[ "$(echo "$R2" | jget server_version --raw)" = "$V1" ] && ok "6.1② 409 体回传云端当前 server_version=$V1" || no "6.1② 409 体 server_version 非当前 ($R2)"
+FP_AFTER=$(fp bh2ro)
+[ "$FP_BEFORE" = "$FP_AFTER" ] && ok "6.1② 409 前后全行指纹逐字节一致（零改动，非仅 COUNT）" || no "6.1② 409 后数据被改动！before=$FP_BEFORE after=$FP_AFTER"
+[ "$(ver bh2ro)" = "$V1" ] && ok "6.1② 409 后 server_version 未推进（仍 ${V1}）" || no "6.1② 409 后版本被推进"
+
+echo; echo "## 6.1③ force=true 陈旧 base -> 200 覆盖且版本=当前+1 ##"
+R3=$(body -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d "{\"client_id\":\"occ3\",\"base_version\":$V0,\"force\":true,\"data\":$RICH_DATA}" "$B/sync")
+V3=$(echo "$R3" | jget server_version --raw)
+[ "$(echo "$R3" | jget success --raw)" = true ] && [ "$V3" = "$((V1+1))" ] && ok "6.1③ force=true 陈旧 base /sync 200 且版本 ${V1}->${V3}（=当前+1）" || no "6.1③ force 陈旧 base 未覆盖/版本错 ($R3)"
+
+echo; echo "## 6.1④ 不带 base_version（旧客户端）-> 200 无条件覆盖且版本+1 ##"
+R4=$(body -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d "{\"client_id\":\"occ4\",\"data\":$RICH_DATA}" "$B/sync")
+V4=$(echo "$R4" | jget server_version --raw)
+[ "$(echo "$R4" | jget success --raw)" = true ] && [ "$V4" = "$((V3+1))" ] && ok "6.1④ 旧客户端无 base /sync 200 且版本 ${V3}->${V4}（+1）" || no "6.1④ 无 base 未 200/版本未+1 ($R4)"
+
+echo; echo "## 6.1⑤ 命中时某业务表为空数组仍 200（防末条结果归属错位把空表 INSERT changes 误读为 409）##"
+# 当前云端版本 V4；data 只给 cards，其余 4 表为空数组 → 守卫路径命中应 200。
+R5=$(body -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d "{\"client_id\":\"occ5\",\"base_version\":$V4,\"data\":{\"projects\":[],\"cards\":[{\"id\":\"only1\",\"project_id\":\"rp1\",\"callsign\":\"BONLY\",\"qty\":1}],\"sf_senders\":[],\"sf_orders\":[],\"app_settings\":[]}}" "$B/sync")
+V5=$(echo "$R5" | jget server_version --raw)
+[ "$(echo "$R5" | jget success --raw)" = true ] && [ "$V5" = "$((V4+1))" ] && ok "6.1⑤ 空表数组守卫命中仍 200 且版本 $V4->$V5" || no "6.1⑤ 空表数组被误判 409/版本错 ($R5)"
+[ "$(d1json "SELECT count(*) AS n FROM cards WHERE tenant_id='bh2ro'")" = '[{"n":1}]' ] && ok "6.1⑤ 全量替换后仅 only1 一行（空表 DELETE 生效）" || no "6.1⑤ 空表替换异常"
+
+echo; echo "## 6.1⑥ sync_meta 行缺失 -> 409 且 server_version===null（非 undefined、非 500）##"
+d1 --command "DELETE FROM sync_meta WHERE tenant_id='bh2ro';" >/dev/null
+FP6_BEFORE=$(fp bh2ro)
+R6C=$(code -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d "{\"client_id\":\"occ6\",\"base_version\":0,\"data\":$STALE_PAYLOAD}" "$B/sync")
+R6=$(body -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d "{\"client_id\":\"occ6\",\"base_version\":0,\"data\":$STALE_PAYLOAD}" "$B/sync")
+[ "$R6C" = 409 ] && ok "6.1⑥ sync_meta 缺失守卫路径 409（非 500）" || no "6.1⑥ sync_meta 缺失未返 409 ($R6C)"
+# server_version 必须是 JSON null（typeof===object/null），禁 undefined（字段缺失 jget 返空）/NaN。
+SV6=$(echo "$R6" | jget server_version)
+[ "$SV6" = "null" ] && ok "6.1⑥ 409 体 server_version === null（JSON null，非 undefined/NaN）" || no "6.1⑥ 409 体 server_version 非 null: '$SV6' ($R6)"
+[ "$FP6_BEFORE" = "$(fp bh2ro)" ] && ok "6.1⑥ sync_meta 缺失 409 后业务数据零改动" || no "6.1⑥ sync_meta 缺失 409 后数据被改动"
+# 复位：用无条件路径重建 sync_meta 行并恢复富样本，供后续段落。
+RESEED=$(body -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d "{\"client_id\":\"reseed\",\"data\":$RICH_DATA}" "$B/sync")
+VR=$(echo "$RESEED" | jget server_version --raw)
+[ -n "$VR" ] && ok "6.1⑥ 复位：无条件 /sync 重建 sync_meta 行（server_version=${VR}）" || no "6.1⑥ 复位失败 ($RESEED)"
+
+echo; echo "## 6.1⑦ 无条件路径上传 N>=1 非空行 -> 200 且读回 server_version 正确（跨路径对照）##"
+# 无条件路径读末条 SELECT、守卫路径读 CAS；此处验证无条件读回与云端落库一致。
+R7=$(body -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d '{"client_id":"occ7","data":{"cards":[{"id":"u1","project_id":"rp1","callsign":"BU1","qty":2},{"id":"u2","project_id":"rp1","callsign":"BU2","qty":3}]}}' "$B/sync")
+V7=$(echo "$R7" | jget server_version --raw)
+[ "$(echo "$R7" | jget success --raw)" = true ] && [ -n "$V7" ] && [ "$V7" = "$(ver bh2ro)" ] && ok "6.1⑦ 无条件多行 /sync 200 且读回 server_version=$V7 == 云端落库" || no "6.1⑦ 无条件读回 server_version 与云端不符 ($R7 / db=$(ver bh2ro))"
+
+echo; echo "## 6.2 连续两次同步（中间无其他写）第二次用首次 V 作 base 仍 200（基线刷新闭环）##"
+RA=$(body -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d '{"client_id":"seqA","data":{"cards":[{"id":"sq1","project_id":"rp1","callsign":"BSEQ","qty":1}]}}' "$B/sync")
+VA=$(echo "$RA" | jget server_version --raw)
+[ "$(echo "$RA" | jget success --raw)" = true ] && [ -n "$VA" ] && ok "6.2 第一次 /sync 200 拿到 server_version=$VA" || no "6.2 第一次 /sync 未回传版本 ($RA)"
+RB=$(body -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d "{\"client_id\":\"seqA\",\"base_version\":$VA,\"data\":{\"cards\":[{\"id\":\"sq2\",\"project_id\":\"rp1\",\"callsign\":\"BSEQ2\",\"qty\":1}]}}" "$B/sync")
+VB=$(echo "$RB" | jget server_version --raw)
+[ "$(echo "$RB" | jget success --raw)" = true ] && [ "$VB" = "$((VA+1))" ] && ok "6.2 第二次用 V=${VA} 作 base 仍 200（版本 ${VA}->${VB}），非 409" || no "6.2 第二次同步 409 或版本错（基线刷新闭环断裂）($RB)"
+
+echo; echo "## 6.3 两客户端持同一 base 依次上传：先到 200、后到 409 且零改动 ##"
+VBASE=$(ver bh2ro)
+# 客户端 X 先上传（base=VBASE）→ 200 推进版本。
+RX=$(body -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d "{\"client_id\":\"cliX\",\"base_version\":$VBASE,\"data\":{\"cards\":[{\"id\":\"x1\",\"project_id\":\"rp1\",\"callsign\":\"BCLIX\",\"qty\":1}]}}" "$B/sync")
+[ "$(echo "$RX" | jget success --raw)" = true ] && ok "6.3 先到客户端 X /sync 200（base=${VBASE}）" || no "6.3 先到 X 未 200 ($RX)"
+FPY_BEFORE=$(fp bh2ro)
+# 客户端 Y 持同一陈旧 base=VBASE 后上传 → 409 且零改动。
+RYC=$(code -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d "{\"client_id\":\"cliY\",\"base_version\":$VBASE,\"data\":{\"cards\":[{\"id\":\"y1\",\"project_id\":\"rp1\",\"callsign\":\"BCLIY\",\"qty\":1}]}}" "$B/sync")
+[ "$RYC" = 409 ] && ok "6.3 后到客户端 Y 持同一 base /sync 409" || no "6.3 后到 Y 未 409 ($RYC)"
+[ "$FPY_BEFORE" = "$(fp bh2ro)" ] && ok "6.3 后到 Y 409 零改动（指纹一致，y1 未写入）" || no "6.3 后到 Y 409 却改动了数据"
+
+echo; echo "## 6.3 /pull：有效写 Key -> 200 全量+server_version；错误/缺失 Key -> 401；查询参数注入被忽略 ##"
+PULL=$(body -H "Authorization: Bearer $TEST_KEY" "$B/pull")
+[ "$(echo "$PULL" | jget success --raw)" = true ] && ok "6.3 /pull 有效写 Key 200 success=true" || no "6.3 /pull 有效 Key 非 200 ($PULL)"
+[ "$(echo "$PULL" | jget server_version --raw)" = "$(ver bh2ro)" ] && ok "6.3 /pull 返回 server_version == 云端落库($(ver bh2ro))" || no "6.3 /pull server_version 不符"
+# 全量字段集存在
+echo "$PULL" | grep -q '"projects"' && echo "$PULL" | grep -q '"cards"' && echo "$PULL" | grep -q '"sf_senders"' && echo "$PULL" | grep -q '"sf_orders"' && echo "$PULL" | grep -q '"app_settings"' && ok "6.3 /pull data 含全部 5 张业务表" || no "6.3 /pull data 缺表 ($PULL)"
+[ "$(code -H "Authorization: Bearer WRONGKEY" "$B/pull")" = 401 ] && ok "6.3 /pull 错误 Key 401" || no "6.3 /pull 错误 Key 非 401"
+[ "$(code "$B/pull")" = 401 ] && ok "6.3 /pull 缺失 Key 401" || no "6.3 /pull 缺失 Key 非 401"
+# 查询参数注入 tenant_id：worker 由 Key 解析、忽略参数 → 与无参一致（不跨租户）。
+PULL_INJ=$(body -H "Authorization: Bearer $TEST_KEY" "$B/pull?tenant_id=other&base_version=999")
+[ "$PULL" = "$PULL_INJ" ] && ok "6.3 /pull ?tenant_id=other 注入被忽略（结果与无参一致，不跨租户）" || no "6.3 /pull 注入改变了结果（疑跨租户）"
+
+echo; echo "## 2.3a 往返形态：/sync 写嵌套 metadata/sender_info -> /pull 读回为对象/布尔（非转义字符串/整数）##"
+# 用一条已知富样本无条件覆盖，再 /pull 读回断言形态与逐字段值。
+RT_DATA='{"projects":[{"id":"tp1","name":"往返项目"}],
+  "cards":[{"id":"tc1","project_id":"tp1","callsign":"BG2RT","qty":9,"serial":7,"status":"distributed","metadata":{"distribution":{"method":"mail","proxy_callsign":"BA2RT","remarks":"dr"},"return":{"method":"self","remarks":"rr"}}}],
+  "sf_senders":[{"id":"ts1","name":"寄件甲","phone":"P1","mobile":"M1","province":"PV","city":"CT","district":"DT","address":"AD","is_default":true}],
+  "sf_orders":[{"id":"to1","order_id":"TOID","waybill_no":"TWB","card_id":"tc1","status":"confirmed","pay_method":2,"cargo_name":"卡片","sender_info":{"name":"寄件甲","phone":"P1"},"recipient_info":{"name":"收件乙","phone":"P2"}}],
+  "app_settings":[{"key":"k1","value":"v1"}]}'
+body -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d "{\"client_id\":\"rt\",\"data\":$RT_DATA}" "$B/sync" >/dev/null
+RP=$(body -H "Authorization: Bearer $TEST_KEY" "$B/pull")
+[ "$(echo "$RP" | jtypeof data.cards.0.metadata)" = object ] && ok "2.3a /pull cards[0].metadata 为 object（非转义字符串）" || no "2.3a metadata 形态非 object: $(echo "$RP" | jtypeof data.cards.0.metadata)"
+[ "$(echo "$RP" | jget data.cards.0.metadata.distribution.proxy_callsign --raw)" = "BA2RT" ] && ok "2.3a /pull 嵌套 metadata.distribution.proxy_callsign 还原正确" || no "2.3a 嵌套 metadata 还原错"
+[ "$(echo "$RP" | jtypeof data.sf_orders.0.sender_info)" = object ] && ok "2.3a /pull sf_orders[0].sender_info 为 object" || no "2.3a sender_info 形态非 object"
+[ "$(echo "$RP" | jtypeof data.sf_orders.0.recipient_info)" = object ] && ok "2.3a /pull sf_orders[0].recipient_info 为 object" || no "2.3a recipient_info 形态非 object"
+[ "$(echo "$RP" | jget data.sf_orders.0.recipient_info.name --raw)" = "收件乙" ] && ok "2.3a /pull recipient_info.name 还原正确" || no "2.3a recipient_info 内容错"
+[ "$(echo "$RP" | jtypeof data.sf_senders.0.is_default)" = boolean ] && ok "2.3a /pull sf_senders[0].is_default 为 boolean（非整数 1/0）" || no "2.3a is_default 形态非 boolean: $(echo "$RP" | jtypeof data.sf_senders.0.is_default)"
+[ "$(echo "$RP" | jget data.sf_senders.0.is_default --raw)" = "true" ] && ok "2.3a /pull is_default === true（整数 1 还原为布尔真）" || no "2.3a is_default 值非 true"
+
+echo; echo "## 2.3a 异构多列样本逐字段相等（证伪绑定列错序：callsign/serial/qty 绑反则此处必挂）##"
+# 写入多行、各列各不相同；/pull 读回逐字段比对。绑定错序时行数/版本仍对、内容错位 → 这里抓。
+MULTI_DATA='{"cards":[
+  {"id":"m1","project_id":"rp1","callsign":"AAA1","qty":11,"serial":101,"status":"pending","metadata":{"tag":"one"}},
+  {"id":"m2","project_id":"rp1","callsign":"BBB2","qty":22,"serial":202,"status":"distributed","metadata":{"tag":"two"}},
+  {"id":"m3","project_id":"rp1","callsign":"CCC3","qty":33,"serial":303,"status":"returned","metadata":{"tag":"three"}}]}'
+body -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d "{\"client_id\":\"multi\",\"data\":$MULTI_DATA}" "$B/sync" >/dev/null
+RM=$(body -H "Authorization: Bearer $TEST_KEY" "$B/pull")
+# /pull 不保证顺序，用 node 按 id 索引逐字段比对期望值。
+MOK=$(echo "$RM" | node -e '
+  let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+    let o; try{o=JSON.parse(s)}catch{console.log("PARSE_ERR");return}
+    const exp={m1:["AAA1",11,101,"pending","one"],m2:["BBB2",22,202,"distributed","two"],m3:["CCC3",33,303,"returned","three"]};
+    const by={}; for(const c of (o.data&&o.data.cards||[])) by[c.id]=c;
+    for(const id of Object.keys(exp)){
+      const c=by[id]; if(!c){console.log("MISS:"+id);return}
+      const e=exp[id];
+      if(c.callsign!==e[0]||c.qty!==e[1]||c.serial!==e[2]||c.status!==e[3]||(c.metadata&&c.metadata.tag)!==e[4]){
+        console.log("MISMATCH:"+id+" got="+JSON.stringify([c.callsign,c.qty,c.serial,c.status,c.metadata&&c.metadata.tag]));return;
+      }
+    }
+    console.log("OK");
+  });')
+[ "$MOK" = OK ] && ok "2.3a 异构多列 3 行逐字段相等（callsign/qty/serial/status/metadata 未绑定错序）" || no "2.3a 异构多列逐字段不等: $MOK"
 
 echo; echo "########## 6.4 单 batch 回滚 ##########"
 d1 --command "DELETE FROM cards WHERE tenant_id='bh2ro'; INSERT INTO cards (tenant_id,id,project_id,callsign,qty,status,created_at,updated_at) VALUES ('bh2ro','keep1','p1','BK1',1,'pending','t','t'),('bh2ro','keep2','p1','BK2',2,'pending','t','t');" >/dev/null
