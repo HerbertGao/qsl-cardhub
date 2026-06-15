@@ -238,20 +238,16 @@ pub async fn export_cards_to_excel(
             .map_err(|e| format!("获取项目失败: {}", e))?
             .ok_or_else(|| format!("项目不存在: {}", project_id_clone))?;
 
-        // 获取所有卡片（不分页）
+        // 获取所有卡片（不分页，避免分页上限截断）
         let filter = db::CardFilter {
             project_id: Some(project_id_clone),
             callsign: None,
             status: None,
         };
-        let pagination = db::Pagination {
-            page: 1,
-            page_size: 100000, // 足够大以获取所有卡片
-        };
-        let paged = db::list_cards(filter, pagination)
+        let cards = db::list_all_cards(filter)
             .map_err(|e| format!("获取卡片列表失败: {}", e))?;
 
-        Ok::<(Project, Vec<CardWithProject>), String>((project, paged.items))
+        Ok::<(Project, Vec<CardWithProject>), String>((project, cards))
     })
     .await
     .map_err(|e| format!("任务执行失败: {}", e))??;
