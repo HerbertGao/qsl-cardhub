@@ -73,8 +73,8 @@ pub enum SyncCmdResult {
 /// 从云端恢复结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RestoreResult {
-    /// 恢复后对齐的云端版本
-    pub server_version: i64,
+    /// 恢复后对齐的云端版本（快照缺 sync_meta 行时为 null）
+    pub server_version: Option<i64>,
     /// 恢复的数据统计
     pub stats: ExportStats,
 }
@@ -212,8 +212,11 @@ pub async fn execute_sync_cmd(force: Option<bool>) -> Result<SyncCmdResult, Stri
             // 更新上次同步时间
             let sync_time = format_datetime(&now_china());
             config.last_sync_at = Some(sync_time.clone());
-            // load-bearing：把本地基线刷新为云端回传的新版本，否则下次上传必 409
-            config.base_version = server_version;
+            // 仅当响应回传新版本时刷新基线（load-bearing：否则下次上传必 409）；
+            // None（旧服务端/异常）保留原基线、不清空——清空会让下次跳过 OCC、可能静默覆盖云端较新数据。
+            if server_version.is_some() {
+                config.base_version = server_version;
+            }
             save_sync_config(&config)?;
 
             Ok(SyncCmdResult::Success {
@@ -267,11 +270,11 @@ pub async fn restore_from_cloud() -> Result<RestoreResult, String> {
     import_from_export_data(&mut conn, &export_data, AppSettingsClearMode::Unconditional)
         .map_err(|e| format!("从云端恢复失败: {}", e))?;
 
-    // 对齐本地基线为快照版本并落盘
-    config.base_version = Some(server_version);
+    // 对齐本地基线为快照版本并落盘（null→None→下次按首次/无条件处理）
+    config.base_version = server_version;
     save_sync_config(&config)?;
 
-    log::info!("✅ 从云端恢复完成，base_version 对齐至 {}", server_version);
+    log::info!("✅ 从云端恢复完成，base_version 对齐至 {:?}", server_version);
 
     Ok(RestoreResult {
         server_version,

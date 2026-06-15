@@ -455,7 +455,7 @@ type SyncCmdResult =
 
 // 从云端恢复结果（与后端 RestoreResult 对齐）
 interface RestoreResult {
-  server_version: number
+  server_version: number | null
   stats: ExportStats
 }
 

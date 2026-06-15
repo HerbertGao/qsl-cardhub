@@ -170,7 +170,7 @@ type SyncCmdResult =
 
 // 从云端恢复结果（与后端 RestoreResult 对齐）
 interface RestoreResult {
-  server_version: number
+  server_version: number | null
   stats: { projects: number; cards: number; sf_senders: number; sf_orders: number }
 }
 
@@ -338,6 +338,12 @@ const restoreFromCloud = async (): Promise<void> => {
     ElMessage.success(
       `恢复成功：${result.stats.projects} 个项目，${result.stats.cards} 张卡片，${result.stats.sf_senders} 个寄件人，${result.stats.sf_orders} 个订单`
     )
+    // 恢复全量重建本地库（含 projects），先刷新项目侧栏再加载卡片；
+    // 若当前选中项目已不存在，置 null（watch(selectedProjectId) 会清空卡片区）。
+    await loadProjects()
+    if (selectedProjectId.value && !projects.value.some((p) => p.id === selectedProjectId.value)) {
+      selectedProjectId.value = null
+    }
     await loadCards()
   } catch (error) {
     ElMessage.error(String(error))

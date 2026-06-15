@@ -514,8 +514,8 @@ export default {
           status: r.status,
           pay_method: r.pay_method,
           cargo_name: r.cargo_name,
-          sender_info: JSON.parse(r.sender_info),
-          recipient_info: JSON.parse(r.recipient_info),
+          sender_info: r.sender_info ? JSON.parse(r.sender_info) : {},
+          recipient_info: r.recipient_info ? JSON.parse(r.recipient_info) : {},
           created_at: r.created_at,
           updated_at: r.updated_at,
         }));

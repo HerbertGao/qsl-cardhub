@@ -129,8 +129,9 @@ pub struct PingResponse {
 /// 可直接复用 `SyncData` 的反序列化结构。
 #[derive(Debug, Clone, Deserialize)]
 pub struct PullResponse {
-    /// 当前云端版本
-    pub server_version: i64,
+    /// 当前云端版本（sync_meta 行缺失时为 null）
+    #[serde(default)]
+    pub server_version: Option<i64>,
     /// 全量业务数据快照
     pub data: SyncData,
     /// 最近写入的客户端标识（可选）
@@ -367,7 +368,7 @@ pub async fn pull_data(api_url: &str, api_key: &str) -> Result<PullResponse, Str
         .map_err(|e| format!("解析快照失败: {}", e))?;
 
     log::info!(
-        "✅ 拉取成功 (server_version={}): {} 个项目, {} 张卡片, {} 个寄件人, {} 个订单",
+        "✅ 拉取成功 (server_version={:?}): {} 个项目, {} 张卡片, {} 个寄件人, {} 个订单",
         pull_response.server_version,
         pull_response.data.projects.len(),
         pull_response.data.cards.len(),
@@ -499,7 +500,7 @@ mod tests {
         }"#;
 
         let resp: PullResponse = serde_json::from_str(json).unwrap();
-        assert_eq!(resp.server_version, 5);
+        assert_eq!(resp.server_version, Some(5));
         assert_eq!(resp.last_client_id.as_deref(), Some("client-abc"));
         assert_eq!(resp.data.cards.len(), 1);
         assert!(resp.data.cards[0].metadata.is_some());
@@ -540,5 +541,25 @@ mod tests {
         assert_eq!(resp.data.sf_orders.len(), 1);
         assert_eq!(resp.data.sf_orders[0].sender_info.name, "");
         assert_eq!(resp.data.sf_orders[0].recipient_info.name, "");
+    }
+
+    #[test]
+    fn test_pull_response_tolerates_null_server_version() {
+        // sync_meta 行缺失时 worker 回传 server_version:null → 须反序列化为 None、不 abort
+        let json = r#"{
+            "success": true,
+            "server_version": null,
+            "data": {
+                "projects": [],
+                "cards": [],
+                "sf_senders": [],
+                "sf_orders": [],
+                "app_settings": []
+            }
+        }"#;
+
+        let resp = serde_json::from_str::<PullResponse>(json);
+        assert!(resp.is_ok(), "server_version=null 应容忍反序列化、不 abort");
+        assert!(resp.unwrap().server_version.is_none());
     }
 }
