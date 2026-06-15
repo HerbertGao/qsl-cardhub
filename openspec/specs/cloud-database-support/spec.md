@@ -155,7 +155,7 @@ TBD - created by archiving change add-card-management. Update Purpose after arch
 
 ### 需求：云端数据同步
 
-系统**必须**支持将本地数据全量同步到用户自建的云端 API。
+系统**必须**支持将本地数据全量同步到用户自建的云端 API，并参与服务端的乐观并发版本护栏（见 `cloud-sync-versioning`）：持久化并回传 `base_version`、成功后刷新基线、遇 409 引导用户下载或强制覆盖。
 
 #### 场景：配置云端 API
 
@@ -209,10 +209,12 @@ TBD - created by archiving change add-card-management. Update Purpose after arch
 - 请求体包含：
   - `client_id`: 客户端标识
   - `sync_time`: 同步时间戳
+  - `base_version`: 本地持久化的云端基线版本（首次同步前为空/缺省时不携带，服务端按无条件覆盖处理）
   - `data`: 所有本地数据，与导出/导入范围一致，即**数据库全部业务表**：projects、cards、sf_senders、sf_orders、app_settings（若将来新增业务表，须同步加入导出、导入与云端同步的 data 中）
-- 同步成功：
+- 同步成功（200）：
   - 显示统计信息（项目数、卡片数等）
   - 记录上次同步时间
+  - **必须**把本地持久化的 `base_version` 刷新为响应回传的 `server_version` 并落盘（否则下次同步会自发 409）
 - 同步失败：显示具体错误信息
 
 #### 场景：同步认证失败
@@ -227,6 +229,22 @@ TBD - created by archiving change add-card-management. Update Purpose after arch
 - 显示错误提示："认证失败，请检查 API Key"
 - 本地数据不受影响
 
+#### 场景：同步遇版本冲突（409）
+
+**前提条件：**
+- 本地持有的 `base_version` 落后于云端（其他设备已先同步）
+
+**操作步骤：**
+1. 用户点击"立即同步"
+
+**预期结果：**
+- 服务端返回 409，本地数据与本地 `base_version` **均不被改动**
+- 系统**必须**把 409 解析为**可分辨的「版本冲突」结果**（不并入笼统错误字符串），并提供两条出路：
+  - 「下载云端最新」：走从云端恢复（`/pull`）重建本地库后再决定
+  - 「强制覆盖」：以 `force=true` 重新发起 `/sync`，用本机数据覆盖云端
+- 冲突提示**应**展示云端当前 `server_version`（取自 409 响应体）
+- 若 409 响应体解析失败（非 JSON / 缺 `server_version` 字段）：系统**仍必须**降级为可分辨的「版本冲突」结果（`server_version` 缺省为空），**禁止** panic 或回退为笼统报错，使用户仍能走「下载/强制覆盖」两条出路
+
 #### 场景：清除同步配置
 
 **操作步骤：**
@@ -238,10 +256,10 @@ TBD - created by archiving change add-card-management. Update Purpose after arch
 - 清除 API 地址配置
 - 清除 API Key
 - 清除上次同步时间
+- 清除本地 `base_version`（下次同步将按首次处理）
 - 保留 client_id（便于云端识别）
 - 表单恢复空白状态
-
----
+- 注（accepted-degraded，阶段 1 既有）：现状 `clear_sync_config` 删除整个 `sync.toml`（连带 client_id 一并丢失），与上「保留 client_id」措辞冲突；本期不扩范围改清除语义，仅确保「清除 `base_version`」不引入新矛盾，该不一致记为独立清理项（见 design 待解决问题）
 
 ### 需求：云端 API 规范
 
@@ -325,4 +343,38 @@ TBD - created by archiving change add-card-management. Update Purpose after arch
    - 验证 API Key 有效性
 
 ---
+
+### 需求：桌面端从云端恢复同步数据
+
+系统**必须**提供「从云端恢复」能力：以写入 Key 调用 `GET /pull` 拉回该租户全量快照，用快照**原子重建本地业务表**，并把本地 `base_version` 设为快照的 `server_version`。该操作会**销毁本地未上传的改动**，**必须**前置二次确认。
+
+#### 场景：从云端恢复重建本地库
+
+**前提条件：**
+- 已配置云端 API 地址与写入 API Key
+
+**操作步骤：**
+1. 用户在"数据管理"页点击"从云端恢复"
+2. 系统弹出确认对话框，明示「将用云端数据覆盖本地、丢失本地未上传改动」
+3. 用户确认
+
+**预期结果：**
+- 发送 `GET /pull`，请求头携带 `Authorization: Bearer {api_key}`
+- 用返回的 `data` 在**单个本地事务**内「**无条件清空** 5 张业务表 → 按快照写入」（projects、cards、sf_senders、sf_orders、app_settings），中途失败**必须**回滚、不留半重建状态
+- **并且** 清空**必须无条件覆盖全部 5 张表（含 `app_settings`）**：即便快照 `app_settings` 为空数组也要清空本地旧配置，**禁止**沿用既有文件导入「app_settings 仅在 data 含该字段时才清」的条件清空（否则云端空配置时本地旧配置幽灵残留、`base_version` 已对齐但数据不一致）
+- 恢复成功后把本地 `base_version` 设为返回的 `server_version` 并落盘
+- 此后用户「立即同步」携带对齐的 `base_version`、应直接 200（不再 409）
+
+#### 场景：恢复鉴权失败
+
+**前提条件：**
+- API Key 无效或缺失
+
+**操作步骤：**
+1. 用户点击"从云端恢复"
+
+**预期结果：**
+- `/pull` 返回 401
+- 显示"认证失败，请检查 API Key"
+- 本地数据**禁止**被改动（鉴权失败不进入重建流程）
 

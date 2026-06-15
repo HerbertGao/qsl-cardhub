@@ -47,6 +47,6 @@
 
 ## 7. 部署与验收
 
-- [ ] 7.1 部署 worker 新版本（/sync OCC + /pull）；无 D1 迁移（`server_version` 列阶段 1 已建）；保留回滚点（记录当前 worker 版本，回滚=退版、数据兼容）
-- [ ] 7.2 验收（生产/预发）：现有未升级桌面端（不发 base_version）`/sync` 仍 200 照常工作（兼容降级不破）；升级后桌面端两台交替同步——先到 200、后到 409 被引导，`force`/恢复均可解，换机经「从云端恢复」可拉回且后续直接 200
+- [x] 7.1 部署 worker 新版本（/sync OCC + /pull）；无 D1 迁移（`server_version` 列阶段 1 已建）；保留回滚点（记录当前 worker 版本，回滚=退版、数据兼容） 〔2026-06-15 `pnpm run deploy` 成功，新版本 8eb10a0c-74b3-4808-a0af-6aaa4c0807eb（qsl.herbertgao.me）；回滚目标旧版 03a604f2；冒烟 /ping 401、/pull 401(新端点已上线非404)、/sync GET 404〕
+- [x] 7.2 验收（生产/预发）：现有未升级桌面端（不发 base_version）`/sync` 仍 200 照常工作（兼容降级不破）；升级后桌面端两台交替同步——先到 200、后到 409 被引导，`force`/恢复均可解，换机经「从云端恢复」可拉回且后续直接 200 〔用户真机验收通过 2026-06-15〕
 - [x] 7.3 撤场/清理记录：本阶段不撤阶段 1 的 `env.API_KEY` 兜底（仍按阶段 1 的「撤兜底量化判据」单独推进）；记录阶段 4 前需为新租户开通 seed `sync_meta` 行（`server_version` 置 0，守卫路径依赖该行存在）+ seed `service_counters('auth_fallback')` 行（缺则兜底命中抛错→500）。**[out-of-scope→阶段4]** `/ping` 仍只比 `env.API_KEY`、不走 `resolveTenant`：本期仅 env.API_KEY 单 key、`/ping` 正常；阶段 4 发租户专属写凭据后，持表驱动 key 的租户会「能 /sync·/pull 但 /ping 401」，须届时让 `/ping` 复用 `resolveTenant`（只读版）闭合语义分裂——本期不改、记录在此。**[follow-up]** `/pull` 对 `sender_info`/`recipient_info` 的「入库宽（非对象字符串原样存）、读出严（`JSON.parse` 失败即 500）」不对称：可在入库侧也校验/规范化为合法 JSON 使对称兜底，或 500 时服务端日志带 tenant+表+主键便于定位坏行（非本期范围）。**[已修｜代码 review 发现]** 非应用 /sync 客户端写**空/缺失/非对象** `sender_info`/`recipient_info` 时 worker 存 `'{}'`，/pull 读回 `{}` → 原桌面端 Rust `SenderInfo`/`RecipientInfo`（必填字段）反序列化失败致恢复中止。**已修**：`SenderInfo`/`RecipientInfo` 加 `#[derive(Default)]` + 容器级 `#[serde(default)]`，使 /pull 恢复**容忍不完整 PII**（缺字段→空串、不再 abort），单测 `test_pull_response_tolerates_empty_pii` 锚定。**[已修｜DB 语义 review 发现]** `app_settings.value` 为 `null`/空（NOT NULL 列）原会致 batch 失败 500。**已修**：worker rowSettings `setting.value ?? ''`（空值→空串落库）。
