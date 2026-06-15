@@ -243,7 +243,7 @@ async function resolveTenant(env, key) {
     if (!result || !result.meta || result.meta.changes === 0) {
       throw new Error('auth_fallback counter row missing');
     }
-    return 'default';
+    return 'bh2ro';
   }
 
   // env.API_KEY 未配置或仍不命中 → 不命中（调用方 401）；
@@ -476,9 +476,9 @@ export default {
         }
 
         const DB = env.DB;
-        // 读取侧按服务端确定的 tenant_id 过滤（本期恒为常量 'default'，host/path 路由属阶段 4）；
+        // 读取侧按服务端确定的 tenant_id 过滤（本期恒为常量 'bh2ro'，host/path 路由属阶段 4）；
         // tenant_id 禁止取自前端参数。projects join 同时按 tenant_id 匹配，保留 LEFT JOIN 与 COLLATE NOCASE。
-        const tenant_id = 'default';
+        const tenant_id = 'bh2ro';
         const rows = await DB.prepare(
           `SELECT c.id, c.project_id, c.callsign, c.qty, c.serial, c.status, c.metadata, c.created_at, c.updated_at, p.name AS project_name
            FROM cards c
@@ -576,10 +576,10 @@ export default {
                 const orderid = r.orderid;
                 const mailno = r.mailno;
                 let callsign = null;
-                // route-push 是无凭据公开端点、无租户上下文，本期注入服务端常量 default；
+                // route-push 是无凭据公开端点、无租户上下文，本期注入服务端常量 bh2ro；
                 // 按 order 派生确定租户属阶段 4。保留业务连接键 o.card_id = c.id（漏则退化笛卡尔积错号），
                 // 仅把隔离键 o.client_id=c.client_id 换为 o.tenant_id = c.tenant_id，并加 WHERE o.tenant_id = ?。
-                const tenant_id = 'default';
+                const tenant_id = 'bh2ro';
                 if (orderid) {
                   const row = await DB.prepare(
                     'SELECT c.callsign FROM sf_orders o JOIN cards c ON o.tenant_id = c.tenant_id AND o.card_id = c.id WHERE o.tenant_id = ? AND o.order_id = ? LIMIT 1'

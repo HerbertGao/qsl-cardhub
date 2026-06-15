@@ -6,7 +6,7 @@
 --   wrangler d1 execute qsl-sync --file migrations/0001_tenant_foundation.sql --remote
 --
 -- 本文件把单租户旧 schema（业务表以 client_id 隔离）演进为行级 tenant_id 多租户，
--- 既有数据全部回填到内置 default 租户；对外可见行为不变（tenant_id 恒为 'default'）。
+-- 既有数据全部回填到内置 bh2ro 租户；对外可见行为不变（tenant_id 恒为 'bh2ro'）。
 --
 -- ----------------------------------------------------------------------------
 -- 原子性（务必理解，否则会写错事务语句）
@@ -57,7 +57,7 @@
 -- 4) 冻结桌面端写入：迁移执行窗口内停止桌面端 /sync（避免「校验后、迁移前又同步引入
 --    异常行」竞态）。
 --
--- 5) 离线计算 default 写凭据 hash（与 worker JS String.prototype.trim() 逐字符同语义，
+-- 5) 离线计算 bh2ro 写凭据 hash（与 worker JS String.prototype.trim() 逐字符同语义，
 --    仅去首尾空白；输出 64 位小写 hex，无前缀）：
 --    API_KEY 必须非空高熵值；空则本命令拒绝输出，不得把 `sha256('')` 当凭据 seed。
 --      node -e 'const k=(process.env.API_KEY||"").trim(); if(!k){console.error("API_KEY 为空——拒绝 seed（避免 sha256(\"\") 成无鉴权凭据）");process.exit(1)} process.stdout.write(require("crypto").createHash("sha256").update(k).digest("hex"))'
@@ -156,8 +156,8 @@ CREATE TABLE IF NOT EXISTS service_counters (
 -- ============================================================================
 -- 第 2 部分：业务表重建（projects / cards / sf_senders / sf_orders / app_settings）
 --   逐表「建新表(临时名，含 tenant_id/新 PK/全部业务索引) → INSERT…SELECT 回填
---   tenant_id='default' → DROP 旧表 → RENAME」。索引在建新表步一并建好（随表名走）。
---   隔离列 client_id 映射为 tenant_id='default'，其余业务列原样拷贝。
+--   tenant_id='bh2ro' → DROP 旧表 → RENAME」。索引在建新表步一并建好（随表名走）。
+--   隔离列 client_id 映射为 tenant_id='bh2ro'，其余业务列原样拷贝。
 -- ============================================================================
 
 -- ---- projects ----
@@ -170,7 +170,7 @@ CREATE TABLE projects_new (
     PRIMARY KEY (tenant_id, id)
 );
 INSERT INTO projects_new (tenant_id, id, name, created_at, updated_at)
-    SELECT 'default', id, name, created_at, updated_at FROM projects;
+    SELECT 'bh2ro', id, name, created_at, updated_at FROM projects;
 DROP TABLE projects;
 ALTER TABLE projects_new RENAME TO projects;
 -- 索引在 DROP 旧表 + RENAME 之后建（旧同名索引随旧表 DROP 消失，绑最终表名，避免全局索引名碰撞）
@@ -192,7 +192,7 @@ CREATE TABLE cards_new (
     PRIMARY KEY (tenant_id, id)
 );
 INSERT INTO cards_new (tenant_id, id, project_id, creator_id, callsign, qty, serial, status, metadata, created_at, updated_at)
-    SELECT 'default', id, project_id, creator_id, callsign, qty, serial, status, metadata, created_at, updated_at FROM cards;
+    SELECT 'bh2ro', id, project_id, creator_id, callsign, qty, serial, status, metadata, created_at, updated_at FROM cards;
 DROP TABLE cards;
 ALTER TABLE cards_new RENAME TO cards;
 -- 索引在 DROP 旧表 + RENAME 之后建（旧同名索引随旧表 DROP 消失，绑最终表名，避免全局索引名碰撞）
@@ -217,7 +217,7 @@ CREATE TABLE sf_senders_new (
     PRIMARY KEY (tenant_id, id)
 );
 INSERT INTO sf_senders_new (tenant_id, id, name, phone, mobile, province, city, district, address, is_default, created_at, updated_at)
-    SELECT 'default', id, name, phone, mobile, province, city, district, address, is_default, created_at, updated_at FROM sf_senders;
+    SELECT 'bh2ro', id, name, phone, mobile, province, city, district, address, is_default, created_at, updated_at FROM sf_senders;
 DROP TABLE sf_senders;
 ALTER TABLE sf_senders_new RENAME TO sf_senders;
 
@@ -238,7 +238,7 @@ CREATE TABLE sf_orders_new (
     PRIMARY KEY (tenant_id, id)
 );
 INSERT INTO sf_orders_new (tenant_id, id, order_id, waybill_no, card_id, status, pay_method, cargo_name, sender_info, recipient_info, created_at, updated_at)
-    SELECT 'default', id, order_id, waybill_no, card_id, status, pay_method, cargo_name, sender_info, recipient_info, created_at, updated_at FROM sf_orders;
+    SELECT 'bh2ro', id, order_id, waybill_no, card_id, status, pay_method, cargo_name, sender_info, recipient_info, created_at, updated_at FROM sf_orders;
 DROP TABLE sf_orders;
 ALTER TABLE sf_orders_new RENAME TO sf_orders;
 -- 索引在 DROP 旧表 + RENAME 之后建（旧同名索引随旧表 DROP 消失，绑最终表名，避免全局索引名碰撞）
@@ -254,7 +254,7 @@ CREATE TABLE app_settings_new (
     PRIMARY KEY (tenant_id, key)
 );
 INSERT INTO app_settings_new (tenant_id, key, value)
-    SELECT 'default', key, value FROM app_settings;
+    SELECT 'bh2ro', key, value FROM app_settings;
 DROP TABLE app_settings;
 ALTER TABLE app_settings_new RENAME TO app_settings;
 
@@ -262,7 +262,7 @@ ALTER TABLE app_settings_new RENAME TO app_settings;
 -- ============================================================================
 -- 第 3 部分：重建 sync_meta 为终态（PK tenant_id）并确定性回填单行
 --   现状 PK 为 client_id、可能多行（worker 从不 DELETE 旧行）。
---   只回填一行 'default'：last_client_id 取最新一行 client_id
+--   只回填一行 'bh2ro'：last_client_id 取最新一行 client_id
 --   （ORDER BY received_at DESC, client_id DESC LIMIT 1，并列由 client_id 兜底；
 --    received_at 可字典序==时序由 serverTime() 定宽零填充 ISO 保证，改其格式须同步校验此 tiebreaker）。
 --   空表时子查询返回 NULL（last_client_id=NULL，交首个 /sync 写）。server_version 置 0。
@@ -277,7 +277,7 @@ CREATE TABLE sync_meta_new (
 );
 INSERT INTO sync_meta_new (tenant_id, last_client_id, server_version, sync_time, received_at)
 SELECT
-    'default',
+    'bh2ro',
     (SELECT client_id  FROM sync_meta ORDER BY received_at DESC, client_id DESC LIMIT 1),
     0,
     (SELECT sync_time   FROM sync_meta ORDER BY received_at DESC, client_id DESC LIMIT 1),
@@ -287,14 +287,14 @@ ALTER TABLE sync_meta_new RENAME TO sync_meta;
 
 
 -- ============================================================================
--- 第 4 部分：seed 内置 default 租户与默认写凭据 + 兜底计数初始行
+-- 第 4 部分：seed 内置 bh2ro 租户与默认写凭据 + 兜底计数初始行
 -- ============================================================================
 
--- 内置 default 活跃租户
+-- 内置 bh2ro 活跃租户
 INSERT INTO tenants (tenant_id, name, tier, status)
-    VALUES ('default', 'Default Tenant', NULL, 'active');
+    VALUES ('bh2ro', 'BH2RO', NULL, 'active');
 
--- default 活跃写凭据。
+-- bh2ro 活跃写凭据。
 -- key_hash 必须为离线计算的 sha256(trim(API_KEY))（64 位小写 hex，无前缀）。
 -- 执行前由用户用文件头「执行前置 5)」的 node 命令算出，替换下方占位符整段（连同尖括号）。
 -- 占位符必须保留 '<占位' 前缀字面量，使文件末尾自检 LIKE '<占位%' 能命中残留。
@@ -302,7 +302,7 @@ INSERT INTO tenants (tenant_id, name, tier, status)
 -- 非其 sha256）；真实风险是占位行占用 active key_hash 唯一槽位 → 表驱动对真实 Key 永久 miss
 -- → 全程走兜底，由部署后「auth_fallback count===0」验收兜住。残留即强制门：必须回滚。
 INSERT INTO tenant_credentials (id, tenant_id, scope, key_hash, status)
-    VALUES ('default-key', 'default', 'sync', '<占位:离线 sha256(trim(API_KEY))>', 'active');
+    VALUES ('bh2ro-key', 'bh2ro', 'sync', '<占位:离线 sha256(trim(API_KEY))>', 'active');
 
 -- 兜底计数初始行（count=0，避免验收读到「行不存在」误判）
 INSERT INTO service_counters (name, count) VALUES ('auth_fallback', 0);

@@ -78,11 +78,11 @@ chk_pk app_settings "tenant_id,key"
 chk_pk sync_meta "tenant_id"
 
 echo
-echo "== 断言 3：数据全部 tenant_id='default' 且行数保全 =="
+echo "== 断言 3：数据全部 tenant_id='bh2ro' 且行数保全 =="
 for t in projects cards sf_senders sf_orders app_settings; do
   total=$(sqlite3 "$DB" "SELECT COUNT(*) FROM $t;")
-  deflt=$(sqlite3 "$DB" "SELECT COUNT(*) FROM $t WHERE tenant_id='default';")
-  if [ "$total" = "$deflt" ] && [ "$total" -gt 0 ]; then pass "$t: $total 行全为 default"; else fail "$t: total=$total default=$deflt"; fi
+  deflt=$(sqlite3 "$DB" "SELECT COUNT(*) FROM $t WHERE tenant_id='bh2ro';")
+  if [ "$total" = "$deflt" ] && [ "$total" -gt 0 ]; then pass "$t: $total 行全为 bh2ro"; else fail "$t: total=$total bh2ro=$deflt"; fi
 done
 
 echo
@@ -107,11 +107,11 @@ done
 
 echo
 echo "== 断言 6：EXPLAIN QUERY PLAN 命中目标索引 =="
-qp_cards=$(sqlite3 "$DB" "EXPLAIN QUERY PLAN SELECT c.id FROM cards c WHERE c.tenant_id='default' AND c.callsign='BG1ABC' COLLATE NOCASE ORDER BY c.created_at DESC;")
+qp_cards=$(sqlite3 "$DB" "EXPLAIN QUERY PLAN SELECT c.id FROM cards c WHERE c.tenant_id='bh2ro' AND c.callsign='BG1ABC' COLLATE NOCASE ORDER BY c.created_at DESC;")
 echo "$qp_cards" | grep -q "idx_cards_tenant_callsign" && pass "cards 呼号查询命中 idx_cards_tenant_callsign" || { printf '  %s\n' "$qp_cards"; fail "cards 呼号查询未命中 idx_cards_tenant_callsign"; }
-qp_sf=$(sqlite3 "$DB" "EXPLAIN QUERY PLAN SELECT c.callsign FROM sf_orders o JOIN cards c ON o.tenant_id=c.tenant_id AND o.card_id=c.id WHERE o.tenant_id='default' AND o.order_id='ORDER-001' LIMIT 1;")
+qp_sf=$(sqlite3 "$DB" "EXPLAIN QUERY PLAN SELECT c.callsign FROM sf_orders o JOIN cards c ON o.tenant_id=c.tenant_id AND o.card_id=c.id WHERE o.tenant_id='bh2ro' AND o.order_id='ORDER-001' LIMIT 1;")
 echo "$qp_sf" | grep -q "idx_sf_orders_order_id" && pass "route-push 命中 idx_sf_orders_order_id" || { printf '  %s\n' "$qp_sf"; fail "route-push 未命中 idx_sf_orders_order_id"; }
-qp_wb=$(sqlite3 "$DB" "EXPLAIN QUERY PLAN SELECT c.callsign FROM sf_orders o JOIN cards c ON o.tenant_id=c.tenant_id AND o.card_id=c.id WHERE o.tenant_id='default' AND o.waybill_no='SF0001' LIMIT 1;")
+qp_wb=$(sqlite3 "$DB" "EXPLAIN QUERY PLAN SELECT c.callsign FROM sf_orders o JOIN cards c ON o.tenant_id=c.tenant_id AND o.card_id=c.id WHERE o.tenant_id='bh2ro' AND o.waybill_no='SF0001' LIMIT 1;")
 echo "$qp_wb" | grep -q "idx_sf_orders_waybill_no" && pass "route-push 命中 idx_sf_orders_waybill_no" || { printf '  %s\n' "$qp_wb"; fail "route-push 未命中 idx_sf_orders_waybill_no"; }
 
 echo
@@ -119,18 +119,18 @@ echo "== 断言 7：sync_meta 单行 + 确定性 last_client_id =="
 sm_rows=$(sqlite3 "$DB" "SELECT COUNT(*) FROM sync_meta;")
 [ "$sm_rows" = "1" ] && pass "sync_meta 单行" || fail "sync_meta 行数=$sm_rows，期望 1"
 sm_tid=$(sqlite3 "$DB" "SELECT tenant_id FROM sync_meta;")
-[ "$sm_tid" = "default" ] && pass "sync_meta tenant_id=default" || fail "sync_meta tenant_id=$sm_tid"
+[ "$sm_tid" = "bh2ro" ] && pass "sync_meta tenant_id=bh2ro" || fail "sync_meta tenant_id=$sm_tid"
 sm_lci=$(sqlite3 "$DB" "SELECT last_client_id FROM sync_meta;")
 [ "$sm_lci" = "cli-A-new" ] && pass "sync_meta last_client_id=cli-A-new（确定性取最新 received_at）" || fail "sync_meta last_client_id=$sm_lci，期望 cli-A-new"
 sm_sv=$(sqlite3 "$DB" "SELECT server_version FROM sync_meta;")
 [ "$sm_sv" = "0" ] && pass "sync_meta server_version=0" || fail "sync_meta server_version=$sm_sv"
 
 echo
-echo "== 断言 8：seed —— default 租户 + 凭据 + auth_fallback 计数行 =="
-t_def=$(sqlite3 "$DB" "SELECT COUNT(*) FROM tenants WHERE tenant_id='default' AND status='active';")
-[ "$t_def" = "1" ] && pass "tenants 含 active default" || fail "tenants default 缺失"
-cred=$(sqlite3 "$DB" "SELECT COUNT(*) FROM tenant_credentials WHERE tenant_id='default' AND status='active';")
-[ "$cred" = "1" ] && pass "tenant_credentials 含 active default 凭据" || fail "default 凭据缺失"
+echo "== 断言 8：seed —— bh2ro 租户 + 凭据 + auth_fallback 计数行 =="
+t_def=$(sqlite3 "$DB" "SELECT COUNT(*) FROM tenants WHERE tenant_id='bh2ro' AND status='active';")
+[ "$t_def" = "1" ] && pass "tenants 含 active bh2ro" || fail "tenants bh2ro 缺失"
+cred=$(sqlite3 "$DB" "SELECT COUNT(*) FROM tenant_credentials WHERE tenant_id='bh2ro' AND status='active';")
+[ "$cred" = "1" ] && pass "tenant_credentials 含 active bh2ro 凭据" || fail "bh2ro 凭据缺失"
 afb=$(sqlite3 "$DB" "SELECT count FROM service_counters WHERE name='auth_fallback';")
 [ "$afb" = "0" ] && pass "service_counters auth_fallback 行存在且 count=0" || fail "auth_fallback count=$afb（期望 0）"
 
@@ -154,7 +154,7 @@ fi
 
 echo
 echo "== 断言 11：同 key_hash active 唯一（部分唯一索引）=="
-sqlite3 "$DB" "INSERT INTO tenant_credentials (id, tenant_id, key_hash, status) VALUES ('k2','default','dup_hash','active');" 2>/dev/null
+sqlite3 "$DB" "INSERT INTO tenant_credentials (id, tenant_id, key_hash, status) VALUES ('k2','bh2ro','dup_hash','active');" 2>/dev/null
 if sqlite3 "$DB" "INSERT INTO tenant_credentials (id, tenant_id, key_hash, status) VALUES ('k3','other','dup_hash','active');" 2>/dev/null; then
   fail "部分唯一索引误放行：同 active key_hash 登记到两个租户"
 else

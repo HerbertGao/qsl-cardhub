@@ -9,10 +9,10 @@
 - `run_worker_smoke.sh` —— 6.3/6.4/6.5/6.6/6.7 worker 行为冒烟（`wrangler dev --local` + miniflare D1，自选测试 Key，不触碰真实 secret）。本机已实测 14/14 PASS。
 
 ## 组 D 本地已验（实测 PASS，对应复选框已在 tasks.md 勾选）
-- 6.3 表驱动命中 200 + auth_fallback 计数恒 0、错误 Key 401、env.API_KEY 置空 401（不放行）、尾随空白 env 表驱动仍命中且兜底 0、兜底路径本身（撤表凭据后 token==trim(env) → 200 default + D1 计数 0→1）。
+- 6.3 表驱动命中 200 + auth_fallback 计数恒 0、错误 Key 401、env.API_KEY 置空 401（不放行）、尾随空白 env 表驱动仍命中且兜底 0、兜底路径本身（撤表凭据后 token==trim(env) → 200 bh2ro + D1 计数 0→1）。
 - 6.4 含违例（qty=0 触发 CHECK）的 /sync：单 `DB.batch` 整体回滚——预存 keep1/keep2 存活、新行 n1/bad 未写，非 200。**注**：本地 miniflare D1 的 batch 原子性为强信号；生产 `--remote` 行为同 Cloudflare 文档（DB.batch 包事务），如需生产级确认按下「6.2/6.4 remote 确认」段在 `--remote` 临时库重跑。
 - 6.5 DROP cards 后 /sync → 500 显式报错、worker 不静默重建（确认 4.3 内联 CREATE TABLE 已删）。
-- 6.6 `/api/query?callsign=BG1ABC` 仅返回 default（cq1），不返回同呼号的 other 租户卡；`?tenant_id=other` 注入结果与无参完全一致（参数被忽略，无跨租户）。
+- 6.6 `/api/query?callsign=BG1ABC` 仅返回 bh2ro（cq1），不返回同呼号的 other 租户卡；`?tenant_id=other` 注入结果与无参完全一致（参数被忽略，无跨租户）。
 - 6.7 尾随空白 env.API_KEY 下 /ping 200（trim 生效）。
 
 ## 须用户/环境执行（本地验不了或属生产前硬门）
@@ -30,7 +30,7 @@
 旧同名索引随旧表 DROP 自动消失，不再碰撞。
 
 验证：`bash verify/run_6_1.sh` 直接对真实迁移跑回归——A 段断言无 `already exists` / 无报错，
-B 段跑通全部 6.1 断言（数据全 default、id 不变、PK (tenant_id,id)、
+B 段跑通全部 6.1 断言（数据全 bh2ro、id 不变、PK (tenant_id,id)、
 全索引在、EXPLAIN 命中 idx_cards_tenant_callsign / idx_sf_orders_order_id、占位符自检、CHECK 拒 abc!、
 active key_hash 部分唯一）。本机已实测全 PASS。
 
@@ -64,7 +64,7 @@ wrangler d1 delete qsl-mig-verify
 ### 第 7 节生产迁移与验收（用户在自己终端执行，代理不代跑生产）
 7.1 备份(`d1 export`) → 单一所有者校验(含 sync_meta) → 冻结写入 → 离线算
 `sha256(trim(API_KEY))` 替换占位符 → `wrangler d1 execute qsl-sync --file 0001_... --remote` →
-占位符自检 0 行；7.2 部署 worker 新版本；7.3 验收：现有桌面端 /sync 200 落 default、
+占位符自检 0 行；7.2 部署 worker 新版本；7.3 验收：现有桌面端 /sync 200 落 bh2ro、
 **auth_fallback 计数行存在且 count===0**（严格相等+存在性双检，>0 或缺失/不可读判 inconclusive）、
 /ping 200、移动端裸域查询字段集不变；7.4 量化撤兜底判据 + 记 callsign_openid_bindings/sf_route_log 二次迁表点。
 

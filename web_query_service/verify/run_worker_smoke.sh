@@ -43,11 +43,11 @@ DROP TABLE IF EXISTS tenants; DROP TABLE IF EXISTS tenant_credentials; DROP TABL
 DROP TABLE IF EXISTS service_counters;" >/dev/null
 d1 --file ./schema.sql >/dev/null
 d1 --command "
-INSERT INTO tenants (tenant_id,name,tier,status) VALUES ('default','Default Tenant',NULL,'active');
-INSERT INTO tenant_credentials (id,tenant_id,scope,key_hash,status) VALUES ('default-key','default','sync','$HASH','active');
+INSERT INTO tenants (tenant_id,name,tier,status) VALUES ('bh2ro','BH2RO',NULL,'active');
+INSERT INTO tenant_credentials (id,tenant_id,scope,key_hash,status) VALUES ('bh2ro-key','bh2ro','sync','$HASH','active');
 INSERT INTO service_counters (name,count) VALUES ('auth_fallback',0);
-INSERT INTO projects (tenant_id,id,name,created_at,updated_at) VALUES ('default','p1','项目一','t','t');
-INSERT INTO cards (tenant_id,id,project_id,callsign,qty,status,created_at,updated_at) VALUES ('default','cq1','p1','BG1ABC',5,'pending','t','t');
+INSERT INTO projects (tenant_id,id,name,created_at,updated_at) VALUES ('bh2ro','p1','项目一','t','t');
+INSERT INTO cards (tenant_id,id,project_id,callsign,qty,status,created_at,updated_at) VALUES ('bh2ro','cq1','p1','BG1ABC',5,'pending','t','t');
 INSERT INTO cards (tenant_id,id,project_id,callsign,qty,status,created_at,updated_at) VALUES ('other','cqOther','pO','BG1ABC',9,'pending','t','t');" >/dev/null
 
 echo; echo "########## 6.3 表驱动命中 + 错误 Key + 兜底 ##########"
@@ -57,16 +57,16 @@ start "$TEST_KEY"
 [ "$(code -H "Authorization: Bearer WRONG" -H 'Content-Type: application/json' -d '{"client_id":"c","data":{}}' "$B/sync")" = 401 ] && ok "错误 Key /sync 401" || no "错误 Key 非 401"
 
 echo; echo "########## 6.3 env.API_KEY 空 -> 401（不放行） ##########"
-d1 --command "UPDATE tenant_credentials SET status='revoked' WHERE id='default-key';" >/dev/null
+d1 --command "UPDATE tenant_credentials SET status='revoked' WHERE id='bh2ro-key';" >/dev/null
 start ""
 [ "$(code -H "Authorization: Bearer anything" "$B/ping")" = 401 ] && ok "空 env /ping 401" || no "空 env /ping 非 401"
 [ "$(code -H "Authorization: Bearer anything" -H 'Content-Type: application/json' -d '{"client_id":"c","data":{}}' "$B/sync")" = 401 ] && ok "空 env /sync 401（无裸写）" || no "空 env /sync 非 401"
 
-echo; echo "########## 6.3 兜底命中：表 miss(revoked) + 非空 env 直比 -> 200 default + 计数 0->1 ##########"
+echo; echo "########## 6.3 兜底命中：表 miss(revoked) + 非空 env 直比 -> 200 bh2ro + 计数 0->1 ##########"
 # 凭据仍 revoked（接上段表驱动 miss），env.API_KEY 非空且 ==测试 Key → trim 相等走兜底；先把计数复位 0
 d1 --command "UPDATE service_counters SET count=0 WHERE name='auth_fallback';" >/dev/null
 start "$TEST_KEY"
-[ "$(code -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d '{"client_id":"cf1","data":{"cards":[{"id":"fb1","project_id":"p1","callsign":"BG9FB","qty":1}]}}' "$B/sync")" = 200 ] && ok "兜底命中 /sync 200（数据落 default）" || no "兜底命中 /sync 非 200"
+[ "$(code -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d '{"client_id":"cf1","data":{"cards":[{"id":"fb1","project_id":"p1","callsign":"BG9FB","qty":1}]}}' "$B/sync")" = 200 ] && ok "兜底命中 /sync 200（数据落 bh2ro）" || no "兜底命中 /sync 非 200"
 [ "$(d1json "SELECT count FROM service_counters WHERE name='auth_fallback'" )" = '[{"count":1}]' ] && ok "兜底命中：auth_fallback 0->1" || no "兜底命中后 auth_fallback != 1"
 
 echo; echo "########## 6.3 兜底 fail-closed：计数行缺失 -> /sync 500（写失败不静默吞）##########"
@@ -76,47 +76,47 @@ d1 --command "DELETE FROM service_counters WHERE name='auth_fallback';" >/dev/nu
 d1 --command "INSERT INTO service_counters (name,count) VALUES ('auth_fallback',0);" >/dev/null
 
 echo; echo "########## 6.7 + 6.3 对抗：尾随空白 env.API_KEY ##########"
-d1 --command "UPDATE tenant_credentials SET status='active' WHERE id='default-key'; UPDATE service_counters SET count=0 WHERE name='auth_fallback';" >/dev/null
+d1 --command "UPDATE tenant_credentials SET status='active' WHERE id='bh2ro-key'; UPDATE service_counters SET count=0 WHERE name='auth_fallback';" >/dev/null
 start "$TEST_KEY  "   # 尾随两个空格
 [ "$(code -H "Authorization: Bearer $TEST_KEY" "$B/ping")" = 200 ] && ok "6.7 尾随空白 env /ping 200（trim 生效）" || no "6.7 /ping 非 200"
 [ "$(code -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d '{"client_id":"c","data":{}}' "$B/sync")" = 200 ] && ok "6.3 对抗：尾随空白 env 表驱动仍命中 200" || no "6.3 对抗 /sync 非 200"
 [ "$(d1json "SELECT count FROM service_counters WHERE name='auth_fallback'" )" = '[{"count":0}]' ] && ok "6.3 对抗：兜底计数仍 0" || no "6.3 对抗：兜底计数 != 0"
 
 echo; echo "########## 鉴权绕过回归：空 Bearer + 空hash凭据 -> 401（worker 空key守卫）##########"
-# 模拟「误把 sha256('') seed 成 active 凭据」：插入空串 hash 作 default 的 active 凭据。
+# 模拟「误把 sha256('') seed 成 active 凭据」：插入空串 hash 作 bh2ro 的 active 凭据。
 # 不带 Authorization header 发 /sync：getBearerToken 返 null -> resolveTenant trimmedKey='' 早返 null -> 必须 401。
 EMPTY_HASH="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-d1 --command "INSERT INTO tenant_credentials (id,tenant_id,scope,key_hash,status) VALUES ('empty-hash-cred','default','sync','$EMPTY_HASH','active');" >/dev/null
+d1 --command "INSERT INTO tenant_credentials (id,tenant_id,scope,key_hash,status) VALUES ('empty-hash-cred','bh2ro','sync','$EMPTY_HASH','active');" >/dev/null
 [ "$(code -H 'Content-Type: application/json' -d '{"client_id":"cbypass","data":{}}' "$B/sync")" = 401 ] && ok "空 Bearer + 空hash凭据 /sync 401（空key守卫生效）" || no "空 Bearer 命中空hash凭据未返 401"
 # 清理该条凭据，避免污染后续段落
 d1 --command "DELETE FROM tenant_credentials WHERE id='empty-hash-cred';" >/dev/null
 
-echo; echo "########## 6.6 读取注入 default + tenant_id 注入被忽略 ##########"
-# 前序 /sync 全量覆盖会清掉 default 卡片，6.6 前重新 seed 查询样例（test-only 状态复位）
-d1 --command "INSERT OR REPLACE INTO cards (tenant_id,id,project_id,callsign,qty,status,created_at,updated_at) VALUES ('default','cq1','p1','BG1ABC',5,'pending','t','t'); INSERT OR REPLACE INTO cards (tenant_id,id,project_id,callsign,qty,status,created_at,updated_at) VALUES ('other','cqOther','pO','BG1ABC',9,'pending','t','t'); INSERT OR REPLACE INTO projects (tenant_id,id,name,created_at,updated_at) VALUES ('default','p1','项目一','t','t');" >/dev/null
+echo; echo "########## 6.6 读取注入 bh2ro + tenant_id 注入被忽略 ##########"
+# 前序 /sync 全量覆盖会清掉 bh2ro 卡片，6.6 前重新 seed 查询样例（test-only 状态复位）
+d1 --command "INSERT OR REPLACE INTO cards (tenant_id,id,project_id,callsign,qty,status,created_at,updated_at) VALUES ('bh2ro','cq1','p1','BG1ABC',5,'pending','t','t'); INSERT OR REPLACE INTO cards (tenant_id,id,project_id,callsign,qty,status,created_at,updated_at) VALUES ('other','cqOther','pO','BG1ABC',9,'pending','t','t'); INSERT OR REPLACE INTO projects (tenant_id,id,name,created_at,updated_at) VALUES ('bh2ro','p1','项目一','t','t');" >/dev/null
 R1=$(curl -s -m 8 "$B/api/query?callsign=BG1ABC")
 R2=$(curl -s -m 8 "$B/api/query?callsign=BG1ABC&tenant_id=other")
-echo "$R1" | grep -q '"id":"cq1"' && ! echo "$R1" | grep -q 'cqOther' && ok "6.6 query 仅返回 default（cq1），无 other 泄漏" || no "6.6 query 结果异常: $R1"
+echo "$R1" | grep -q '"id":"cq1"' && ! echo "$R1" | grep -q 'cqOther' && ok "6.6 query 仅返回 bh2ro（cq1），无 other 泄漏" || no "6.6 query 结果异常: $R1"
 [ "$R1" = "$R2" ] && ok "6.6 ?tenant_id=other 被忽略（结果与无参一致）" || no "6.6 tenant_id 注入改变了结果"
 
 echo; echo "########## 6.3 client_id 超长截断 ≤128（index.js:304 slice(0,128)）##########"
 LONGID=$(printf 'x%.0s' {1..200})
 CCLID=$(code -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d "{\"client_id\":\"$LONGID\",\"data\":{\"cards\":[{\"id\":\"clid1\",\"project_id\":\"p1\",\"callsign\":\"BCLID\",\"qty\":1}]}}" "$B/sync")
 [ "$CCLID" = 200 ] && ok "client_id 超长 /sync 200" || no "client_id 超长 /sync 非 200 ($CCLID)"
-[ "$(d1json "SELECT length(last_client_id) AS n FROM sync_meta WHERE tenant_id='default'")" = '[{"n":128}]' ] && ok "client_id 截断：last_client_id 长度 == 128" || no "client_id 截断：last_client_id 长度 != 128"
+[ "$(d1json "SELECT length(last_client_id) AS n FROM sync_meta WHERE tenant_id='bh2ro'")" = '[{"n":128}]' ] && ok "client_id 截断：last_client_id 长度 == 128" || no "client_id 截断：last_client_id 长度 != 128"
 
 echo; echo "########## app_settings 按租户全量替换 round-trip（cloud-backend-api「app_settings 表结构」）##########"
 [ "$(code -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d '{"client_id":"as1","data":{"app_settings":[{"key":"lang","value":"zh"},{"key":"theme","value":"dark"}]}}' "$B/sync")" = 200 ] && ok "app_settings 首轮 /sync 200" || no "app_settings 首轮 /sync 非 200"
-[ "$(d1json "SELECT count(*) AS n FROM app_settings WHERE tenant_id='default' AND key IN ('lang','theme')")" = '[{"n":2}]' ] && ok "app_settings 首轮：lang+theme 落库（tenant_id=default）" || no "app_settings 首轮：键值未按租户落库"
+[ "$(d1json "SELECT count(*) AS n FROM app_settings WHERE tenant_id='bh2ro' AND key IN ('lang','theme')")" = '[{"n":2}]' ] && ok "app_settings 首轮：lang+theme 落库（tenant_id=bh2ro）" || no "app_settings 首轮：键值未按租户落库"
 [ "$(code -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d '{"client_id":"as2","data":{"app_settings":[{"key":"lang","value":"en"}]}}' "$B/sync")" = 200 ] && ok "app_settings 次轮 /sync 200" || no "app_settings 次轮 /sync 非 200"
-[ "$(d1json "SELECT count(*) AS n FROM app_settings WHERE tenant_id='default'")" = '[{"n":1}]' ] && ok "app_settings 全量替换：旧 theme 被清、仅剩 1 行" || no "app_settings 次轮残留旧键"
-[ "$(d1json "SELECT value AS v FROM app_settings WHERE tenant_id='default' AND key='lang'")" = '[{"v":"en"}]' ] && ok "app_settings 全量替换：lang=en（DELETE+INSERT 生效）" || no "app_settings lang 未更新为 en"
+[ "$(d1json "SELECT count(*) AS n FROM app_settings WHERE tenant_id='bh2ro'")" = '[{"n":1}]' ] && ok "app_settings 全量替换：旧 theme 被清、仅剩 1 行" || no "app_settings 次轮残留旧键"
+[ "$(d1json "SELECT value AS v FROM app_settings WHERE tenant_id='bh2ro' AND key='lang'")" = '[{"v":"en"}]' ] && ok "app_settings 全量替换：lang=en（DELETE+INSERT 生效）" || no "app_settings lang 未更新为 en"
 
 echo; echo "########## 6.4 单 batch 回滚 ##########"
-d1 --command "DELETE FROM cards WHERE tenant_id='default'; INSERT INTO cards (tenant_id,id,project_id,callsign,qty,status,created_at,updated_at) VALUES ('default','keep1','p1','BK1',1,'pending','t','t'),('default','keep2','p1','BK2',2,'pending','t','t');" >/dev/null
+d1 --command "DELETE FROM cards WHERE tenant_id='bh2ro'; INSERT INTO cards (tenant_id,id,project_id,callsign,qty,status,created_at,updated_at) VALUES ('bh2ro','keep1','p1','BK1',1,'pending','t','t'),('bh2ro','keep2','p1','BK2',2,'pending','t','t');" >/dev/null
 C64=$(code -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d '{"client_id":"cf","data":{"cards":[{"id":"n1","project_id":"p1","callsign":"BN1","qty":3},{"id":"bad","project_id":"p1","callsign":"BBAD","qty":0}]}}' "$B/sync")
 [ "$C64" = 500 ] && ok "6.4 含违例 batch /sync 500 ($C64)" || no "6.4 违例 batch 未返 500 ($C64)"
-IDS=$(d1json "SELECT id FROM cards WHERE tenant_id='default' ORDER BY id")
+IDS=$(d1json "SELECT id FROM cards WHERE tenant_id='bh2ro' ORDER BY id")
 echo "$IDS" | grep -q keep1 && echo "$IDS" | grep -q keep2 && ! echo "$IDS" | grep -q '"n1"' && ! echo "$IDS" | grep -q '"bad"' && ok "6.4 回滚完好：keep1/keep2 存活、n1/bad 未写" || no "6.4 回滚异常: $IDS"
 
 echo; echo "########## 6.5 DROP 表 -> /sync 显式报错、不静默重建 ##########"
