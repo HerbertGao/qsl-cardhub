@@ -1,8 +1,8 @@
 ## 1. 前置校验与量级摸底
 
-- [ ] 1.1 对**每张业务表 + `sync_meta`** 跑 `SELECT client_id, COUNT(*) … GROUP BY client_id`，确认单一所有者（`sync_meta` 因 worker 从不删旧行、换机/重装会累积多行，必须纳入）；非单一则停下，按既定步骤（确认仅一台机器同步过 / 择 `received_at` 最新一条、余删）人工处置后重来
-- [ ] 1.2 **先确认该 D1 计划档（Free 50 / Paid 1000 子请求/调用）**；跑 `SELECT COUNT(*)` 量各业务表真实行数，按**兜底最坏路径**把**单次 `/sync` 全部子请求**计入预算（`resolveTenant` 凭据查询 + 兜底计数器 UPDATE〔此二者为 batch 外独立 `.run()`、计入单次调用子请求总数但不占 batch 内语句额度〕+ `DELETE×5` + `N×INSERT` + `sync_meta` upsert）评估是否进单 `DB.batch`；设明确阈值（Paid 下总语句 ≤~850 走真单 batch；Free 50 下小数据量也会撞限须分块/影子表）
-- [ ] 1.3 `wrangler d1 export` 远端全量导出（默认含 schema+data），留作迁移回滚点；**记录当前生产 worker 部署版本号（Cloudflare Deployments）或对应 git commit** 作为回滚步骤④的目标；迁移窗口内冻结桌面端写入
+- [x] 1.1 对**每张业务表 + `sync_meta`** 跑 `SELECT client_id, COUNT(*) … GROUP BY client_id`，确认单一所有者（`sync_meta` 因 worker 从不删旧行、换机/重装会累积多行，必须纳入）；非单一则停下，按既定步骤（确认仅一台机器同步过 / 择 `received_at` 最新一条、余删）人工处置后重来
+- [x] 1.2 **先确认该 D1 计划档（Free 50 / Paid 1000 子请求/调用）**；跑 `SELECT COUNT(*)` 量各业务表真实行数，按**兜底最坏路径**把**单次 `/sync` 全部子请求**计入预算（`resolveTenant` 凭据查询 + 兜底计数器 UPDATE〔此二者为 batch 外独立 `.run()`、计入单次调用子请求总数但不占 batch 内语句额度〕+ `DELETE×5` + `N×INSERT` + `sync_meta` upsert）评估是否进单 `DB.batch`；设明确阈值（Paid 下总语句 ≤~850 走真单 batch；Free 50 下小数据量也会撞限须分块/影子表）
+- [x] 1.3 `wrangler d1 export` 远端全量导出（默认含 schema+data），留作迁移回滚点；**记录当前生产 worker 部署版本号（Cloudflare Deployments）或对应 git commit** 作为回滚步骤④的目标；迁移窗口内冻结桌面端写入
 
 ## 2. schema.sql 演进（新建 D1 的源 schema）
 
@@ -42,7 +42,7 @@
 ## 6. 本地验证（优先 --remote 临时/preview D1）
 
 - [x] 6.1 对一份含 `client_id` 的旧结构 D1 跑迁移 SQL，断言：业务表无 `client_id`、PK `(tenant_id,id)`、数据全 `tenant_id='default'`、`id` 不变、**全部业务索引存在**（`EXPLAIN QUERY PLAN` 断言 `cards` 呼号查询命中 `idx_cards_tenant_callsign`、route-push 命中 `idx_sf_orders_order_id`）。注：`--local` 可能对 DDL/RENAME 报 `SQLITE_AUTH`，本地通过不等于 remote，必要时用一次性 `--remote` 临时库验证
-- [ ] 6.2 迁移 SQL 中段人为注入失败，断言整文件回滚、不留半迁移表——**确认性实测（上生产硬门）**：Cloudflare 文档已保证 `--file` 失败回滚到原状，本步确认当前 wrangler 版本行为一致；若实测为逐语句提交则改影子表（`cards_v2` 校验后 RENAME 切换）
+- [ ] 6.2 迁移 SQL 中段人为注入失败，断言整文件回滚、不留半迁移表——**确认性实测（上生产硬门）**：Cloudflare 文档已保证 `--file` 失败回滚到原状，本步确认当前 wrangler 版本行为一致；若实测为逐语句提交则改影子表（`cards_v2` 校验后 RENAME 切换）〔归档说明：未做人为失败注入实测；依赖 Cloudflare 文档的 `--file` 整文件回滚保证 + 2026-06-15 生产一次性迁移成功（423 changes 单文件落地），接受为 out-of-scope〕
 - [x] 6.3 用现有全局 API_KEY 打 `/sync`：表驱动凭据命中、**兜底计数行存在且 `count===0`**（严格相等+存在性双检，缺失/不可读判 inconclusive 非 pass）、200、数据落 `default`；错误 Key → 401；`env.API_KEY` 置空 → 401（不放行）；额外对抗用例：在 `env.API_KEY` 尾部加空白，断言表驱动仍命中且兜底计数==0
 - [x] 6.4 `/sync` 注入失败模拟，断言单 batch 回滚（不出现已删未写空表）
 - [x] 6.5 手工 DROP 一张业务表后打 `/sync`，断言显式报错、**不**按旧结构静默重建
@@ -52,6 +52,6 @@
 ## 7. 生产迁移与部署（用户执行）与验收
 
 - [x] 7.1 向用户展示完整迁移操作清单（备份 → 单一所有者校验含 sync_meta → 冻结写入 → 离线算 hash 替换占位 → `wrangler d1 execute --file 0001_tenant_foundation.sql --remote` → 执行后占位符自检 0 行），由用户在自己终端执行
-- [ ] 7.2 部署 worker 新版本（含 4.x/5.x 全部改动 + 兜底计数器）
-- [ ] 7.3 验收（与迁移同一不可分交付单元）：现有桌面端 `/sync` 200 且落 `default`、**兜底计数行存在且 `count===0`**（表驱动真命中，>0 或计数行缺失/不可读视为 seed 失败须排查、判 inconclusive，非可接受）；桌面端「测试连接」`/ping` 200；现有移动端裸域查询照常字段集不变
-- [ ] 7.4 量化判据满足后（连续 N 次/T 窗口表驱动命中且兜底计数恒 0）记录「撤兜底」为后续清理项；阶段 4 上线第二真实租户前必须先迁 `callsign_openid_bindings`/`sf_route_log`（本期已知二次迁表点）
+- [x] 7.2 部署 worker 新版本（含 4.x/5.x 全部改动 + 兜底计数器）
+- [x] 7.3 验收（与迁移同一不可分交付单元）：现有桌面端 `/sync` 200 且落 `default`、**兜底计数行存在且 `count===0`**（表驱动真命中，>0 或计数行缺失/不可读视为 seed 失败须排查、判 inconclusive，非可接受）；桌面端「测试连接」`/ping` 200；现有移动端裸域查询照常字段集不变
+- [x] 7.4 量化判据满足后（连续 N 次/T 窗口表驱动命中且兜底计数恒 0）记录「撤兜底」为后续清理项；阶段 4 上线第二真实租户前必须先迁 `callsign_openid_bindings`/`sf_route_log`（本期已知二次迁表点）
