@@ -27,15 +27,13 @@ start(){ # $1 = API_KEY value
   for i in $(seq 1 25); do curl -s -o /dev/null -m 2 "$B/api/config" 2>/dev/null && return 0; sleep 2; done
   echo "server failed to start; see /tmp/qsl_smoke_dev.log"; exit 1
 }
-# ── CDN 真实 IP 段专用启动（trusted-client-ip / fix-cdn-real-ip 验证）──────────────────
-# 暗礁：CDN_ORIGIN_CIDRS 是逗号分隔 CIDR；`wrangler dev --var KEY:VALUE` 按逗号切值会截断它
-# （白名单只剩子集→「命中」永不触发→全部 fail-safe 到 CF-IP→测试因错误原因「通过」）。
-# 故 CDN_ORIGIN_CIDRS / CDN_REAL_IP_HEADER 必须经【临时测试 toml 的 [vars]】注入，禁裸 --var。
+# ── CDN 密钥回源头专用启动（trusted-client-ip / fix-cdn-real-ip 验证）──────────────────
+# 信任信号 = 密钥头 X-Origin-Auth（CDN 覆盖语义注入）。经【临时测试 toml 的 [vars]】注入
+# CDN_ORIGIN_SECRET / CDN_REAL_IP_HEADER（用 toml 而非裸 --var，统一且避免任何转义坑）。
 # 该临时 toml 用绝对路径引 main/assets，并复用项目 wrangler.toml 的 D1 + RATE_LIMIT KV 绑定
 # （--config 会以 toml 所在目录解析相对 main，故用绝对路径；放 /tmp 防污染项目）。
 CDN_TOML=/tmp/qsl_smoke_cdn.toml
-# 受信白名单用 RFC 5737 文档段（全局可路由公网单播、可过 parseTrustedCidrs 默认拒口径）。
-CDN_CIDRS="203.0.113.0/24,198.51.100.0/24"
+CDN_SECRET="smoke-origin-secret-$(printf 'a%.0s' $(seq 1 48))"  # 模拟 256bit 密钥（定长、无逗号）
 CDN_HDR="Ali-Cdn-Real-Ip"
 write_cdn_toml(){
   local root; root="$(pwd)"
@@ -59,7 +57,7 @@ binding = "RATE_LIMIT"
 id = "b88cc03aa78945b0a07095cc147f8394"
 
 [vars]
-CDN_ORIGIN_CIDRS = "$CDN_CIDRS"
+CDN_ORIGIN_SECRET = "$CDN_SECRET"
 CDN_REAL_IP_HEADER = "$CDN_HDR"
 EOF
 }
@@ -345,66 +343,81 @@ PRES=$(d1json "SELECT name FROM sqlite_master WHERE type='table' AND name='cards
 [ "$PRES" = "[]" ] && ok "6.5 worker 未静默重建 cards" || no "6.5 cards 被静默重建: $PRES"
 
 echo; echo "########## 4.4 可信真实客户端 IP 限流归桶（fix-cdn-real-ip / trusted-client-ip）##########"
-# 端到端验证 getClientIP 在 CDN 双入口下的限流计数键归桶；KV 已绑（dev --local 真计数到 429）。
-# 本机已探针实测 miniflare 透传 curl 设的 CF-Connecting-IP（与 design 决策 6 / RC 实测一致）：
-# CF-IP 不在白名单的请求按该 CF-IP 计数、命中白名单的请求按受信头(Ali-Cdn-Real-Ip)真实用户 IP 计数，
-# 不同 IP 各自独立桶、且超过 RATE_LIMIT_MAX(20) 真返 429。若未来本地 miniflare 不再透传该头，
-# 这些断言会整体偏移（多个 IP 共桶提前 429 / 永不 429），即暴露环境非等价（对齐 CHECKLIST.md 口径）；
-# 届时 CDN-路径归桶以纯函数单测 client-ip.test.js（4.1-4.3）为准、本节退化为只断言「限流真计数到 429」。
+# 端到端验证 getClientIP 在「密钥回源头」模型下的限流计数键归桶；KV 已绑（dev --local 真计数到 429）。
+# 信任信号 = 带有效 X-Origin-Auth 密钥（=来自 CDN）→ 采信 Ali-Cdn-Real-Ip 真实用户 IP；
+# 无/错密钥（直连）→ 按 CF-Connecting-IP 计数、忽略一切注入头。绝不采信 X-Forwarded-For。
+# miniflare 透传 curl 设的 CF-Connecting-IP / X-Origin-Auth / Ali-Cdn-Real-Ip（与 design / RC 实测一致）；
+# 若未来本地不再透传，断言会整体偏移即暴露环境非等价（对齐 CHECKLIST.md），届时归桶以纯函数单测为准。
 RL_MAX=20  # = index.js RATE_LIMIT_MAX；查询/captcha 共用桶 ratelimit:<ip>，authcb 独立桶 ratelimit:authcb:<ip>。
-# 连发 n 次取末次 code（用于「打满桶」断言）。
 hammer(){ local n="$1"; shift; local last=""; for _i in $(seq 1 "$n"); do last=$(code "$@"); done; printf '%s' "$last"; }
+# checkRateLimit 用固定窗口 now-(now%60)；若 RL_MAX+1 连发跨窗口边界，计数会中途重置→末次到不了上限。
+# 故每个「打满到 429」前对齐到新窗口起点：仅当处于当前窗口末段(>45s)时才睡入下一窗口（最多 ~15s，平时不睡）。
+align_window(){ local sec; sec=$(( $(date +%s) % 60 )); if [ "$sec" -gt 45 ]; then sleep $((61 - sec)); fi; }
 
-# 段间清 KV + 重启（用 CDN 测试 toml；CIDRS 含逗号→必须经 [vars] 注入，非 --var）。
+# 段间清 KV + 重启（用 CDN 测试 toml；密钥经 [vars] 注入）。
 start_cdn
-CF_IN="203.0.113.50"      # 命中白名单（模拟阿里云 CDN 回源节点 IP）
-CF_IN2="198.51.100.77"    # 另一命中白名单的 CDN 回源 IP（同样应按受信头真实 IP 归桶）
-CF_DIRECT="8.8.8.8"       # 不在白名单（模拟直连 Cloudflare 源站）
-# 注：captcha 未配 → 限流通过后返 503（功能未启用）；503≠429 即「未被限流」哨兵。auth-callback 同理：
-# 限流通过后因 WeChat 未配返 503，亦作「未被限流」哨兵。429 一律来自 checkRateLimit。
+AUTH="X-Origin-Auth: $CDN_SECRET"                 # 有效密钥（=经 CDN 覆写注入）
+AUTH_BAD="X-Origin-Auth: smoke-WRONG-secret-value" # 伪造/错误密钥（攻击者猜不到真值）
+CF_NODE="203.0.113.50"    # 经 CDN 时 CF-Connecting-IP = CDN 回源节点 IP（密钥有效则忽略它、按真实头归桶）
+CF_NODE2="198.51.100.77"  # 另一 CDN 回源节点 IP（同一真实用户应仍同桶）
+CF_DIRECT="8.8.8.8"       # 直连 Cloudflare 源站时的真实出口 IP
+# 注：captcha 未配 → 限流通过后返 503（功能未启用）；503≠429 即「未被限流」哨兵。auth-callback 同理。429 一律来自 checkRateLimit。
 
-echo "## 4.4① 经 CDN 不同真实用户 IP 互不挤占（按 Ali-Cdn-Real-Ip 归桶，非 CDN 节点 IP）##"
-# 真实用户 A（198.51.100.10）：连发 RL_MAX+1 次 → 末次必 429（按真实 IP 计数到上限）。
-A_LAST=$(hammer $((RL_MAX+1)) -H "CF-Connecting-IP: $CF_IN" -H "Ali-Cdn-Real-Ip: 198.51.100.10" "$B/api/captcha")
+echo "## 4.4① 经 CDN（有效密钥）不同真实用户互不挤占（按 Ali-Cdn-Real-Ip 归桶，非 CDN 节点 IP）##"
+# 真实用户 A（198.51.100.10）：带有效密钥连发 RL_MAX+1 → 末次必 429（按真实 IP 计数到上限）。
+align_window
+A_LAST=$(hammer $((RL_MAX+1)) -H "CF-Connecting-IP: $CF_NODE" -H "$AUTH" -H "Ali-Cdn-Real-Ip: 198.51.100.10" "$B/api/captcha")
 [ "$A_LAST" = 429 ] && ok "4.4① 真实用户 A 经 CDN 计数到上限 → 429（按 Ali-Cdn-Real-Ip 真实 IP）" || no "4.4① 真实用户 A 未到 429 ($A_LAST)"
-# 真实用户 B（198.51.100.20）：同一 CDN 节点 IP、不同真实头 → 独立桶，1 次必非 429。
-B_ONE=$(code -H "CF-Connecting-IP: $CF_IN" -H "Ali-Cdn-Real-Ip: 198.51.100.20" "$B/api/captcha")
-[ "$B_ONE" != 429 ] && ok "4.4① 真实用户 B 独立桶不受 A 挤占 → 非 429 ($B_ONE)（真实 IP 各自计数）" || no "4.4① 真实用户 B 被 A 挤占成 429（误并入 CDN 节点桶）"
-# 同一真实用户经【不同 CDN 节点 IP】(CF_IN2) 仍归同一真实 IP 桶：A 已满 → 仍 429（证按真实 IP 而非节点 IP）。
-A_VIA2=$(code -H "CF-Connecting-IP: $CF_IN2" -H "Ali-Cdn-Real-Ip: 198.51.100.10" "$B/api/captcha")
-[ "$A_VIA2" = 429 ] && ok "4.4① 真实用户 A 经另一 CDN 节点($CF_IN2)仍同桶 429（按真实 IP 非节点 IP 归桶）" || no "4.4① 真实用户 A 换 CDN 节点后逃逸限流 ($A_VIA2)（误按节点 IP 归桶）"
+# 真实用户 B（198.51.100.20）：同一 CDN 节点 IP、有效密钥、不同真实头 → 独立桶，1 次未限流 → 503（功能未配哨兵；=503 而非 !=429，服务挂(000)时不假过）。
+B_ONE=$(code -H "CF-Connecting-IP: $CF_NODE" -H "$AUTH" -H "Ali-Cdn-Real-Ip: 198.51.100.20" "$B/api/captcha")
+[ "$B_ONE" = 503 ] && ok "4.4① 真实用户 B 独立桶不受 A 挤占 → 503 未限流（真实 IP 各自计数）" || no "4.4① 真实用户 B 被 A 挤占或服务异常 ($B_ONE)"
+# 同一真实用户经【不同 CDN 节点 IP】(CF_NODE2) 仍归同一真实 IP 桶：A 已满 → 仍 429（证按真实 IP 而非节点 IP）。
+A_VIA2=$(code -H "CF-Connecting-IP: $CF_NODE2" -H "$AUTH" -H "Ali-Cdn-Real-Ip: 198.51.100.10" "$B/api/captcha")
+[ "$A_VIA2" = 429 ] && ok "4.4① 真实用户 A 经另一 CDN 节点($CF_NODE2)仍同桶 429（按真实 IP 非节点 IP 归桶）" || no "4.4① 真实用户 A 换 CDN 节点后逃逸限流 ($A_VIA2)（误按节点 IP 归桶）"
 
 echo "## 4.4② 经 CDN 伪造 XFF 不绕过限流（绝不采信 XFF 任何分段）##"
-# 真实用户 A 已满桶；每次带【不同伪造 XFF】仍 429 → XFF 未被用作自选桶键（否则每次新桶永不 429）。
-XFF1=$(code -H "CF-Connecting-IP: $CF_IN" -H "Ali-Cdn-Real-Ip: 198.51.100.10" -H "X-Forwarded-For: 6.6.6.6, 198.51.100.10" "$B/api/captcha")
-XFF2=$(code -H "CF-Connecting-IP: $CF_IN" -H "Ali-Cdn-Real-Ip: 198.51.100.10" -H "X-Forwarded-For: 7.7.7.7, 198.51.100.10" "$B/api/captcha")
+# 真实用户 A 已满桶；带有效密钥 + 每次不同伪造 XFF 仍 429 → XFF 未被用作自选桶键。
+XFF1=$(code -H "CF-Connecting-IP: $CF_NODE" -H "$AUTH" -H "Ali-Cdn-Real-Ip: 198.51.100.10" -H "X-Forwarded-For: 6.6.6.6, 198.51.100.10" "$B/api/captcha")
+XFF2=$(code -H "CF-Connecting-IP: $CF_NODE" -H "$AUTH" -H "Ali-Cdn-Real-Ip: 198.51.100.10" -H "X-Forwarded-For: 7.7.7.7, 198.51.100.10" "$B/api/captcha")
 [ "$XFF1" = 429 ] && [ "$XFF2" = 429 ] && ok "4.4② 满桶真实用户带不同伪造 XFF 仍 429（XFF 不制造自选桶）" || no "4.4② 伪造 XFF 绕过限流 (XFF1=$XFF1 XFF2=$XFF2)"
 
-echo "## 4.4③ 直连(CF-IP∉白名单) + 伪造 Ali-Cdn-Real-Ip/XFF → 按 CF-Connecting-IP 计数 ##"
-# 直连真实出口 8.8.8.8：每次伪造不同 Ali-Cdn-Real-Ip + XFF；若误采信伪造头则每次新桶永不 429。
-# 连发 RL_MAX+1 次（每次伪造头都不同）→ 末次必 429（证明按真实 CF-IP 8.8.8.8 计数，伪造头被忽略）。
+echo "## 4.4③ 直连(无密钥) + 伪造 Ali-Cdn-Real-Ip/XFF → 按 CF-Connecting-IP 计数 ##"
+# 直连真实出口 8.8.8.8（不带 X-Origin-Auth）：每次伪造不同 Ali-Cdn-Real-Ip + XFF；若误采信伪造头则每次新桶永不 429。
+align_window
 D_LAST=""
 for i in $(seq 1 $((RL_MAX+1))); do
   D_LAST=$(code -H "CF-Connecting-IP: $CF_DIRECT" -H "Ali-Cdn-Real-Ip: 1.2.3.$i" -H "X-Forwarded-For: 5.5.5.$i" "$B/api/captcha")
 done
-[ "$D_LAST" = 429 ] && ok "4.4③ 直连伪造 Ali-Cdn-Real-Ip/XFF 均无效，按 CF-Connecting-IP 计数到 429" || no "4.4③ 直连伪造头绕过限流（永不 429, last=$D_LAST）"
+[ "$D_LAST" = 429 ] && ok "4.4③ 直连无密钥伪造 Ali-Cdn-Real-Ip/XFF 均无效，按 CF-Connecting-IP 计数到 429" || no "4.4③ 直连伪造头绕过限流（永不 429, last=${D_LAST}）"
 
-echo "## 4.4④ auth-callback 在 CDN 路径按真实用户 IP 计数（独立桶 authcb，不与查询互挤）##"
+echo "## 4.4④ 错误密钥（伪造 X-Origin-Auth）→ 按 CF-Connecting-IP 计数（不采信注入头）##"
+# 同一直连出口 7.7.7.7 带【错误密钥】+ 每次不同伪造 Ali-Cdn-Real-Ip：若误信则每次新桶永不 429；正确应按 CF-IP 到 429。
+CF_BADKEY="7.7.7.7"
+align_window
+BK_LAST=""
+for i in $(seq 1 $((RL_MAX+1))); do
+  BK_LAST=$(code -H "CF-Connecting-IP: $CF_BADKEY" -H "$AUTH_BAD" -H "Ali-Cdn-Real-Ip: 4.4.4.$i" "$B/api/captcha")
+done
+[ "$BK_LAST" = 429 ] && ok "4.4④ 错误密钥下伪造 Ali-Cdn-Real-Ip 无效，按 CF-Connecting-IP 计数到 429" || no "4.4④ 错误密钥仍采信注入头绕过限流（永不 429, last=${BK_LAST}）"
+
+echo "## 4.4⑤ auth-callback 经 CDN（有效密钥）按真实用户 IP 计数（独立桶 authcb，不与查询互挤）##"
 # 清 KV 重启隔离本段（authcb 桶独立、且与上文 captcha 桶证伪互不渗透）。
 start_cdn
+AUTH="X-Origin-Auth: $CDN_SECRET"
 CB="$B/api/wechat/auth-callback?code=x&state=BG1ABC"
-# 真实用户 U（198.51.100.30）经 CDN + 每次不同伪造 XFF：连发 RL_MAX+1 → 末次 429（按真实 IP，XFF 不绕过）。
+# 真实用户 U（198.51.100.30）带有效密钥 + 每次不同伪造 XFF：连发 RL_MAX+1 → 末次 429（按真实 IP，XFF 不绕过）。
+align_window
 U_LAST=""
 for i in $(seq 1 $((RL_MAX+1))); do
-  U_LAST=$(code -H "CF-Connecting-IP: $CF_IN" -H "Ali-Cdn-Real-Ip: 198.51.100.30" -H "X-Forwarded-For: 9.9.9.$i" "$CB")
+  U_LAST=$(code -H "CF-Connecting-IP: $CF_NODE" -H "$AUTH" -H "Ali-Cdn-Real-Ip: 198.51.100.30" -H "X-Forwarded-For: 9.9.9.$i" "$CB")
 done
-[ "$U_LAST" = 429 ] && ok "4.4④ auth-callback 真实用户经 CDN 计数到 429（按真实 IP，伪造 XFF 不绕过）" || no "4.4④ auth-callback 真实用户未到 429 ($U_LAST)"
-# 同一真实用户 U 在【查询桶】仍新鲜（authcb 与查询桶独立）→ 非 429。
-U_QUERY=$(code -H "CF-Connecting-IP: $CF_IN" -H "Ali-Cdn-Real-Ip: 198.51.100.30" "$B/api/captcha")
-[ "$U_QUERY" != 429 ] && ok "4.4④ 同真实用户查询桶不受 authcb 挤占 → 非 429 ($U_QUERY)（独立桶不变）" || no "4.4④ authcb 桶渗入查询桶（独立桶被破坏）"
-# 另一真实用户 V 在 auth-callback 独立桶 → 1 次非 429。
-V_ONE=$(code -H "CF-Connecting-IP: $CF_IN" -H "Ali-Cdn-Real-Ip: 198.51.100.40" "$CB")
-[ "$V_ONE" != 429 ] && ok "4.4④ auth-callback 另一真实用户 V 独立桶 → 非 429 ($V_ONE)" || no "4.4④ auth-callback 真实用户 V 被 U 挤占成 429"
+[ "$U_LAST" = 429 ] && ok "4.4⑤ auth-callback 真实用户经 CDN 计数到 429（按真实 IP，伪造 XFF 不绕过）" || no "4.4⑤ auth-callback 真实用户未到 429 ($U_LAST)"
+# 同一真实用户 U 在【查询桶】仍新鲜（authcb 与查询桶独立）→ 1 次未限流 → 503 哨兵（=503 而非 !=429，服务挂(000)不假过）。
+U_QUERY=$(code -H "CF-Connecting-IP: $CF_NODE" -H "$AUTH" -H "Ali-Cdn-Real-Ip: 198.51.100.30" "$B/api/captcha")
+[ "$U_QUERY" = 503 ] && ok "4.4⑤ 同真实用户查询桶不受 authcb 挤占 → 503 未限流（独立桶不变）" || no "4.4⑤ authcb 桶渗入查询桶或服务异常 ($U_QUERY)"
+# 另一真实用户 V 在 auth-callback 独立桶 → 1 次未限流 → 503 哨兵（=503 而非 !=429，服务挂(000)不假过）。
+V_ONE=$(code -H "CF-Connecting-IP: $CF_NODE" -H "$AUTH" -H "Ali-Cdn-Real-Ip: 198.51.100.40" "$CB")
+[ "$V_ONE" = 503 ] && ok "4.4⑤ auth-callback 另一真实用户 V 独立桶 → 503 未限流" || no "4.4⑤ auth-callback 真实用户 V 被 U 挤占或服务异常 ($V_ONE)"
 
 rm -f "$CDN_TOML" 2>/dev/null || true
 
