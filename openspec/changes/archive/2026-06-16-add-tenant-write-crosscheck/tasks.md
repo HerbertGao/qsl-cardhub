@@ -36,6 +36,6 @@
 
 ## 8. 部署与归档
 
-- [ ] 8.1 `pnpm run deploy`，记录新 worker 版本 + 回滚目标（无 D1 迁移、回滚=退版本）
-- [ ] 8.2【验收】现有桌面端不发头 → 200 等价；带正确/错误头 → 200/403；/ping 回显租户；表驱动 Key 在 /ping 通
-- [ ] 8.3 用户确认后 `openspec-cn archive add-tenant-write-crosscheck`（增量并入 `cloud-backend-api`/`tenant-isolation` 主规范）
+- [x] 8.1 `pnpm run deploy` → worker **c6386089-d888-48f9-b810-2a0738b27830**（回滚目标 **facccf8a**，无 D1 迁移、回滚=退版本）
+- [x] 8.2【验收】生产冒烟全绿：无凭据 /ping 401+auth_failed / /api/config 200 / /sync·/pull 401；有效 Key /ping 200 tenant=bh2ro fallback=false（表驱动命中、缺口修复）；+X-Tenant-Id 一致 200 / 不一致 403 tenant_mismatch；CORS 含 X-Tenant-Id
+- [x] 8.3 `openspec-cn archive add-tenant-write-crosscheck`（增量并入 `cloud-backend-api`/`tenant-isolation` 主规范）

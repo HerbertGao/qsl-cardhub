@@ -168,3 +168,26 @@
 - **并且** 执行前**必须**以 `wrangler d1 export` 全量备份作为回滚点
 - **并且** 回滚剧本**必须**写明：迁移后 worker 读 `callsign_openid_bindings.tenant_id` 列（auth-callback 写、route-push 反查），**不可单独回退 worker**（旧 worker 的 `INSERT (callsign, openid, …)` 撞新表 NOT NULL `tenant_id`、`WHERE callsign=?` 反查仍可用但写入会失败）；回滚 = worker 与表配对还原
 
+### 需求：声明租户交叉校验不变量（归属真源恒为 Key）
+
+写入/探活端点（`/sync`、`/pull`、`/ping`）接受客户端声明的租户头 `X-Tenant-Id` 时，该声明值**仅**可用于「与 `resolveTenant(Key)` 解析出的 `tenant_id` 做一致性交叉校验」与「回显」，**禁止**将其用作写入/读取的 `tenant_id` 目标。租户归属的**唯一真源**恒为写入 Key 经 `resolveTenant` 的解析结果——本需求是「写入按 Key 解析租户」的强化补充，确保「显式声明」不退化为「信任客户端自报归属」。
+
+#### 场景：声明值绝不当写入/读取目标
+
+- **当** 客户端持租户 A 的有效写入 Key，却声明 `X-Tenant-Id: B`
+- **那么** 服务端**必须**以 `resolveTenant(Key)=A` 为准，检测到声明 B ≠ 解析 A → 返回 403、**零改动**
+- **并且** **禁止**存在任何代码路径用声明值 B 作为 `DELETE/INSERT/SELECT` 的 `tenant_id`（否则「持 A 的 Key + 声明 B → 写进 B」复活信任客户端自报归属的越权写入）
+- **并且** 即便声明与解析一致，入库/读取**仍必须**用 `resolveTenant` 的返回值（而非回显声明值），保证单一真源
+
+#### 场景：缺/空声明头向后兼容
+
+- **当** 请求不携带 `X-Tenant-Id`，或携带但为空串/纯空白（值经 `trim` 后为空）
+- **那么** 交叉校验**必须**跳过（放行），归属仍由 `resolveTenant(Key)` 决定，行为与本变更前等价——声明值判空**必须**在 `trim` 之后，空白头等同缺头
+- **并且** 未来如需在全量升级后强制要求声明头，**应**以独立 env 开关（如 `REQUIRE_TENANT_HEADER`）控制，本变更默认放行
+
+#### 场景：/ping 的租户解析必须只读
+
+- **当** `/ping` 走 `resolveTenant` 做鉴权与租户回显
+- **那么** 该调用**必须只读**：经 `env.API_KEY` 兜底命中时**禁止**递增 `service_counters('auth_fallback')`（`resolveTenant` 须支持只读模式参数，`/ping` 传入）
+- **并且** 理由：`/ping` 是探活/测试连接，高频且非真实写入，若计入兜底计数会污染「撤兜底量化判据 `auth_fallback count===0`」（见「env.API_KEY 直比兜底」需求的撤销判据）；`/sync`、`/pull` 的兜底命中**仍**计数
+
