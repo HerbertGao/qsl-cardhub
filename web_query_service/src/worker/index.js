@@ -160,13 +160,27 @@ export async function computeDifficulty(env, bkey) {
     const windowStart = now - (now % POWRATE_TTL);
     const pr = await env.RATE_LIMIT.get(`powrate:${bkey}`, { type: 'json' });
     const rate = pr && pr.window === windowStart ? pr.count : 0;
+    return difficultyFor(rate); // 只读算难度，不写——powrate 递增见 bumpPowrate（在 seed 落库后才计数）
+  } catch {
+    return unknownDifficulty(); // powrate 读失败 fail-secure → DIFF_MAX
+  }
+}
+
+/**
+ * 递增 powrate 计数（best-effort）。**在 `powseed` 写入成功之后**调用——失败的 challenge（powseed 写失败→503）
+ * 不应抬高该 IP 的自适应难度。bump 自身失败仅丢一次计数、不影响已签发的 seed（故 swallow）。
+ */
+export async function bumpPowrate(env, bkey) {
+  if (bkey === 'unknown') return;
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const windowStart = now - (now % POWRATE_TTL);
+    const pr = await env.RATE_LIMIT.get(`powrate:${bkey}`, { type: 'json' });
+    const rate = pr && pr.window === windowStart ? pr.count : 0;
     await env.RATE_LIMIT.put(`powrate:${bkey}`, JSON.stringify({ window: windowStart, count: rate + 1 }), {
       expirationTtl: POWRATE_TTL + 10,
     });
-    return difficultyFor(rate);
-  } catch {
-    return unknownDifficulty(); // powrate 读写失败 fail-secure → DIFF_MAX
-  }
+  } catch { /* best-effort：bump 失败不影响已签发 seed */ }
 }
 
 /**
@@ -557,7 +571,7 @@ export default {
           if (!hs.allowed) {
             return json({ success: false, message: '请求过于频繁，请稍后再试' }, 429);
           }
-          const difficulty = await computeDifficulty(env, bkey); // powrate 失败 fail-secure→DIFF_MAX
+          const difficulty = await computeDifficulty(env, bkey); // 只读算难度；powrate 读失败 fail-secure→DIFF_MAX
           const seed = randomHex(16);
           const record = {
             difficulty,
@@ -565,8 +579,9 @@ export default {
             challenge_ua_hash: await uaHash(request.headers.get('User-Agent')),
             exp: Date.now() + POWSEED_TTL * 1000,
           };
-          // 写 powseed 失败 → fail-closed（禁返回不可兑换的 seed）
+          // 写 powseed 失败 → fail-closed（禁返回不可兑换的 seed）；此前未递增 powrate
           await env.RATE_LIMIT.put(`powseed:${seed}`, JSON.stringify(record), { expirationTtl: POWSEED_TTL });
+          await bumpPowrate(env, bkey); // seed 落库成功后才递增 powrate（失败 challenge 不抬难度）
           return json({ success: true, seed, difficulty });
         } catch {
           return json({ success: false, message: '会话功能暂不可用' }, 503);

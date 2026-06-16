@@ -86,11 +86,16 @@ export function createSessionManager(deps) {
         try { data = await res.json(); } catch { data = null; }
       }
       last = { status: res.status, data, retried: attempt > 0 };
-      const isRateLimited = res.status === 429 && data && data.retry_after != null; // 限流 429 带 retry_after
-      const needRehandshake = res.status === 401 || (res.status === 429 && !isRateLimited); // 401 或 配额 429
-      if (needRehandshake && attempt === 0) {
-        invalidate(snap); // 仅使匹配旧会话失效
-        continue; // 重走握手重试一次
+      if (attempt === 0) {
+        const isRateLimited = res.status === 429 && data && data.retry_after != null; // 限流 429 带 retry_after
+        if (res.status === 401 || (res.status === 429 && !isRateLimited)) {
+          invalidate(snap); // 会话失效/配额用尽 → 仅使匹配旧会话失效、重走握手重试一次
+          continue;
+        }
+        if (res.status === 403) {
+          // _ts 时窗/签名过期 → 同会话**重签**（下轮 signQuery 生成新 _ts/_nonce）重试一次，**不**失效会话/不重握手
+          continue;
+        }
       }
       return last;
     }

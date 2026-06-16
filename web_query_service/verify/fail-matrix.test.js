@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import {
   validateQuerySession,
   computeDifficulty,
+  bumpPowrate,
   handshakeRateLimit,
   checkRateLimit,
 } from '../src/worker/index.js';
@@ -181,4 +182,21 @@ test('computeDifficulty: unknown → DIFF_MAX', async () => {
 test('computeDifficulty: 正常低频 → base', async () => {
   const d = await computeDifficulty({ RATE_LIMIT: mockKV() }, '1.2.3.4');
   assert.equal(d, DIFFICULTY_DEFAULTS.base);
+});
+test('computeDifficulty: 只读（不写 powrate）——失败 challenge 不抬难度', async () => {
+  const kv = mockKV();
+  await computeDifficulty({ RATE_LIMIT: kv }, '4.4.4.4');
+  await computeDifficulty({ RATE_LIMIT: kv }, '4.4.4.4');
+  assert.equal(kv.store.has('powrate:4.4.4.4'), false, 'computeDifficulty 不应写 powrate');
+});
+test('bumpPowrate: seed 落库后递增；连续 bump 推高 difficulty（自适应仍生效）', async () => {
+  const kv = mockKV();
+  const env = { RATE_LIMIT: kv };
+  for (let i = 0; i < 10; i++) await bumpPowrate(env, '6.6.6.6');
+  const d = await computeDifficulty(env, '6.6.6.6');
+  assert.ok(d > DIFFICULTY_DEFAULTS.base, '高频 bump 后难度应升过 base');
+});
+test('bumpPowrate: KV 抛错 → best-effort 不抛（不影响已签发 seed）', async () => {
+  await bumpPowrate({ RATE_LIMIT: throwingKV }, '7.7.7.7'); // 不应 reject
+  await bumpPowrate({ RATE_LIMIT: mockKV() }, 'unknown'); // unknown 直接 return
 });
