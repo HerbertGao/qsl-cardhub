@@ -23,7 +23,7 @@ import {
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Tenant-Id',
   'Access-Control-Max-Age': '86400',
 };
 
@@ -247,13 +247,16 @@ export async function chargeQuota(env, sid) {
 
 /**
  * 由写入 Key 解析租户（表驱动为主 + env.API_KEY 直比兜底，见 tenant-isolation 规范）。
- * @returns {Promise<string|null>} 命中返回 tenant_id；不命中/env 空返回 null（调用方应 401）。
- * @throws 兜底计数器写失败（表缺失 no such table 等）时抛错，使 /sync 返非 200、不静默吞。
+ * @param {object} [opts] - `{ readonly?: boolean }`；readonly=true（/ping 探活）跳过兜底计数 UPDATE。
+ * @returns {Promise<{tenant: string|null, viaFallback: boolean}>} 命中 tenant=tenant_id；
+ *   不命中/env 空 tenant=null（调用方应 401）；viaFallback=本次是否经 env.API_KEY 兜底命中。
+ * @throws 兜底计数器写失败（表缺失 no such table 等）时抛错，使 /sync 返非 200、不静默吞（readonly 下不写故不抛）。
  */
-async function resolveTenant(env, key) {
+export async function resolveTenant(env, key, opts = {}) {
+  const readonly = opts.readonly === true;
   const trimmedKey = (key || '').trim();
   // 空/缺失 Bearer 永不鉴权：即便 sha256('') 被误 seed 成 active 凭据，也直接拒绝（defense-in-depth）
-  if (trimmedKey === '') return null;
+  if (trimmedKey === '') return { tenant: null, viaFallback: false };
   // env.API_KEY「空」统一判据（纯空白经 trim 成空串也算空）
   const apiKey = (env.API_KEY || '').trim();
 
@@ -265,26 +268,45 @@ async function resolveTenant(env, key) {
     .bind(keyHash)
     .first();
   if (cred && cred.tenant_id) {
-    return cred.tenant_id;
+    return { tenant: cred.tenant_id, viaFallback: false };
   }
 
-  // env.API_KEY 直比兜底（过渡期）：未命中且 trim(key)===trim(env.API_KEY) 且 env.API_KEY 非空
+  // env.API_KEY 直比兜底（过渡期）：未命中且 trim(key)===trim(env.API_KEY) 且 env.API_KEY 非空。
+  // readonly（/ping 探活）跳过兜底计数 UPDATE——否则高频探活/测试连接会污染「撤兜底验收 auth_fallback count===0」。
   if (apiKey !== '' && trimmedKey === apiKey) {
-    // 递增 D1 计数行（禁用 KV，KV fail-open 会吞递增致假绿）；
-    // 此 UPDATE 是独立 .run()、不进 /sync 数据 batch。
-    const result = await env.DB.prepare(
-      "UPDATE service_counters SET count = count + 1 WHERE name = 'auth_fallback'"
-    ).run();
-    // 写失败判据：result.meta.changes === 0（行缺失，漏 seed）或上面 .run() 抛错（表缺失）→ 视为写失败
-    if (!result || !result.meta || result.meta.changes === 0) {
-      throw new Error('auth_fallback counter row missing');
+    if (!readonly) {
+      // 递增 D1 计数行（禁用 KV，KV fail-open 会吞递增致假绿）；此 UPDATE 是独立 .run()、不进 /sync 数据 batch。
+      const result = await env.DB.prepare(
+        "UPDATE service_counters SET count = count + 1 WHERE name = 'auth_fallback'"
+      ).run();
+      // 写失败判据：result.meta.changes === 0（行缺失，漏 seed）或上面 .run() 抛错（表缺失）→ 视为写失败
+      if (!result || !result.meta || result.meta.changes === 0) {
+        throw new Error('auth_fallback counter row missing');
+      }
     }
-    return 'bh2ro';
+    return { tenant: 'bh2ro', viaFallback: true };
   }
 
-  // env.API_KEY 未配置或仍不命中 → 不命中（调用方 401）；
-  // 禁止沿用「env.API_KEY 空即放行」。
-  return null;
+  // env.API_KEY 未配置或仍不命中 → 不命中（调用方 401）；禁止沿用「env.API_KEY 空即放行」。
+  return { tenant: null, viaFallback: false };
+}
+
+/**
+ * 写入/探活端点的声明租户交叉校验：resolveTenant 解析 Key 得 tenant（唯一真源），与客户端声明的
+ * declared（X-Tenant-Id）比对——不一致 403、缺声明（空）向后兼容放行。
+ * ★红线：返回的 tenant 恒为 resolveTenant 的解析值，declared 只参与比较、绝不当写入/读取目标。
+ * @returns {Promise<{ok:boolean, tenant?:string, viaFallback?:boolean, status?:number, code?:string}>}
+ */
+export async function crossCheckTenant(env, key, declared, opts = {}) {
+  const { tenant, viaFallback } = await resolveTenant(env, key, opts);
+  if (!tenant) {
+    return { ok: false, status: 401, code: 'auth_failed' };
+  }
+  // declared 为空（缺头/空串）→ 向后兼容放行；非空且 !== 解析租户 → 403（绝不据 declared 写入/读取）
+  if (declared && declared !== tenant) {
+    return { ok: false, status: 403, code: 'tenant_mismatch', tenant, viaFallback };
+  }
+  return { ok: true, tenant, viaFallback };
 }
 
 export default {
@@ -301,28 +323,35 @@ export default {
       // GET /ping
       if (path === '/ping' && method === 'GET') {
         const token = getBearerToken(request);
-        // 仅在 env.API_KEY 侧补 trim（token 侧 getBearerToken 已 trim）；
-        // env.API_KEY 空（含纯空白经 trim 后为空）时返回 401，与 /sync 一致，删除原 fail-open。
-        const apiKey = (env.API_KEY || '').trim();
-        if (apiKey === '' || token !== apiKey) {
-          return json({ success: false, message: 'API Key 无效' }, 401);
+        const declared = (request.headers.get('X-Tenant-Id') || '').trim();
+        // 走 resolveTenant（表驱动+兜底，readonly 不计兜底计数），使「多 Key→同租户」表驱动凭据也能测通；
+        // 并对 X-Tenant-Id 交叉校验、回显解析出的租户身份供客户端确认。env.API_KEY 兜底已 trim、空则 401（不 fail-open）。
+        const cc = await crossCheckTenant(env, token, declared, { readonly: true });
+        if (!cc.ok) {
+          const msg = cc.code === 'tenant_mismatch' ? '申报租户与凭据不一致' : 'API Key 无效';
+          return json({ success: false, code: cc.code, message: msg }, cc.status);
         }
         return json({
           success: true,
           message: 'pong',
           server_time: serverTime(),
+          tenant: cc.tenant,
+          fallback: cc.viaFallback === true,
         });
       }
 
       // POST /sync
       if (path === '/sync' && method === 'POST') {
         const token = getBearerToken(request);
-        // 鉴权统一由 resolveTenant 命中决定（删除原 token!==env.API_KEY 前置门，
-        // 否则多 Key→同租户的表驱动凭据会被旧门 401 架空）。
-        const tenant_id = await resolveTenant(env, token);
-        if (!tenant_id) {
-          return json({ success: false, message: '认证失败，请检查 API Key' }, 401);
+        const declared = (request.headers.get('X-Tenant-Id') || '').trim();
+        // 鉴权由 resolveTenant 命中决定 + 声明租户交叉校验（X-Tenant-Id 仅校验+回显、绝不当写入目标）；
+        // 缺声明头向后兼容放行，归属真源恒为 Key 解析值。声明不一致 → 403 且在任何 DELETE/INSERT 之前。
+        const cc = await crossCheckTenant(env, token, declared);
+        if (!cc.ok) {
+          const msg = cc.code === 'tenant_mismatch' ? '申报租户与凭据不一致' : '认证失败，请检查 API Key';
+          return json({ success: false, code: cc.code, message: msg }, cc.status);
         }
+        const tenant_id = cc.tenant;
         let body;
         try {
           body = await request.json();
@@ -494,10 +523,14 @@ export default {
       // GET /pull 按写入 Key 拉回该租户全量快照 + 当前 server_version
       if (path === '/pull' && method === 'GET') {
         const token = getBearerToken(request);
-        const tenant_id = await resolveTenant(env, token);
-        if (!tenant_id) {
-          return json({ success: false, message: '认证失败，请检查 API Key' }, 401);
+        const declared = (request.headers.get('X-Tenant-Id') || '').trim();
+        // 同 /sync：声明租户交叉校验（仅校验+回显、绝不当读取目标），缺声明向后兼容，403 在任何 SELECT 之前。
+        const cc = await crossCheckTenant(env, token, declared);
+        if (!cc.ok) {
+          const msg = cc.code === 'tenant_mismatch' ? '申报租户与凭据不一致' : '认证失败，请检查 API Key';
+          return json({ success: false, code: cc.code, message: msg }, cc.status);
         }
+        const tenant_id = cc.tenant;
 
         const DB = env.DB;
         // 6 条 SELECT（5 业务表显式业务列、排除 tenant_id；1 条 sync_meta），各计 1 次查询；

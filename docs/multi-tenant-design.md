@@ -101,6 +101,17 @@
 
 ②的明文自助须在条款写明：数据视为公开、平台不担保密性；②租户作为其上传他人 PII 的处理者自负告知义务；禁止上传敏感个人信息（手机号+详址）到明文存储。
 
+> **阶段 4 修订（2026-06-16，用户拍板）——本表 ①/② 分级在官方云上退役**：
+>
+> **官方云只收认证租户（写入），不收游客。** 故官方云上不存在「②非认证租户」住户——每个官方租户都有运维线下签发的注册凭据 `(tenant, key)`，`key` 即「认证码」。后果：
+> - **写入（sync/pull）**：仅认证租户（worker 交叉校验申报 `tenant` 与 `key→tenant` 一致，不一致 403）。无游客自动建行、无防 spam、无撞码问题。
+> - **读取（query）**：仍公开、按租户路由，**恒走 PoW**（官方租户全是认证档、无可切换的 open 档）。
+> - **`tier` 退役**：`tenants.tier` 列保留为预留字段，官方云**不接 per-tenant tier 分流逻辑**。原②档（轻量明文、不托底）整体**搬到自托管**——自托管者若想免 PoW，做成 worker 部署期 env 开关（如 `REQUIRE_POW`），而非 per-tenant tier。
+> - **客户端两模式**（非三模式）：① **云同步**（官方或自托管同一套配置 `(api_url, tenant, key)`，仅 `api_url` 不同）；② **纯本地**（无云、导出/导入、零配置，现有本地用户不被挡）。租户身份常驻标题栏、点击导航到「租户 & 云端同步」设置。
+> - **自托管**：我方只提供 **API 规范**（`docs/cloud-sync-api-spec.md`，默认 `default` 单租户）+ 开源 worker 代码可自部署；不承诺 turnkey 单租户产品。
+> - **注册**：纯线下运维签发 `(tenant, key)`，**无公开自助注册端点**（无滥用面）；加分项给管理员一个 **CLI 脚本** mint 凭据。
+> - **存量 `bh2ro` 零凭据迁移**：阶段 1 已把 `sha256(trim(API_KEY))` seed 为 `bh2ro-key` 凭据，现有全局 API_KEY 本就解析为 `bh2ro`——存量用户升级后只需在租户框填 `bh2ro`、key 不变。
+
 ### 6. 全局表处理
 
 - **`callsign_openid_bindings`**：加 `tenant_id`，主键 `(tenant_id, callsign, openid)`。微信授权 `state` 改带 `tenant:callsign`，回调解析后按 tenant 写入；顺丰推送选 openid 时按 tenant 过滤，避免「A 租户订阅者收到 B 租户物流推送」。
@@ -191,11 +202,12 @@ CREATE TABLE tenant_routes (
 - 前端：PoW 计算与会话管理。
 - 验收：无会话/无有效签名的直接查询被拒；全量遍历需大量 PoW。
 
-### 阶段 4：多租户前端与分级
-- host/path → tenant 路由；`/api/config` 按 tenant 下发；`callsign_openid_bindings` 加 tenant + 微信 `state` 带 tenant + route-push 按 tenant 派生过滤。
-- 上线第二个真实租户（建 tenant + 凭据 + 路由 + 前端实例）；②非认证租户：明文自助 + 条款。
-- **桌面端租户身份**：把全局 API_KEY 配置项升级为「租户写凭据」配置（可填租户专属 Key；留空/旧值回退 default 行为）。与「上线第二个真实租户」是同一件事的写入侧——服务端发租户写 Key、桌面端配进去。「一个租户默认一个用户」为席位约束，落 UI/业务层、不改凭据模型（见 §2.1）。
-- 验收：新租户与 default 数据互不可见；现有移动端不受影响。
+### 阶段 4：多租户前端与桌面端身份（拆 4-A/4-B/4-C；见 §5 阶段 4 修订）
+
+- **4-A 全局表租户化（已闭环 2026-06-16）**：`callsign_openid_bindings` 加 `tenant_id`（迁移 0002）+ 微信 `state` 向前兼容 `tenant:callsign` + route-push 按匹配订单派生租户过滤；`sf_route_log` 保持全局。已部署生产 worker `facccf8a`、归档。
+- **4-B 路径路由 + 按租户配置（待做）**：路径前缀 `/t/<slug>/` → `tenant_routes`/`tenants` 解析；`/api/config` 按租户下发（filing/标题/功能）；查询/会话按租户隔离（KV 键加租户命名空间）。**官方云恒 PoW、不接 tier 分流**（见 §5 修订）。前端从 URL 派生 tenant、`state` 改发 `tenant:callsign`。上线第二个真实租户（建 tenant + 凭据 + 路由 + 前端实例）。
+- **4-C 桌面端租户身份与登录态（待做，需求已收敛 2026-06-16）**：客户端两模式（云同步 `(api_url, tenant, key)` / 纯本地）；首启登录窗；标题栏常驻租户、点击导航到「租户 & 云端同步」设置；`SyncConfig` 加 `tenant`（硬性必填走云同步时）；`/sync`·`/pull` 带申报 tenant，worker 交叉校验 `resolveTenant(key)===申报tenant` 不一致 403（**归属真源仍是 key、申报 tenant 只做校验+展示，绝不当写入目标**）；`/ping` 回显认证态。线下签发 + CLI mint 脚本（4-C4）；`cloud-sync-api-spec.md` 补 tenant 契约 + 自托管文档（4-C4，本期未改）。存量 `bh2ro` 零凭据迁移。**拆 4 子变更**（依赖序，4-C 全程不依赖 4-B、4-C1 可独立先行）：4-C1 worker 交叉校验（统一请求头 `X-Tenant-Id` + helper `crossCheckTenant`：`resolveTenant(key)` 命中后比对申报值、不一致 403、缺 header 向后兼容放行；**入库恒用 resolveTenant 返回值、申报值只校验+回显**；/ping 升级走 resolveTenant + 回显认证态 + readonly 不计兜底）→ 4-C2 桌面端 `SyncConfig.tenant`(Option+serde default)+命令+client header+四态枚举（sync 类型**纳入 ts-rs**）→ 4-C3 应用内首屏登录遮罩 + 自绘标题栏租户徽章 + DataTransferView 重组；4-C4 CLI `mint-credential.mjs`（离线 hash 出幂等 SQL）+ 文档，与 4-C1 并行。
+- 验收：新租户与 bh2ro 数据互不可见；现有移动端/本地用户不受影响。
 
 ### 可选增强（独立项，按需排期）
 - **PII 字段加密**：`sf_senders`/`sf_orders` 的姓名/电话/地址用对称 AES-GCM 字段加密，DEK 在 Cloudflare secret 并离线备份（防拖库、对齐个人信息保护合规）。与多租户、防爬正交，可独立实施。
