@@ -46,6 +46,26 @@
 
 - **顺丰路由推送**：服务端提供两条路径：正式 `POST /api/sf/route-push`、沙箱 `POST /api/sf/route-push/sandbox`；沙箱触发的用户推送内容带「【沙箱】」标记。请求/响应格式详见 OpenSpec 规范 `openspec/specs/sf-route-push-receiver/spec.md`。
 
+## 阶段 4-A：全局表租户化迁移（0002）
+
+把全局表 `callsign_openid_bindings` 加 `tenant_id` 行级隔离（主键 `(tenant_id, callsign, openid)`），存量回填创始租户 `bh2ro`；`sf_route_log` 保持全局不变（顺丰 waybill 全局唯一、tenant 由匹配的 `sf_orders` join 派生）。与配对 Worker 同批部署：Worker 的 route-push 按匹配订单派生租户后 `WHERE tenant_id=? AND callsign=? COLLATE NOCASE` 反查 openid（杜绝同呼号跨租户推送），auth-callback 由授权 `state`（`tenant:callsign`，无冒号回退 `bh2ro`）解析并校验活跃租户后写绑定。
+
+### 部署顺序（迁移与 Worker 配对、不可单退 Worker）
+
+1. **备份（回滚点）**：`npx wrangler d1 execute qsl-sync --remote --command "..."` 前，先全量导出
+   ```bash
+   npx wrangler d1 export qsl-sync --remote --output ~/qsl-d1-backup-before-0002.sql
+   ```
+2. **执行迁移**（运维在自己终端跑，单一 SQL 文件、整体原子，文件内无 `BEGIN/COMMIT`）
+   ```bash
+   npx wrangler d1 execute qsl-sync --remote --file=./migrations/0002_global_table_tenant.sql
+   ```
+3. **部署配对 Worker**：`pnpm run deploy`，记录新版本号与回滚目标版本。
+
+### 回滚
+
+迁移后新表 `tenant_id NOT NULL`，**旧 Worker 的 `INSERT (callsign, openid, …)` 会撞 NOT NULL → 不可单独回退 Worker**。回滚 = 退 Worker 版本 **+** 还原表（建新空 D1 import 备份 dump，或逐表 DROP 后 import；dump 不自动 DROP 已存在表）。未上线第二个真实租户前，全部绑定/订单仍归 `bh2ro`，迁移前后线上行为等价（无回归）。
+
 ## 防爬会话 / PoW（query-antibot-session，阶段 3-B）
 
 公开「按呼号查询」不登录、面向公众。查询侧防爬用 **PoW 门票 + 短时会话（绑真实 IP+UA）+ 会话配额 + 会话专属动态签名**把全量爬库成本抬到不划算（爬全库成本 ≈ 会话数 × PoW）。**物理上限诚实声明**：只抬成本、不杜绝遍历；纯 SHA-256 hashcash 对 GPU/ASIC 有数量级摊薄（memory-hard PoW 本期不引入）。

@@ -774,30 +774,38 @@ export default {
                 const orderid = r.orderid;
                 const mailno = r.mailno;
                 let callsign = null;
-                // route-push 是无凭据公开端点、无租户上下文，本期注入服务端常量 bh2ro；
-                // 按 order 派生确定租户属阶段 4。保留业务连接键 o.card_id = c.id（漏则退化笛卡尔积错号），
-                // 仅把隔离键 o.client_id=c.client_id 换为 o.tenant_id = c.tenant_id，并加 WHERE o.tenant_id = ?。
-                const tenant_id = 'bh2ro';
-                if (orderid) {
-                  const row = await DB.prepare(
-                    'SELECT c.callsign FROM sf_orders o JOIN cards c ON o.tenant_id = c.tenant_id AND o.card_id = c.id WHERE o.tenant_id = ? AND o.order_id = ? LIMIT 1'
-                  )
-                    .bind(tenant_id, orderid)
-                    .first();
-                  if (row) callsign = row.callsign;
+                let tenant_id = null;
+                // route-push 是无凭据公开端点、无路由/凭据上下文：租户由「本次匹配到的 sf_orders 行」派生
+                // （按 order_id/waybill_no 匹配订单，取回其 tenant_id），禁止注入硬编码常量或采信报文自报值。
+                // 保留业务连接键 o.card_id = c.id（漏则退化笛卡尔积错号）+ 同租户自洽 o.tenant_id = c.tenant_id
+                // （漏则订单跨租户错配卡片）。order_id 与 waybill_no 是同一 shipment 的两标识、应指向同一租户，
+                // 但二者无 DB 层唯一约束（顺丰侧全局唯一，但经各租户客户端自报同步入库）。【合并两键的全部候选行】
+                // 后按 distinct 租户数决策：==1 → 推送；==0 → 无匹配不推；>1（单键内跨租户 或 两键互相矛盾）→
+                // fail-closed 放弃推送（宁可不推也不向错租户订阅者推，硬化隔离）。单租户内多行（同租户多卡同单号）
+                // 仍取首条沿用原行为。
+                const candRows = [];
+                const matchOrders = async (col, val) => {
+                  const res = await DB.prepare(
+                    `SELECT c.callsign, o.tenant_id FROM sf_orders o JOIN cards c ON o.tenant_id = c.tenant_id AND o.card_id = c.id WHERE o.${col} = ?`
+                  ).bind(val).all();
+                  candRows.push(...(res.results || []));
+                };
+                if (orderid) await matchOrders('order_id', orderid);
+                if (mailno) await matchOrders('waybill_no', mailno);
+                const candTenants = new Set(candRows.map((x) => x.tenant_id));
+                if (candTenants.size === 1) {
+                  callsign = candRows[0].callsign;
+                  tenant_id = candRows[0].tenant_id;
+                } else if (candTenants.size > 1) {
+                  console.error('SF route-push ambiguous match across tenants, skip push', orderid, mailno);
                 }
-                if (!callsign && mailno) {
-                  const row = await DB.prepare(
-                    'SELECT c.callsign FROM sf_orders o JOIN cards c ON o.tenant_id = c.tenant_id AND o.card_id = c.id WHERE o.tenant_id = ? AND o.waybill_no = ? LIMIT 1'
-                  )
-                    .bind(tenant_id, mailno)
-                    .first();
-                  if (row) callsign = row.callsign;
-                }
-                // 仅在微信推送完整配置时（APPID + SECRET + TEMPLATE_ID）才尝试发送
-                if (callsign && env.WECHAT_APPID && env.WECHAT_SECRET && env.WECHAT_TEMPLATE_ID) {
-                  const openids = await DB.prepare('SELECT openid FROM callsign_openid_bindings WHERE callsign = ?')
-                    .bind(callsign)
+                // 仅在微信推送完整配置时（APPID + SECRET + TEMPLATE_ID）才尝试发送；openid 反查带派生租户维度
+                // （WHERE tenant_id=? AND callsign=? COLLATE NOCASE），杜绝同呼号跨租户推送，且 callsign 比较与
+                // 全系统 NOCASE 约定一致（绑定 callsign 与 cards.callsign 均大写入库，NOCASE 兜历史/脏数据大小写）。
+                // DISTINCT 防同租户重复 openid 行致重复推送。
+                if (callsign && tenant_id && env.WECHAT_APPID && env.WECHAT_SECRET && env.WECHAT_TEMPLATE_ID) {
+                  const openids = await DB.prepare('SELECT DISTINCT openid FROM callsign_openid_bindings WHERE tenant_id = ? AND callsign = ? COLLATE NOCASE')
+                    .bind(tenant_id, callsign)
                     .all();
                   for (const row of openids.results || []) {
                     try {
@@ -816,7 +824,7 @@ export default {
         return json({ return_code: '0000', return_msg: '成功' }, 200);
       }
 
-      // GET /api/wechat/auth-callback 微信网页授权回调（订阅收卡）：code + state(callsign) -> 换 openid -> 写入绑定表
+      // GET /api/wechat/auth-callback 微信网页授权回调（订阅收卡）：code + state(tenant:callsign) -> 换 openid -> 写入绑定表
       if (path === '/api/wechat/auth-callback' && method === 'GET') {
         // IP 限流：独立计数桶 authcb（不与查询共桶、互不挤占预算），
         // 计数 IP 取自可信真实客户端 IP 解析（见 client-ip.js / trusted-client-ip 规范）。
@@ -829,15 +837,52 @@ export default {
           return new Response('请求过于频繁，请稍后再试', { status: 429, headers: CORS_HEADERS });
         }
         const code = url.searchParams.get('code');
-        const state = url.searchParams.get('state'); // callsign
+        const state = url.searchParams.get('state'); // tenant:callsign（无冒号 → 纯 callsign，租户回退 bh2ro）
         if (!code || !state) {
           return new Response('缺少 code 或 state（呼号）', { status: 400, headers: CORS_HEADERS });
         }
-        const callsign = decodeURIComponent(state).toUpperCase();
+        // 入参长度上限（防超长构造耗资源）：code/state 取自 query，超限直接 400。
+        if (state.length > 256 || code.length > 512) {
+          return new Response('参数过长', { status: 400, headers: CORS_HEADERS });
+        }
+        // state 向前兼容解析：以【首个】冒号分隔 tenant:callsign（callsign 与租户 slug 均不含冒号）；
+        // 无冒号 → callsign=整串、租户回退创始租户 bh2ro（兼容本期仍发纯 callsign 的前端；前端改发
+        // tenant:callsign 属阶段 4-B）。畸形 %编码 → 400（不外溢到顶层 catch 的 500）。
+        let decodedState;
+        try {
+          decodedState = decodeURIComponent(state);
+        } catch {
+          return new Response('无效 state', { status: 400, headers: CORS_HEADERS });
+        }
+        const sepIdx = decodedState.indexOf(':');
+        let tenant_id, callsign;
+        if (sepIdx >= 0) {
+          tenant_id = decodedState.slice(0, sepIdx);
+          callsign = decodedState.slice(sepIdx + 1).toUpperCase();
+        } else {
+          tenant_id = 'bh2ro';
+          callsign = decodedState.toUpperCase();
+        }
+        if (!callsign) {
+          return new Response('缺少呼号', { status: 400, headers: CORS_HEADERS });
+        }
+        // callsign 字符白名单（业余呼号 = 字母数字 + 可选 /，已大写）：拒绝含 HTML 元字符/超长的构造，
+        // 既堵成功页回显处的反射型 XSS 源（callsign 源自用户可控 state），又防垃圾绑定行。
+        if (!/^[A-Z0-9/]{1,16}$/.test(callsign)) {
+          return new Response('无效呼号', { status: 400, headers: CORS_HEADERS });
+        }
+        // 解析出的 tenant 必须为 tenants 表中的活跃租户，否则拒绝（公开回调可被构造任意 state，
+        // 不校验则会在不存在/非活跃租户名下落入垃圾绑定行；bh2ro 默认路径亦经此校验）。
+        const tenantRow = await env.DB.prepare(
+          "SELECT 1 FROM tenants WHERE tenant_id = ? AND status = 'active' LIMIT 1"
+        ).bind(tenant_id).first();
+        if (!tenantRow) {
+          return new Response('无效租户', { status: 400, headers: CORS_HEADERS });
+        }
         if (!env.WECHAT_APPID || !env.WECHAT_SECRET) {
           return new Response('未配置微信服务号', { status: 503, headers: CORS_HEADERS });
         }
-        const tokenUrl = `https://api.weixin.qq.com/sns/oauth2/access_token?appid=${env.WECHAT_APPID}&secret=${env.WECHAT_SECRET}&code=${code}&grant_type=authorization_code`;
+        const tokenUrl = `https://api.weixin.qq.com/sns/oauth2/access_token?appid=${env.WECHAT_APPID}&secret=${env.WECHAT_SECRET}&code=${encodeURIComponent(code)}&grant_type=authorization_code`;
         const tokenRes = await fetch(tokenUrl);
         const tokenData = await tokenRes.json();
         const openid = tokenData.openid;
@@ -850,11 +895,13 @@ export default {
           });
         }
         await env.DB.prepare(
-          'INSERT OR IGNORE INTO callsign_openid_bindings (callsign, openid, created_at) VALUES (?,?,?)'
+          'INSERT OR IGNORE INTO callsign_openid_bindings (tenant_id, callsign, openid, created_at) VALUES (?,?,?,?)'
         )
-          .bind(callsign, openid, new Date().toISOString())
+          .bind(tenant_id, callsign, openid, new Date().toISOString())
           .run();
-        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>订阅成功</title></head><body><p>订阅收卡成功！呼号 ${callsign} 已与您的微信绑定，后续该呼号的卡片分发与物流动态将推送至微信。</p></body></html>`;
+        // 纵深防御：callsign 已过白名单（仅 [A-Z0-9/]），此处再做 HTML 实体转义，避免将来放宽校验时回显成 XSS。
+        const safeCallsign = callsign.replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>订阅成功</title></head><body><p>订阅收卡成功！呼号 ${safeCallsign} 已与您的微信绑定，后续该呼号的卡片分发与物流动态将推送至微信。</p></body></html>`;
         return new Response(html, { headers: { 'Content-Type': 'text/html; charset=UTF-8', ...CORS_HEADERS } });
       }
 

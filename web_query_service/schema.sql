@@ -121,18 +121,24 @@ CREATE TABLE IF NOT EXISTS app_settings (
     PRIMARY KEY (tenant_id, key)
 );
 
--- 呼号–微信 openid 绑定表（订阅收卡后写入；顺丰推送时按呼号查 openid 发模板消息）
--- 本期不加 tenant_id（callsign 为全局键），租户化推迟到阶段 4
+-- 呼号–微信 openid 绑定表（订阅收卡后写入；顺丰推送时按租户+呼号查 openid 发模板消息）
+-- 阶段 4-A 已租户化：加 tenant_id 行级隔离键，主键 (tenant_id, callsign, openid)。
+-- auth-callback 由授权 state（tenant:callsign，无冒号回退 bh2ro）解析并校验租户后写入；
+-- route-push 由匹配的 sf_orders 派生 tenant 后按 WHERE tenant_id=? AND callsign=? 反查 openid。
 CREATE TABLE IF NOT EXISTS callsign_openid_bindings (
+    tenant_id TEXT NOT NULL,
     callsign TEXT NOT NULL,
     openid TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (callsign, openid)
+    PRIMARY KEY (tenant_id, callsign, openid)
 );
-CREATE INDEX IF NOT EXISTS idx_bindings_callsign ON callsign_openid_bindings(callsign);
+-- 索引服务 route-push 的 openid 反查 WHERE tenant_id=? AND callsign=? COLLATE NOCASE：
+-- 以 (tenant_id, callsign COLLATE NOCASE) 复合且大小写不敏感，与全系统 callsign 比较的 NOCASE 约定一致。
+CREATE INDEX IF NOT EXISTS idx_bindings_callsign ON callsign_openid_bindings(tenant_id, callsign COLLATE NOCASE);
 
--- 顺丰路由推送去重/记录（可选：同一 mailno+opCode+id 不重复处理）
--- 本期不加 tenant_id，租户化推迟到阶段 4
+-- 顺丰路由推送去重/记录（同一 mailno+opCode+id 不重复处理）
+-- 全局表、不加 tenant_id：顺丰 waybill 全局唯一，去重维度全局；推送目标租户由匹配的
+-- sf_orders join 派生（见 multi-tenant-design.md §6），不单独隔离去重维度。
 CREATE TABLE IF NOT EXISTS sf_route_log (
     id TEXT PRIMARY KEY,
     mailno TEXT,

@@ -69,7 +69,9 @@ start_cdn(){
   stop
   rm -rf .wrangler/state/v3/kv 2>/dev/null || true
   write_cdn_toml
-  nohup npx wrangler dev --local --port "$PORT" --config "$CDN_TOML" --var API_KEY:"$TEST_KEY" --var SESSION_SECRET:"$SESSION_SECRET_VAL" >/tmp/qsl_smoke_dev.log 2>&1 &
+  # --persist-to 锁回项目 .wrangler/state：--config 在 /tmp 会让 miniflare D1/KV 持久化分叉到
+  # /tmp/.wrangler（空库、无 seed 的 tenants 表），auth-callback 的租户校验查询会打空库 500。
+  nohup npx wrangler dev --local --port "$PORT" --config "$CDN_TOML" --persist-to "$(pwd)/.wrangler/state" --var API_KEY:"$TEST_KEY" --var SESSION_SECRET:"$SESSION_SECRET_VAL" >/tmp/qsl_smoke_dev.log 2>&1 &
   for i in $(seq 1 25); do curl -s -o /dev/null -m 2 "$B/api/config" 2>/dev/null && return 0; sleep 2; done
   echo "CDN-IP server failed to start; see /tmp/qsl_smoke_dev.log"; exit 1
 }
@@ -97,7 +99,7 @@ database_id = "9f16589f-12cb-4c81-9810-49027018f037"
 [vars]
 SESSION_SECRET = "$SESSION_SECRET_VAL"
 EOF
-  nohup npx wrangler dev --local --port "$PORT" --config "$NOKV_TOML" --var API_KEY:"$TEST_KEY" >/tmp/qsl_smoke_dev.log 2>&1 &
+  nohup npx wrangler dev --local --port "$PORT" --config "$NOKV_TOML" --persist-to "$root/.wrangler/state" --var API_KEY:"$TEST_KEY" >/tmp/qsl_smoke_dev.log 2>&1 &
   for i in $(seq 1 25); do curl -s -o /dev/null -m 2 "$B/api/config" 2>/dev/null && return 0; sleep 2; done
   echo "no-KV server failed to start; see /tmp/qsl_smoke_dev.log"; exit 1
 }
@@ -190,6 +192,7 @@ DROP TABLE IF EXISTS service_counters;" >/dev/null
 d1 --file ./schema.sql >/dev/null
 d1 --command "
 INSERT INTO tenants (tenant_id,name,tier,status) VALUES ('bh2ro','BH2RO',NULL,'active');
+INSERT INTO tenants (tenant_id,name,tier,status) VALUES ('gone','GONE',NULL,'revoked');
 INSERT INTO tenant_credentials (id,tenant_id,scope,key_hash,status) VALUES ('bh2ro-key','bh2ro','sync','$HASH','active');
 INSERT INTO service_counters (name,count) VALUES ('auth_fallback',0);
 INSERT INTO projects (tenant_id,id,name,created_at,updated_at) VALUES ('bh2ro','p1','项目一','t','t');
@@ -568,6 +571,30 @@ WURL=$(mk_url "$TOKEN" "wrong-sk-0000000000000000000000000000" "BG1ABC")
 # ⑧ 换网（不同 binding_key）携带原会话 → 401（IP 绑定生效，防会话搬移）
 MOVED=$(mk_url "$TOKEN" "$SK" "BG1ABC")
 [ "$(code -H "CF-Connecting-IP: 198.51.100.250" "$MOVED")" = 401 ] && ok "4.5⑧ 会话搬移到不同真实 IP → 401（IP 绑定）" || no "4.5⑧ 会话搬移未被拒"
+
+echo; echo "########## 4.6 auth-callback state 解析 + 租户校验（阶段 4-A）##########"
+# worker 仍由 4.5 的 start "$TEST_KEY"（项目 toml：DB+tenants(bh2ro active / gone revoked)+RATE_LIMIT KV）运行。
+# 校验在微信换 openid 之前（无凭据公开回调）：有效租户+有效呼号→503(未配微信，证解析+校验通过)；
+# 不存在/非活跃租户→400(无效租户)；空呼号→400(缺少呼号)。每断言用不同 CF-IP 避免 authcb 桶串扰。
+# 有效租户 tenant:callsign → 503（解析 + 租户校验通过，止于未配微信）
+[ "$(code -H "CF-Connecting-IP: 203.0.113.41" "$B/api/wechat/auth-callback?code=x&state=bh2ro:BG1ABC")" = 503 ] && ok "4.6 state=bh2ro:CALL 有效租户 → 503（解析+校验通过）" || no "4.6 state=bh2ro:CALL 未 503"
+# 无冒号回退创始租户 bh2ro（有效）→ 503（向前兼容）
+[ "$(code -H "CF-Connecting-IP: 203.0.113.42" "$B/api/wechat/auth-callback?code=x&state=BG1ABC")" = 503 ] && ok "4.6 state=CALL 无冒号回退 bh2ro → 503（向前兼容）" || no "4.6 无冒号回退未 503"
+# 不存在租户 → 400「无效租户」（拒绝、不落垃圾绑定）
+[ "$(code -H "CF-Connecting-IP: 203.0.113.43" "$B/api/wechat/auth-callback?code=x&state=nope:BG1ABC")" = 400 ] && ok "4.6 state=nope:CALL 不存在租户 → 400 拒绝" || no "4.6 不存在租户未 400"
+# 非活跃租户(revoked) → 400（证 status='active' 过滤，非仅存在性）
+[ "$(code -H "CF-Connecting-IP: 203.0.113.44" "$B/api/wechat/auth-callback?code=x&state=gone:BG1ABC")" = 400 ] && ok "4.6 state=gone:CALL 非活跃租户 → 400 拒绝" || no "4.6 非活跃租户未 400"
+# 空呼号(state=bh2ro:) → 400「缺少呼号」
+[ "$(code -H "CF-Connecting-IP: 203.0.113.45" "$B/api/wechat/auth-callback?code=x&state=bh2ro:")" = 400 ] && ok "4.6 state=bh2ro: 空呼号 → 400" || no "4.6 空呼号未 400"
+# 文案区分：不存在租户响应含「无效租户」（确保非与「缺少呼号」同分支误判）
+echo "$(body -H "CF-Connecting-IP: 203.0.113.46" "$B/api/wechat/auth-callback?code=x&state=nope:BG1ABC")" | grep -q "无效租户" && ok "4.6 不存在租户响应含「无效租户」文案" || no "4.6 无效租户文案缺失"
+# 畸形 state：%25 经 URLSearchParams 解出裸 '%'，第二次 decodeURIComponent 抛错 → try/catch 兜 400（非顶层 500）
+[ "$(code -H "CF-Connecting-IP: 203.0.113.47" "$B/api/wechat/auth-callback?code=x&state=%25")" = 400 ] && ok "4.6 畸形 state(%25→裸%) → 400（非顶层 500）" || no "4.6 畸形 state 未 400（$(code -H "CF-Connecting-IP: 203.0.113.47" "$B/api/wechat/auth-callback?code=x&state=%25")）"
+# 超长 state(>256) → 400 参数过长（防超长构造）
+LONGSTATE=$(printf 'a%.0s' $(seq 1 300))
+[ "$(code -H "CF-Connecting-IP: 203.0.113.48" "$B/api/wechat/auth-callback?code=x&state=$LONGSTATE")" = 400 ] && ok "4.6 超长 state(>256) → 400" || no "4.6 超长 state 未 400"
+# callsign 字符白名单：含 HTML 元字符的 callsign（%3Cscript%3E→<SCRIPT>）→ 400「无效呼号」（堵成功页反射 XSS 源）
+[ "$(code -H "CF-Connecting-IP: 203.0.113.49" "$B/api/wechat/auth-callback?code=x&state=bh2ro:%3Cscript%3E")" = 400 ] && ok "4.6 callsign 含 HTML 元字符 → 400（XSS 源被白名单拒）" || no "4.6 XSS 构造 callsign 未 400"
 
 # ⑨ KV 未绑（SESSION_SECRET 已配，仅缺 RATE_LIMIT KV）→ 会话端点 503 fail-closed
 start_nokv
