@@ -69,7 +69,7 @@
 
 - **当** 微信授权回调（`/api/wechat/auth-callback`）携带 `state` 到达服务端
 - **那么** 服务端**必须**按 `tenant:callsign` 解析 `state`（以**首个**冒号分隔；callsign 与租户 slug 均不含冒号）
-- **并且** 当 `state` **不含**冒号时**必须**向前兼容：`callsign` = 整串、`tenant_id` 回退为创始租户常量 `bh2ro`（兼容本期仍发纯 callsign 的前端；前端改发 `tenant:callsign` 属阶段 4-B）
+- **并且** 当 `state` **不含**冒号时**必须**向前兼容：`callsign` = 整串、`tenant_id` 回退为 `env.DEFAULT_TENANT` 指定的默认租户（本部署 `bh2ro`），**禁止**硬编码默认租户字面量（随 `tenant-isolation` 默认租户配置化）；本阶段（4-B `tenant-path-routing`）前端在 `/t/<slug>/` 页发 `tenant:callsign`（租户取自 URL）、bare 默认租户页发纯 callsign 走此无冒号兜底
 - **并且** 解析出的 `tenant_id` **必须**校验为 `tenants` 表中 `status='active'` 的租户，否则**必须**拒绝（返回错误、**禁止**写入绑定），避免在不存在/非活跃租户名下落入垃圾绑定行
 - **并且** 该 `tenant_id` **禁止**取自任何不经服务端校验的来源
 

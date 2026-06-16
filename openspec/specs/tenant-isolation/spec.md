@@ -5,18 +5,19 @@
 ## 需求
 ### 需求：租户模型与默认租户
 
-云端**必须**提供行级多租户隔离的数据模型，由 `tenants`、`tenant_credentials`、`tenant_routes` 三张表承载，并保证既有数据归属于内置的 `default` 租户。
+云端**必须**提供行级多租户隔离的数据模型，由 `tenants`、`tenant_credentials`、`tenant_routes` 三张表承载，并保证既有数据归属于**由 `DEFAULT_TENANT` 配置指定的内置默认租户**（部署落地为 `bh2ro`）。worker 代码**禁止散落**硬编码的默认租户字面量（如 `'bh2ro'`）——默认租户身份**必须**统一经单一 helper 取自 `env.DEFAULT_TENANT`，**仅**该 helper 的兜底默认（未配置时缺省 `bh2ro`，保持现网兼容）允许保留一处 `'bh2ro'` 字面量，使同一份代码经改配置 + seed 各自租户即可被他人部署。
 
-- `tenants`：租户主表，`tenant_id` 为人类可读 slug，**必须** `NOT NULL`（`TEXT PRIMARY KEY` 在 rowid 表不隐含 NOT NULL）。字符集约束（小写字母、数字、连字符，长度上限）**必须**以可执行约束落地，且**必须**用否定字符类：`CHECK (length(tenant_id) BETWEEN 1 AND 32 AND tenant_id NOT GLOB '*[^a-z0-9-]*')`——**禁用** `GLOB '[a-z0-9-]*'`（其 `*` 是 shell-glob「任意后缀」、只约束首字符，`abc!` 会通过），更**禁止**仅以注释表达「必须」。
+- `tenants`：租户主表，`tenant_id` 为人类可读 slug，**必须** `NOT NULL`（`TEXT PRIMARY KEY` 在 rowid 表不隐含 NOT NULL）。字符集约束（小写字母、数字、连字符，长度上限）**必须**以可执行约束落地，且**必须**用否定字符类：`CHECK (length(tenant_id) BETWEEN 1 AND 32 AND tenant_id NOT GLOB '*[^a-z0-9-]*')`——**禁用** `GLOB '[a-z0-9-]*'`（其 `*` 是 shell-glob「任意后缀」、只约束首字符，`abc!` 会通过），更**禁止**仅以注释表达「必须」。**已知缺口**：`tenants.status` 现**无** `CHECK` 枚举约束（不同于 `tenant_credentials.status`），活跃校验为 `status='active'` 精确等值，线下签发误写 `'Active'`/`' active'` 会令该租户整站静默 404；补 `CHECK(status IN ('active',...))` 属后续阶段（4-C4 线下签发工具）。
 - `tenant_credentials`：写入凭据表，存 `key_hash = sha256(trim(key))`（**禁止**存明文 Key；本期**不加 pepper**，前提是 `API_KEY` 为高熵随机值——见 design 决策 D 残余风险）；命中得 `tenant_id`；**必须**支持「多 Key → 同一租户」；`status` **必须** `NOT NULL DEFAULT 'active'` 且 `CHECK` 取值域（如 `'active'`/`'revoked'`），同一 `key_hash` 在 `status='active'` 下**必须**唯一（部分唯一索引），**禁止**一把 Key 解析到两个租户。
 - `tenant_routes`：host/path → 租户路由表（本期建表即可，路由解析逻辑属后续阶段）。
 
 #### 场景：内置默认租户与默认写凭据
 
 - **当** 多租户地基初始化（迁移）完成
-- **那么** `tenants` 中**必须**存在 `tenant_id = 'default'` 的活跃租户
-- **并且** `tenant_credentials` 中**必须**存在一条 `tenant_id='default'`、`key_hash = sha256(trim(现有全局 API_KEY))` 的活跃写凭据（`trim` 与 worker 解析侧逐字符一致）
-- **并且** 现有桌面端用原全局 API_KEY 同步时**必须**被解析为 `default` 租户
+- **那么** `tenants` 中**必须**存在 `tenant_id` 等于该部署 `DEFAULT_TENANT` 配置值（本部署 `bh2ro`）的活跃租户
+- **并且** `tenant_credentials` 中**必须**存在一条 `tenant_id` 为该默认租户、`key_hash = sha256(trim(现有全局 API_KEY))` 的活跃写凭据（`trim` 与 worker 解析侧逐字符一致）
+- **并且** 现有桌面端用原全局 API_KEY 同步时**必须**被解析为该默认租户
+- **并且** 部署契约：seed 的默认租户 slug **必须**与 `env.DEFAULT_TENANT` 配置值一致（二者不一致 → bare 面以未 seed 租户查询、静默空结果）
 
 #### 场景：同一 Key 不得登记到两个租户
 
@@ -37,7 +38,7 @@
 #### 场景：env.API_KEY 直比兜底（过渡期）且可客观检测
 
 - **当** `sha256(trim(Key))` 未命中 `tenant_credentials`，但 `trim(Key)` 等于 `trim(env.API_KEY)` 且 `env.API_KEY` 非空
-- **那么** 服务端**必须**将其解析为 `default` 租户并放行（兜底，避免 seed 异常锁死现有桌面端）
+- **那么** 服务端**必须**将其解析为 `env.DEFAULT_TENANT` 指定的默认租户并放行（兜底，避免 seed 异常锁死现有桌面端）；该默认租户身份**禁止**硬编码字面量，**必须**取自 `DEFAULT_TENANT`（缺省 `bh2ro`）
 - **并且** 走兜底路径时**必须**递增一个 **D1 计数行**（具名表 `service_counters(name TEXT PRIMARY KEY, count INTEGER NOT NULL DEFAULT 0)` 的 `name='auth_fallback'` 行；**禁止**用 KV——KV 未绑定时 fail-open 会吞掉递增致假绿）；该表与初始 `count=0` 行**必须**由迁移**自建（`CREATE TABLE`）并 seed**（迁移文件须含建表语句、排在 seed 之前，否则生产 D1 无此表致 seed `no such table`）；**计数器写失败**（用 `.run()` 返回的 `result.meta.changes === 0` 判行缺失，或写抛错判表缺失）**必须使 `/sync` 返非 200**，不得静默吞
 - **并且** 迁移后验收**必须**断言「该计数行**存在 且 `count === 0`**」（**严格 `===` + 存在性双检**——因 `(row?.count ?? 0)===0`、`count>=0`、`!count`、`""==0` 等宽松写法会把「行缺失」误当 0 而假绿（注：`null==0` 本身为 `false`，假绿来自 `?? 0`/`>=0`/`!`/空串==0 这些路径），故强制存在性 + 严格相等）；计数行缺失/不可读**必须**判 inconclusive，**禁止**判 pass 或当作可接受降级而误判表驱动已生效
 - **并且** 撤销兜底**必须**有量化判据（连续 N 次/T 时间窗表驱动命中且兜底计数恒 0）
@@ -80,13 +81,13 @@
 
 按呼号查询（`/api/query`、`/api/callsigns/:callsign`）与顺丰 route-push 的呼号反查 join、及 route-push 的 openid 反查 **必须**按服务端确定的 `tenant_id` 过滤，`tenant_id` **禁止**取自前端参数或请求体自报值。其中：
 
-- **按呼号查询**侧的路由解析尚未引入（host/path → 租户路由属阶段 4-B），故其 `tenant_id` **必须**恒为创始租户常量（部署落地为 `bh2ro`）。
+- **按呼号查询**侧的 `tenant_id` **必须**由 `tenant-path-routing` 解析：显式 `/t/<slug>/` 前缀经 `tenants` 表 `status='active'` 校验后取 `<slug>`，bare 路径取 `env.DEFAULT_TENANT`（缺省默认租户 `bh2ro`）；**禁止**取自前端查询参数或请求体自报值，**禁止**未经活跃校验直接把路径 slug 用作 SQL 过滤目标。读取面是公开匿名读，URL 即「选择查询哪个活跃租户的公开数据」，与**写入面**租户恒由 Key 解析（密钥、绝不取路径）的口径**必须**区分。
 - **route-push** 是无凭据公开端点、无路由/凭据上下文，其 `tenant_id` **必须**由「本次推送匹配到的 `sf_orders` 行」**派生**（按全局唯一的 `order_id`/`waybill_no` 匹配订单，由该订单行返回其 `tenant_id`），**禁止**再注入硬编码常量；openid 反查**必须**带该派生 `tenant_id` 维度。
 
 #### 场景：查询注入租户过滤
 
 - **当** 调用方按呼号查询
-- **那么** 服务端**必须**在 SQL 中注入 `WHERE tenant_id = ? AND callsign = ?`，其中 `tenant_id` 来自服务端上下文（本期为创始租户常量 `bh2ro`；按路由解析属阶段 4-B）
+- **那么** 服务端**必须**在 SQL 中注入 `WHERE tenant_id = ? AND callsign = ?`，其中 `tenant_id` 来自 `tenant-path-routing` 解析（显式 `/t/<slug>/` 前缀的活跃租户 slug，或 bare 路径的 `env.DEFAULT_TENANT`），经服务端校验后注入
 - **并且** 即便前端传入任何租户参数，也**禁止**据此跨租户读取
 - **并且** 关联 `projects` 的 join **必须**同时按 `tenant_id` 匹配
 
