@@ -79,3 +79,8 @@ web_query_service/wrangler.toml
 web_query_service/.wrangler
 web_query_service/node_modules
 web_query_service/public
+# Playwright MCP 输出（截图/快照/console 日志）
+.playwright-mcp/
+
+# 调试模式运行时同步配置（含 client_id，非密钥；不入库）
+config/sync.toml

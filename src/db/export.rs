@@ -8,6 +8,9 @@ use crate::error::AppError;
 use crate::sf_express::{RecipientInfo, SFOrder, SenderInfo};
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "ts-rs")]
+use ts_rs::TS;
+
 /// 导出格式版本
 ///
 /// 版本历史:
@@ -53,6 +56,8 @@ pub struct ExportTables {
 
 /// 导出统计
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct ExportStats {
     /// 项目数
     pub projects: u32,

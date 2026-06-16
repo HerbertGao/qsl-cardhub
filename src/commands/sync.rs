@@ -6,26 +6,46 @@ use crate::db::export::ExportStats;
 use crate::db::import::{import_from_export_data, AppSettingsClearMode};
 use crate::db::models::{format_datetime, now_china};
 use crate::security::{delete_credential, get_credential, save_credential};
-use crate::sync::client::{pull_data, sync_data, test_connection, PingResponse, SyncOutcome, SyncResponse};
+use crate::sync::client::{
+    pull_data, sync_data, test_connection, PingResponse, RestoreResult, SyncCmdResult,
+    SyncConfigResponse, SyncOutcome, SyncResponse,
+};
 use crate::sync::config::{
     clear_sync_config, credential_keys, load_sync_config, save_sync_config, SyncConfig,
 };
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
 use tauri::command;
 
-/// 同步配置响应（不含敏感信息）
+/// 同步配置导出/导入的可移植载荷（仅内部 Base64 序列化用，不导出 TS）
+///
+/// **安全提示**：含明文 `api_key`，Base64 仅编码非加密；导出串等同于密钥本身，
+/// 只用于用户本机在设备间手动迁移配置。
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SyncConfigResponse {
-    /// API 地址
-    pub api_url: String,
-    /// 客户端标识
-    pub client_id: String,
-    /// 上次同步时间
-    pub last_sync_at: Option<String>,
-    /// 是否已配置 API Key
-    pub has_api_key: bool,
-    /// 本地持久化的云端基线版本（只读展示）
-    pub base_version: Option<i64>,
+struct ExportedSyncConfig {
+    api_url: String,
+    #[serde(default)]
+    tenant: Option<String>,
+    #[serde(default)]
+    api_key: Option<String>,
+}
+
+/// 校验租户代码 slug：逐字对齐服务端 schema CHECK（等价正则 `^[a-z0-9-]{1,32}$`）。
+///
+/// 仅允许小写字母/数字/连字符、长度 1-32；大写/非法字符/超长一律拒绝（**不**转换为小写）。
+fn validate_tenant_slug(slug: &str) -> Result<(), String> {
+    // 不引入 regex 依赖（ponytail：字符类检查一行够）：锚定全串 + 字符类 + 长度
+    // ponytail: 手写等价校验，规则与服务端 GLOB 一致；若未来 slug 文法变复杂再上 regex
+    let len = slug.chars().count();
+    let ok = (1..=32).contains(&len)
+        && slug
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    if ok {
+        Ok(())
+    } else {
+        Err("租户代码只能是小写字母、数字、连字符，长度 1-32 位".to_string())
+    }
 }
 
 /// 同步结果
@@ -41,47 +61,16 @@ pub struct SyncResult {
     pub server_version: Option<i64>,
 }
 
-/// 同步命令三态结果（供前端分流）
-///
-/// 序列化为带 `status` 标签的对象：
-/// - `{"status":"success", ...}`
-/// - `{"status":"auth_failed"}`
-/// - `{"status":"conflict","server_version":N}`（云端当前版本，解析失败时为 null）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "status", rename_all = "snake_case")]
-pub enum SyncCmdResult {
-    /// 同步成功
-    Success {
-        /// 服务器响应
-        response: SyncResponse,
-        /// 本地统计
-        stats: ExportStats,
-        /// 同步时间
-        sync_time: String,
-        /// 写入后的新云端版本
-        server_version: Option<i64>,
-    },
-    /// 认证失败（401）
-    AuthFailed,
-    /// 版本冲突（409）
-    Conflict {
-        /// 云端当前版本（解析失败/行缺失时为 null）
-        server_version: Option<i64>,
-    },
-}
-
-/// 从云端恢复结果
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RestoreResult {
-    /// 恢复后对齐的云端版本（快照缺 sync_meta 行时为 null）
-    pub server_version: Option<i64>,
-    /// 恢复的数据统计
-    pub stats: ExportStats,
-}
-
 /// 保存同步配置
+///
+/// `tenant`：申报的租户代码。空白→存 `None`（清空=降级回兼容模式，D9）；非空须过 slug
+/// 校验（拒大写/非法字符/超长，**不**静默转小写），校验失败前不落盘。不做硬必填（D2 软约束）。
 #[command]
-pub async fn save_sync_config_cmd(api_url: String, api_key: Option<String>) -> Result<SyncConfigResponse, String> {
+pub async fn save_sync_config_cmd(
+    api_url: String,
+    api_key: Option<String>,
+    tenant: Option<String>,
+) -> Result<SyncConfigResponse, String> {
     log::info!("💾 保存同步配置");
 
     // 加载现有配置或创建新配置
@@ -89,6 +78,15 @@ pub async fn save_sync_config_cmd(api_url: String, api_key: Option<String>) -> R
 
     // 更新 API URL
     config.api_url = api_url;
+
+    // 租户代码：空白→None；非空须过 slug 校验（校验失败 `?` 早返、不落盘）
+    let normalized_tenant = tenant.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    if let Some(t) = normalized_tenant {
+        validate_tenant_slug(t)?;
+        config.tenant = Some(t.to_string());
+    } else {
+        config.tenant = None;
+    }
 
     // 保存配置
     save_sync_config(&config)?;
@@ -121,7 +119,40 @@ pub async fn save_sync_config_cmd(api_url: String, api_key: Option<String>) -> R
         last_sync_at: config.last_sync_at,
         has_api_key,
         base_version: config.base_version,
+        tenant: config.tenant,
     })
+}
+
+/// 导出同步配置为可移植字符串（Base64 编码的 JSON，**含明文 API Key**）
+///
+/// 供用户在设备间手动迁移配置。返回串等同于密钥、应妥善保管。
+/// 不含 `client_id`（设备本地自动生成，不随配置迁移）。
+#[command]
+pub async fn export_sync_config_string_cmd() -> Result<String, String> {
+    let config = load_sync_config()?.ok_or("未配置同步服务")?;
+    let api_key = get_credential(credential_keys::SYNC_API_KEY)
+        .ok()
+        .flatten();
+    let exported = ExportedSyncConfig {
+        api_url: config.api_url,
+        tenant: config.tenant,
+        api_key,
+    };
+    let json = serde_json::to_string(&exported).map_err(|e| format!("序列化失败: {}", e))?;
+    Ok(STANDARD.encode(json))
+}
+
+/// 从可移植字符串导入同步配置（Base64 解码 + 复用 `save_sync_config_cmd` 落盘，含 slug 校验）
+#[command]
+pub async fn import_sync_config_string_cmd(data: String) -> Result<SyncConfigResponse, String> {
+    let bytes = STANDARD
+        .decode(data.trim())
+        .map_err(|_| "配置字符串格式无效（非 Base64）".to_string())?;
+    let json = String::from_utf8(bytes).map_err(|_| "配置字符串内容无效".to_string())?;
+    let parsed: ExportedSyncConfig =
+        serde_json::from_str(&json).map_err(|_| "配置字符串内容无效（非合法配置）".to_string())?;
+    // 复用保存命令：含 slug 校验、空串归一、凭据落盘
+    save_sync_config_cmd(parsed.api_url, parsed.api_key, parsed.tenant).await
 }
 
 /// 加载同步配置
@@ -143,6 +174,7 @@ pub async fn load_sync_config_cmd() -> Result<Option<SyncConfigResponse>, String
                 last_sync_at: config.last_sync_at,
                 has_api_key,
                 base_version: config.base_version,
+                tenant: config.tenant,
             }))
         }
         None => Ok(None),
@@ -165,20 +197,34 @@ pub async fn clear_sync_config_cmd() -> Result<(), String> {
 }
 
 /// 测试同步连接
+///
+/// 测试**表单当前填写的值**（无需先保存配置即可测）。`api_key` 缺省/空时回落到已保存凭据
+/// （支持「已存 Key、仅改其它项」时测试）；`tenant` 随请求头 `X-Tenant-Id` 发送供交叉校验。
 #[command]
-pub async fn test_sync_connection_cmd() -> Result<PingResponse, String> {
+pub async fn test_sync_connection_cmd(
+    api_url: String,
+    api_key: Option<String>,
+    tenant: Option<String>,
+) -> Result<PingResponse, String> {
     log::info!("🔗 测试同步连接");
 
-    // 加载配置
-    let config = load_sync_config()?.ok_or("未配置同步服务")?;
+    let api_url = api_url.trim();
+    if api_url.is_empty() {
+        return Err("请先填写 API 地址".to_string());
+    }
 
-    // 获取 API Key
-    let api_key = get_credential(credential_keys::SYNC_API_KEY)
-        .map_err(|e| format!("获取 API Key 失败: {}", e))?
-        .ok_or("未配置 API Key")?;
+    // API Key：表单传入优先；为空则回落到已保存凭据
+    let api_key = match api_key.map(|k| k.trim().to_string()).filter(|k| !k.is_empty()) {
+        Some(k) => k,
+        None => get_credential(credential_keys::SYNC_API_KEY)
+            .map_err(|e| format!("获取 API Key 失败: {}", e))?
+            .ok_or("未配置 API Key")?,
+    };
 
-    // 测试连接
-    test_connection(&config.api_url, &api_key).await
+    let tenant = tenant.as_deref().map(str::trim).filter(|s| !s.is_empty());
+
+    // 测试连接（带申报租户，供服务端交叉校验 + 回显认证租户）
+    test_connection(api_url, &api_key, tenant).await
 }
 
 /// 执行同步
@@ -230,6 +276,7 @@ pub async fn execute_sync_cmd(force: Option<bool>) -> Result<SyncCmdResult, Stri
         SyncOutcome::Conflict { server_version } => {
             Ok(SyncCmdResult::Conflict { server_version })
         }
+        SyncOutcome::TenantMismatch => Ok(SyncCmdResult::TenantMismatch),
     }
 }
 
@@ -253,7 +300,7 @@ pub async fn restore_from_cloud() -> Result<RestoreResult, String> {
         .ok_or("未配置 API Key")?;
 
     // 拉取云端快照（失败必须短路，禁进入导入）
-    let pulled = pull_data(&config.api_url, &api_key).await?;
+    let pulled = pull_data(&config.api_url, &api_key, config.tenant.as_deref()).await?;
 
     let server_version = pulled.server_version;
     let stats = ExportStats {
@@ -302,5 +349,25 @@ fn sync_data_to_export_data(pulled: crate::sync::client::PullResponse) -> crate:
             sf_orders: pulled.data.sf_orders,
             app_settings: Some(pulled.data.app_settings),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_tenant_slug() {
+        // 通过：小写字母/数字/连字符，长度 1-32
+        assert!(validate_tenant_slug("bh2ro").is_ok());
+        assert!(validate_tenant_slug("tenant-1").is_ok());
+        assert!(validate_tenant_slug("a").is_ok());
+        assert!(validate_tenant_slug(&"a".repeat(32)).is_ok());
+        // 拒绝：大写（不静默转小写）/ 空格 / 非法字符 / 空 / 超长
+        assert!(validate_tenant_slug("BH2RO").is_err());
+        assert!(validate_tenant_slug("a b").is_err());
+        assert!(validate_tenant_slug("x!").is_err());
+        assert!(validate_tenant_slug("").is_err());
+        assert!(validate_tenant_slug(&"a".repeat(33)).is_err());
     }
 }

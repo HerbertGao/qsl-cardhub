@@ -114,7 +114,7 @@
 import { onMounted, ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import type { ProjectWithStats, CardWithProject, PagedCards } from '@/types/models'
+import type { ProjectWithStats, CardWithProject, PagedCards, SyncCmdResult, RestoreResult } from '@/types/models'
 import type {
   CardInputConfirmData,
   CardInputDialogInstance,
@@ -156,23 +156,7 @@ const editingProject = ref<ProjectWithStats | null>(null)
 const syncConfigured = ref<boolean>(false)
 const syncing = ref<boolean>(false)
 
-// 同步命令三态结果（与后端 SyncCmdResult 对齐）
-type SyncCmdResult =
-  | {
-      status: 'success'
-      response: { success: boolean; message: string }
-      stats: { projects: number; cards: number; sf_senders: number; sf_orders: number }
-      sync_time: string
-      server_version: number | null
-    }
-  | { status: 'auth_failed' }
-  | { status: 'conflict'; server_version: number | null }
-
-// 从云端恢复结果（与后端 RestoreResult 对齐）
-interface RestoreResult {
-  server_version: number | null
-  stats: { projects: number; cards: number; sf_senders: number; sf_orders: number }
-}
+// SyncCmdResult / RestoreResult 由 ts-rs 生成、从 @/types/models 导入（消灭手写漂移）
 
 // ==================== 卡片相关状态 ====================
 const cards = ref<CardWithProject[]>([])
@@ -267,6 +251,11 @@ const handleProjectDialogConfirm = async (data: { name: string }): Promise<void>
 }
 
 // ==================== 云端同步方法 ====================
+// 穷尽检查辅助：所有 union 分支处理后残余类型应为 never；漏 case 时 TS 编译报错
+function assertNever(x: never): never {
+  throw new Error(`未处理的同步结果状态: ${JSON.stringify(x)}`)
+}
+
 // 执行同步（force 为 true 时走强制覆盖逃生门）
 const handleSync = async (force = false): Promise<void> => {
   syncing.value = true
@@ -288,9 +277,13 @@ const handleSync = async (force = false): Promise<void> => {
         await handleSyncConflict(result.server_version)
         break
       }
-      default: {
-        ElMessage.error('同步返回未知状态')
+      case 'tenant_mismatch': {
+        ElMessage.error('租户代码与 API Key 归属的租户不一致，请检查租户代码')
         break
+      }
+      default: {
+        // 穷尽检查（D11）：四态全覆盖后此分支不可达；新增状态未处理时 TS 在此编译报错
+        assertNever(result)
       }
     }
   } catch (error) {

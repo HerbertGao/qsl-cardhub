@@ -17,11 +17,15 @@ mod export {
 
     // 导入需要导出的类型
     use qsl_cardhub::config::models::{Platform, PrinterConfig, Profile, Template};
+    use qsl_cardhub::db::export::ExportStats;
     use qsl_cardhub::db::models::{
         AddressEntry, Card, CardMetadata, CardStatus, CardWithProject, DistributionInfo,
         PagedCards, Project, ProjectWithStats, ReturnInfo,
     };
     use qsl_cardhub::sf_express::models::{OrderStatus, SFOrder, SFOrderWithCard, SenderInfo};
+    use qsl_cardhub::sync::client::{
+        PingResponse, RestoreResult, SyncCmdResult, SyncConfigResponse, SyncResponse, SyncStats,
+    };
 
     #[test]
     fn export_bindings() {
@@ -67,6 +71,15 @@ mod export {
         Platform::export_all(&config).expect("Failed to export Platform");
         PrinterConfig::export_all(&config).expect("Failed to export PrinterConfig");
         Template::export_all(&config).expect("Failed to export Template");
+
+        // 同步类型（4-C2 桌面端租户申报）
+        ExportStats::export_all(&config).expect("Failed to export ExportStats");
+        SyncStats::export_all(&config).expect("Failed to export SyncStats");
+        SyncResponse::export_all(&config).expect("Failed to export SyncResponse");
+        PingResponse::export_all(&config).expect("Failed to export PingResponse");
+        SyncConfigResponse::export_all(&config).expect("Failed to export SyncConfigResponse");
+        SyncCmdResult::export_all(&config).expect("Failed to export SyncCmdResult");
+        RestoreResult::export_all(&config).expect("Failed to export RestoreResult");
 
         println!("TypeScript bindings exported to: {:?}", output_dir);
     }
