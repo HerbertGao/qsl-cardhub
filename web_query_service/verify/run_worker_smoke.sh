@@ -603,6 +603,54 @@ start_nokv
 
 rm -f "$CDN_TOML" "$NOKV_TOML" 2>/dev/null || true
 
+echo; echo "########## 4.7 声明租户交叉校验 X-Tenant-Id (4-C1) ##########"
+# 复位 bh2ro 活跃凭据 + 计数；种一把【表驱动】非 env.API_KEY 的 Key（证 /ping 走 resolveTenant、表驱动也能测通）
+TD_KEY="table-driven-key-zzz"
+TD_HASH=$(node -e 'process.stdout.write(require("crypto").createHash("sha256").update((process.argv[1]||"").trim()).digest("hex"))' "$TD_KEY")
+d1 --command "UPDATE tenant_credentials SET status='active' WHERE id='bh2ro-key'; UPDATE service_counters SET count=0 WHERE name='auth_fallback'; INSERT OR IGNORE INTO tenant_credentials (id,tenant_id,scope,key_hash,status) VALUES ('td-key','bh2ro','sync','$TD_HASH','active');" >/dev/null
+start "$TEST_KEY"
+
+# ① 表驱动非 env Key 在 /ping 测通（旧实现只 env.API_KEY 那把通；本次应 200 + 回显 tenant=bh2ro fallback=false）
+PING_TD=$(body -H "Authorization: Bearer $TD_KEY" "$B/ping")
+[ "$(echo "$PING_TD" | jget success --raw)" = true ] && ok "4.7① 表驱动非 env Key 在 /ping 测通(200,修复阶段1缺口)" || no "4.7① 表驱动 Key /ping 未通: $PING_TD"
+[ "$(echo "$PING_TD" | jget tenant --raw)" = bh2ro ] && [ "$(echo "$PING_TD" | jget fallback --raw)" = false ] && ok "4.7① /ping 回显 tenant=bh2ro fallback=false" || no "4.7① /ping 回显异常: $PING_TD"
+
+# ② /ping X-Tenant-Id 一致→200 / 不一致→403
+[ "$(code -H "Authorization: Bearer $TD_KEY" -H "X-Tenant-Id: bh2ro" "$B/ping")" = 200 ] && ok "4.7② /ping X-Tenant-Id=bh2ro 一致 → 200" || no "4.7② /ping 一致未 200"
+[ "$(code -H "Authorization: Bearer $TD_KEY" -H "X-Tenant-Id: other" "$B/ping")" = 403 ] && ok "4.7② /ping X-Tenant-Id=other 不一致 → 403" || no "4.7② /ping 不一致未 403"
+
+# ③ /sync 声明不一致 → 403 且零数据改动（红线：绝不据声明值写入）。先立已知基线指纹。
+d1 --command "DELETE FROM cards WHERE tenant_id='bh2ro'; DELETE FROM cards WHERE tenant_id='other'; INSERT INTO cards (tenant_id,id,project_id,callsign,qty,status,created_at,updated_at) VALUES ('bh2ro','baseline','p1','BG1ABC',1,'pending','t','t');" >/dev/null
+FP_BEFORE=$(fp bh2ro)
+[ "$(code -H "Authorization: Bearer $TEST_KEY" -H "X-Tenant-Id: other" -H 'Content-Type: application/json' -d '{"client_id":"cmm","data":{"cards":[{"id":"X","project_id":"p1","callsign":"EVIL","qty":9}]}}' "$B/sync")" = 403 ] && ok "4.7③ /sync X-Tenant-Id=other 不一致 → 403" || no "4.7③ /sync 不一致未 403"
+[ "$(fp bh2ro)" = "$FP_BEFORE" ] && ok "4.7③ 红线:403 零数据改动(bh2ro 指纹不变,未进 DELETE/INSERT)" || no "4.7③ 403 后 bh2ro 数据被改动"
+[ "$(d1json "SELECT count(*) AS n FROM cards WHERE tenant_id='other'")" = '[{"n":0}]' ] && ok "4.7③ 红线:声明 other 名下零行(声明值绝不当写入目标)" || no "4.7③ 声明值被当写入目标"
+
+# ④ 一致 bh2ro → 200；缺头 → 向后兼容 200；/pull 同
+[ "$(code -H "Authorization: Bearer $TEST_KEY" -H "X-Tenant-Id: bh2ro" -H 'Content-Type: application/json' -d '{"client_id":"cok","data":{"cards":[]}}' "$B/sync")" = 200 ] && ok "4.7④ /sync X-Tenant-Id=bh2ro 一致 → 200" || no "4.7④ /sync 一致未 200"
+[ "$(code -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d '{"client_id":"cbc","data":{"cards":[]}}' "$B/sync")" = 200 ] && ok "4.7④ /sync 缺 X-Tenant-Id 向后兼容 → 200" || no "4.7④ 缺头未向后兼容放行"
+# 纯空白 X-Tenant-Id → 200。注：curl 多丢弃纯空白值头、workerd 也剥 OWS，故此条实际等价「缺头放行」、
+# 不穿 handler .trim()（不对 trim 删除变异敏感）；仅作「空白头不致 403」的契约确认。
+[ "$(code -H "Authorization: Bearer $TEST_KEY" -H "X-Tenant-Id:    " -H 'Content-Type: application/json' -d '{"client_id":"cws","data":{"cards":[]}}' "$B/sync")" = 200 ] && ok "4.7④ /sync 纯空白 X-Tenant-Id 不致 403 → 200（等价缺头）" || no "4.7④ 空白头致 403"
+# 有效 slug + 尾随空白（本地 miniflare 保留 OWS、达 worker）→ handler .trim() 后 ==bh2ro 一致放行 200；
+# 删 handler .trim() 则 "bh2ro  "!==bh2ro → 403。【此断言对 trim 删除变异可检，非假绿，真覆盖 handler .trim()】
+[ "$(code -H "Authorization: Bearer $TEST_KEY" -H "X-Tenant-Id: bh2ro  " -H 'Content-Type: application/json' -d '{"client_id":"cwsv","data":{"cards":[]}}' "$B/sync")" = 200 ] && ok "4.7④ /sync 有效 slug+尾随空白 经 handler trim 一致 → 200（变异可检 trim）" || no "4.7④ 尾随空白 slug 未经 trim 放行（trim 契约破/被删）"
+[ "$(code -H "Authorization: Bearer $TEST_KEY" "$B/pull")" = 200 ] && ok "4.7④ /pull 缺 X-Tenant-Id 向后兼容 → 200" || no "4.7④ /pull 缺头未 200"
+[ "$(code -H "Authorization: Bearer $TEST_KEY" -H "X-Tenant-Id: other" "$B/pull")" = 403 ] && ok "4.7④ /pull X-Tenant-Id=other 不一致 → 403" || no "4.7④ /pull 不一致未 403"
+
+# ⑤ /ping 经兜底命中只读不计兜底；/sync 兜底命中计数（对照）。撤 bh2ro-key+td-key 使表 miss、TEST_KEY 走 env 兜底。
+d1 --command "UPDATE tenant_credentials SET status='revoked' WHERE id IN ('bh2ro-key','td-key'); UPDATE service_counters SET count=0 WHERE name='auth_fallback';" >/dev/null
+PING_FB=$(body -H "Authorization: Bearer $TEST_KEY" "$B/ping")
+[ "$(echo "$PING_FB" | jget fallback --raw)" = true ] && ok "4.7⑤ /ping 经 env 兜底命中 → fallback=true" || no "4.7⑤ /ping 兜底回显异常: $PING_FB"
+[ "$(d1json "SELECT count FROM service_counters WHERE name='auth_fallback'")" = '[{"count":0}]' ] && ok "4.7⑤ /ping 只读:兜底命中 auth_fallback 不变(0)" || no "4.7⑤ /ping 污染了兜底计数"
+d1 --command "UPDATE service_counters SET count=0 WHERE name='auth_fallback';" >/dev/null
+code -H "Authorization: Bearer $TEST_KEY" -H 'Content-Type: application/json' -d '{"client_id":"cfb","data":{"cards":[]}}' "$B/sync" >/dev/null
+[ "$(d1json "SELECT count FROM service_counters WHERE name='auth_fallback'")" = '[{"count":1}]' ] && ok "4.7⑤ 对照:/sync 兜底命中 auth_fallback 0->1(仍计数)" || no "4.7⑤ /sync 兜底未计数"
+d1 --command "UPDATE tenant_credentials SET status='active' WHERE id='bh2ro-key'; DELETE FROM tenant_credentials WHERE id='td-key'; UPDATE service_counters SET count=0 WHERE name='auth_fallback';" >/dev/null
+
+# ⑥ CORS 放行 X-Tenant-Id
+[ "$(curl -s -m 8 -D - -o /dev/null "$B/api/config" | grep -i 'access-control-allow-headers' | grep -ic 'x-tenant-id')" -ge 1 ] && ok "4.7⑥ CORS Allow-Headers 含 X-Tenant-Id" || no "4.7⑥ CORS 未放行 X-Tenant-Id"
+
 stop
 echo
 echo "==== worker 冒烟：PASS=$PASS FAIL=$FAIL ===="
