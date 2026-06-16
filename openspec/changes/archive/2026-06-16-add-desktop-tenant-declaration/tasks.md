@@ -43,7 +43,7 @@
 - [x] 6.2 `cargo test export_bindings --features ts-rs` 生成无意外漂移（仅新增/预期内变更）
 - [x] 6.3 前端 `pnpm run type-check` + `pnpm run lint` + 构建全绿
 - [x] 6.4 纯本地模式回归：以**调用图审查**确认 tenant 校验/发头逻辑只在云同步路径（`api_url` 非空、经 client.rs）触发、导出导入路径不经 client（D12，此为代码不变量、非可执行单测，避免对不可达路径写恒真断言）；可执行侧由 2.6 `tenant_header_value(None)==None` 兜底覆盖「无 tenant→无头」
-- [ ] 6.5 集成验证三端发头条件（None 不发 / Some 发）+ `/sync` 403 四态分流 + /pull·/ping 403 文案（对 4-C1 已上线 worker 实测：填错 tenant→403 tenant_mismatch）。**前置**：实测须用表驱动凭据 Key 而非 env.API_KEY 兜底 Key——兜底解析为默认租户，declared 须 ≠ 默认租户才能触发 403
+- [x] 6.5 集成验证三端发头条件（None 不发 / Some 发）+ `/sync` 403 四态分流 + /pull·/ping 403 文案（对 4-C1 已上线 worker 实测：填错 tenant→403 tenant_mismatch）。**前置**：实测须用表驱动凭据 Key 而非 env.API_KEY 兜底 Key——兜底解析为默认租户，declared 须 ≠ 默认租户才能触发 403
 
 ## 8. PR review 期间追加的同步配置 UX（D14–D18，已实现）
 
@@ -57,6 +57,6 @@
 
 ## 7. 发布与验收（部分用户自跑）
 
-- [ ] 7.1 `cargo tauri build` 出包
-- [ ] 7.2 真机验收：存量 bh2ro 用户升级后填 `bh2ro` 同步 200；不填也能同步（软约束）；填错租户→可分辨 403 引导
-- [ ] 7.3 `openspec-cn archive add-desktop-tenant-declaration`（增量并入 `cloud-database-support` 主规范）
+- [x] 7.1 `cargo tauri build` 出包
+- [x] 7.2 真机验收：存量 bh2ro 用户升级后填 `bh2ro` 同步 200；不填也能同步（软约束）；填错租户→可分辨 403 引导
+- [x] 7.3 `openspec-cn archive add-desktop-tenant-declaration`（增量并入 `cloud-database-support` 主规范）
