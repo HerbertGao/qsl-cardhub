@@ -55,12 +55,18 @@ const manager = createSessionManager({
       body: JSON.stringify({ seed, nonce }),
     })
     const d = await r.json()
-    if (!d.success) throw new Error(d.message || '建立会话失败')
+    if (!d.success) {
+      const err = new Error(d.message || '建立会话失败') as Error & { seedNotFound?: boolean }
+      // 服务端 code='seed_not_found'（KV 写后读窗）→ 握手层短退避重取 challenge 一次
+      if (d.code === 'seed_not_found') err.seedNotFound = true
+      throw err
+    }
     return { token: d.token, sk: d.sk, exp: d.exp, quota: d.quota }
   },
   signQuery,
   doFetch: (url: string) => fetch(url),
   now: () => Date.now(),
+  backoff: () => new Promise<void>((r) => setTimeout(r, 150)),
 })
 
 export interface QueryResult {
@@ -68,14 +74,8 @@ export interface QueryResult {
   data: unknown
 }
 
-/** 带会话查询某呼号；状态机内部自动握手 + 401/429 重试一次。 */
+/** 带会话查询某呼号；状态机内部自动握手 + 401/配额429 重试一次（限流429 不重握手）。 */
 export async function queryCallsign(callsign: string): Promise<QueryResult> {
   const res = await manager.requestQuery(`/api/callsigns/${encodeURIComponent(callsign)}`, {})
-  let data: unknown = null
-  try {
-    data = res.json ? await res.json() : null
-  } catch {
-    data = null
-  }
-  return { status: res.status, data }
+  return { status: res.status, data: res.data }
 }

@@ -588,7 +588,8 @@ export default {
           const hs = await handshakeRateLimit(env, bkey); // 握手桶（fail-closed）
           if (!hs.allowed) return json({ success: false, message: '请求过于频繁，请稍后再试' }, 429);
           const rawSeed = await env.RATE_LIMIT.get(`powseed:${seed}`);
-          if (!rawSeed) return json({ success: false, message: '题目无效或已过期' }, 403);
+          // code='seed_not_found' 供客户端区分「KV 写后读窗导致 seed 暂不可见」→ 短退避重取 challenge 一次
+          if (!rawSeed) return json({ success: false, message: '题目无效或已过期', code: 'seed_not_found' }, 403);
           await env.RATE_LIMIT.delete(`powseed:${seed}`); // 读后立即删（一次性、防并发重放）
           let rec;
           try { rec = JSON.parse(rawSeed); } catch { return json({ success: false, message: '题目无效' }, 403); }
@@ -791,7 +792,9 @@ export default {
         // IP 限流：独立计数桶 authcb（不与查询共桶、互不挤占预算），
         // 计数 IP 取自可信真实客户端 IP 解析（见 client-ip.js / trusted-client-ip 规范）。
         // checkRateLimit 在 RATE_LIMIT KV 未配置时 fail-open（可用性优先）→ KV 为部署前置。
-        const authcbIP = clientBindingKey(getClientIP(request, env));
+        // 订阅回调（OAuth 被动跳转）属本阶段非目标：限流键沿用真实 IP（getClientIP），
+        // 不做 clientBindingKey 的 /64 归一——避免同 /64 内不相关订阅者共享 authcb 桶（保持订阅路径原状）。
+        const authcbIP = getClientIP(request, env);
         const authcbRate = await checkRateLimit(env, authcbIP, 'authcb');
         if (!authcbRate.allowed) {
           return new Response('请求过于频繁，请稍后再试', { status: 429, headers: CORS_HEADERS });

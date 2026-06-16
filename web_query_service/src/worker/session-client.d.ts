@@ -16,11 +16,13 @@ export interface SessionManagerDeps {
   doFetch: (url: string) => Promise<{ status: number; json?: () => any }>;
   now: () => number;
   skewMs?: number;
+  /** seed-not-found 重取 challenge 前的短退避（可选；浏览器侧注入 setTimeout） */
+  backoff?: () => Promise<void>;
 }
 
 export interface QueryResult {
   status: number;
-  json?: () => any;
+  data: any;
   retried: boolean;
 }
 
