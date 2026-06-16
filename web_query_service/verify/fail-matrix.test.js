@@ -12,6 +12,7 @@ import {
   validateQuerySession,
   computeDifficulty,
   bumpPowrate,
+  chargeQuota,
   handshakeRateLimit,
   checkRateLimit,
 } from '../src/worker/index.js';
@@ -96,7 +97,7 @@ test('validateQuerySession: KV 运行时抛错 → fail-closed 503（非放行�
 });
 
 // ---------- 完整有效会话 → ok；配额用尽 → 429 ----------
-test('validateQuerySession: 完整有效会话查询 → ok', async () => {
+test('validateQuerySession: 完整有效会话查询 → ok（返回 sid，且校验阶段不递增配额）', async () => {
   const kv = mockKV();
   const secret = 'session-secret';
   const sid = 'abcdef0123';
@@ -105,6 +106,17 @@ test('validateQuerySession: 完整有效会话查询 → ok', async () => {
   const url = await buildSignedUrl({ kv, secret, sid, sk, bkey });
   const r = await validateQuerySession({ RATE_LIMIT: kv, SESSION_SECRET: secret }, mockRequest(), url, bkey);
   assert.equal(r.ok, true);
+  assert.equal(r.sid, sid);
+  assert.equal(kv.store.has(`sessionq:${sid}`), false, '校验阶段不应写 sessionq（配额在查询成功后由 chargeQuota 计）');
+});
+
+test('chargeQuota: 成功查询后递增 sessionq；best-effort（KV 抛错不抛）', async () => {
+  const kv = mockKV();
+  await chargeQuota({ RATE_LIMIT: kv }, 'qsid');
+  assert.equal((await kv.get('sessionq:qsid', { type: 'json' })).count, 1);
+  await chargeQuota({ RATE_LIMIT: kv }, 'qsid');
+  assert.equal((await kv.get('sessionq:qsid', { type: 'json' })).count, 2);
+  await chargeQuota({ RATE_LIMIT: throwingKV }, 'x'); // best-effort：不应 reject
 });
 test('validateQuerySession: 伪造签名（错 sk）→ 401', async () => {
   const kv = mockKV();

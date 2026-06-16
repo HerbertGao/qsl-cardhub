@@ -219,18 +219,30 @@ export async function validateQuerySession(env, request, url, bkey) {
     const nonceKey = `nonce:${nonce}`;
     if (await env.RATE_LIMIT.get(nonceKey)) return { ok: false, status: 401, message: '请求已处理' };
     await env.RATE_LIMIT.put(nonceKey, '1', { expirationTtl: NONCE_TTL });
-    // 会话配额（unknown 会话取压低的 QUOTA_UNKNOWN）
+    // 会话配额：此处只**校验**未超限（unknown 会话取压低的 QUOTA_UNKNOWN），**不**在此递增——
+    // 递增推迟到查询成功返回数据后由 chargeQuota 执行（失败查询/500/坏 metadata 不应消耗配额）。
     const quotaMax = sess.binding_mode === 'none' ? QUOTA_UNKNOWN : QUOTA;
-    const qKey = `sessionq:${sid}`;
-    const qStored = await env.RATE_LIMIT.get(qKey, { type: 'json' });
+    const qStored = await env.RATE_LIMIT.get(`sessionq:${sid}`, { type: 'json' });
     const used = qStored && typeof qStored.count === 'number' ? qStored.count : 0;
     if (used >= quotaMax) return { ok: false, status: 429, message: '会话配额已用尽，请重新获取会话' };
-    await env.RATE_LIMIT.put(qKey, JSON.stringify({ count: used + 1 }), { expirationTtl: SESSION_TTL });
-    return { ok: true };
+    return { ok: true, sid };
   } catch {
     // KV 运行时失败/超时 → fail-closed（禁冒泡到顶层 catch 变 500）
     return { ok: false, status: 503, message: '会话功能暂不可用' };
   }
+}
+
+/**
+ * 递增会话查询配额（best-effort）。**在查询成功返回数据后**调用——失败查询（D1 错误 / 坏 metadata 致
+ * 500 / 顶层异常）不应消耗配额。bump 自身失败仅丢一次计数（KV 近似，design 决策5），不影响已返回数据。
+ */
+export async function chargeQuota(env, sid) {
+  try {
+    const qKey = `sessionq:${sid}`;
+    const qStored = await env.RATE_LIMIT.get(qKey, { type: 'json' });
+    const used = qStored && typeof qStored.count === 'number' ? qStored.count : 0;
+    await env.RATE_LIMIT.put(qKey, JSON.stringify({ count: used + 1 }), { expirationTtl: SESSION_TTL });
+  } catch { /* best-effort：配额递增失败不影响已返回的查询结果 */ }
 }
 
 /**
@@ -693,6 +705,8 @@ export default {
           };
         });
 
+        // 查询成功（items 已构建、无异常）→ 此时才消耗一次会话配额
+        await chargeQuota(env, sessionCheck.sid);
         return json({ success: true, callsign: callsign.toUpperCase(), items });
       }
 
