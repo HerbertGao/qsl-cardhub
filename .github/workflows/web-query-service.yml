@@ -1,0 +1,54 @@
+name: Web Query Service CI
+
+on:
+  # 仅查询端（web_query_service/）改动时触发——改哪端跑哪端的检查，不跑桌面端 Rust 构建
+  pull_request:
+    branches: [master]
+    paths:
+      - 'web_query_service/**'
+
+  # 手动触发
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# 最小权限：本 job 只读代码（checkout），不写仓库/包/部署
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: 查询端单测 + 构建
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web_query_service
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # pnpm 版本对齐 web_query_service/package.json 的 packageManager（pnpm@10.28.2 = 生成 pnpm-lock.yaml
+      # 的版本），与 --frozen-lockfile 一致、避免版本错配。仓根无 package.json，故必须显式给 version。
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: web_query_service/pnpm-lock.yaml
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 单元测试 (node --test)
+        run: pnpm run test:unit
+
+      - name: 构建 (vue-tsc + vite)
+        run: pnpm run build
