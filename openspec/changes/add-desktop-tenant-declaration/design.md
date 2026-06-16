@@ -65,6 +65,14 @@
 - **D12**：纯本地模式（`api_url` 为空）回归保护——所有 tenant 校验/发头逻辑限定在 `api_url` 非空分支，留强锚断言「api_url 空时 tenant 逻辑零触发、导出导入路径逐字不变」。
 - **D13**：在 `config.rs`/ADR 注释显式区分 `client_id`=设备身份（OCC 用）/ `tenant`=申报归属（仅 `X-Tenant-Id` 用、**非写入目标**），防后续维护者复活 4-C1 红线禁止的信任客户端自报归属。
 
+### D14–D18：PR review 期间追加的同步配置 UX 决策
+
+- **D14｜API 地址下拉预设 + 官方云必填联动**：API 地址改 `el-select`（`filterable allow-create`，预设空值 + `https://qsl.herbertgao.me`），用户可选预设或手填任意自托管地址。选中官方云预设（`api_url === OFFICIAL_CLOUD_URL`）时租户代码 + API Key 在**前端表单层**必填（保存校验）。**这是 UI 层必填，不改 D2 后端软约束**——自托管/自定义地址仍走软约束，官方云的必填只是表单 UX 引导（域名是配置常量，非内置默认行为）。
+- **D15｜配置导出/导入字符串（含明文 Key）**：新增 `export_sync_config_string_cmd`（读 `sync.toml` + 凭据库 → JSON{api_url,tenant,api_key} → Base64）/ `import_sync_config_string_cmd`（Base64 解码 → 复用 `save_sync_config_cmd` 落盘，含 slug 校验）。**用户明确批准导出含明文 Key**（Base64 仅编码非加密、串等同密钥，界面提示敏感性、仅本机迁移）；base64 + 密钥处理留在 Rust（前端只搬运 Base64 串）。**导出不含 `client_id`**（设备本地自动生成，跨设备复制会撞 ID，语义错）。替代（不含 Key）被用户否决。
+- **D16｜租户代码失焦自动格式化（覆盖 D5）**：原 D5 定「拒绝不转换」（怕静默改值困惑用户）。用户要求「输入完毕自动格式化、省手动改」→ 改为 `@blur` 时 `trim→小写→去非法→截断32`。**原顾虑不成立**：格式化发生在失焦、当面可见，非保存时静默。命令层 `validate_tenant_slug` 仍作权威兜底（格式化后恒过）。
+- **D17｜测试连接测表单值（不需先保存）**：`test_sync_connection_cmd` 由无参改为 `(api_url, api_key, tenant)`，测**表单当前值**而非已保存配置（原行为「未配置同步服务」对填完未保存的用户反直觉）。API Key 表单为空时回落已保存凭据（支持已存 Key 改其它项时测试）。
+- **D18｜客户端 ID 改只读 `<div>`（修 bug#2）**：客户端 ID 原用 `<el-input disabled>`，WKWebView（Tauri 原生壳）对禁用输入框在 v-if re-mount 时裁切文字下缘（Chromium 量指标健康、不复现，确认原生壳专属）。客户端 ID 本就只读/自动生成 → 改 `.readonly-field` div（块级 + padding 留白 + 自然行高），从根上不走 input 渲染路径。**此 bug 暴露了 Chromium-mock 测试层抓不到 WKWebView 专属渲染 bug，是测试 harness 提案要覆盖「真实壳层」的实证依据**（见 [[client-test-harness 提案]]）。
+
 ## 风险 / 权衡
 
 - **[ts-rs tagged enum 渲染漂移]** → ts-rs 12 渲染 `#[serde(tag="status")]` 单元变体（`AuthFailed→{status:"auth_failed"}`）历史上有版本差异（可能退化成裸字符串）。**缓解**：纳入后逐字 diff 生成的 `.ts` 与现有手写 union 形状（discriminant=`status`、值 snake_case、单元变体不带多余字段、新增 `tenant_mismatch`），此 diff 是 D4 验收闸；前端加编译期断言（把 `{status:'auth_failed'}` 字面量赋给生成类型）钉住形状。

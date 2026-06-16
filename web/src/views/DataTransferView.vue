@@ -102,21 +102,40 @@
           label="API 地址"
           required
         >
-          <el-input
+          <el-select
             v-model="syncForm.api_url"
-            placeholder="https://your-api.example.com/api"
+            filterable
+            allow-create
+            default-first-option
+            clearable
+            placeholder="选择官方云或手动输入 API 地址"
             style="max-width: 400px"
-          />
+          >
+            <el-option
+              label="（空）未配置"
+              value=""
+            />
+            <el-option
+              label="https://qsl.herbertgao.me（官方云）"
+              :value="OFFICIAL_CLOUD_URL"
+            />
+          </el-select>
+          <div
+            v-if="isOfficialCloud"
+            class="form-hint"
+          >
+            官方云：租户代码与 API Key 必填
+          </div>
         </el-form-item>
 
         <el-form-item
           label="API Key"
-          required
+          :required="isOfficialCloud"
         >
           <el-input
             v-model="syncForm.api_key"
             type="password"
-            placeholder="输入您的 API Key"
+            :placeholder="syncConfig?.has_api_key ? '已保存（留空保持不变，输入新值可更新）' : '输入您的 API Key'"
             show-password
             style="max-width: 400px"
           />
@@ -124,27 +143,31 @@
             v-if="syncConfig?.has_api_key && !syncForm.api_key"
             class="form-hint"
           >
-            已保存 API Key（留空则保持不变）
+            ✓ 已保存 API Key（出于安全不回显，留空则保持不变）
           </div>
         </el-form-item>
 
-        <el-form-item label="租户代码">
+        <el-form-item
+          label="租户代码"
+          :required="isOfficialCloud"
+        >
           <el-input
             v-model="syncForm.tenant"
-            placeholder="如 bh2ro（留空走兼容模式）"
+            placeholder="请输入租户代码"
             style="max-width: 400px"
+            @blur="formatTenant"
           />
           <div class="form-hint">
-            申报所属租户（小写字母 / 数字 / 连字符，1-32 位）；归属以 API Key 为准，此处仅申报 + 交叉校验。留空则不申报、按兼容模式同步。
+            申报所属租户（小写字母 / 数字 / 连字符，1-32 位，<strong>输入完毕自动格式化</strong>）；归属以 API Key 为准，此处仅申报 + 交叉校验。留空则不申报、按兼容模式同步。
           </div>
         </el-form-item>
 
         <el-form-item label="客户端 ID">
-          <el-input
-            v-model="syncConfig.client_id"
-            disabled
-            style="max-width: 400px"
-          />
+          <!-- 只读展示，故用 div 而非 disabled el-input：规避 WKWebView 对禁用输入框
+               re-mount 时文字下缘裁切的渲染 bug，且本就是不可编辑的自动生成值 -->
+          <div class="readonly-field">
+            {{ syncConfig.client_id || '—' }}
+          </div>
           <div class="form-hint">
             自动生成的客户端标识，用于云端识别
           </div>
@@ -194,6 +217,27 @@
           >
             清除配置
           </el-button>
+        </el-form-item>
+
+        <el-form-item label="配置迁移">
+          <el-button-group>
+            <el-button
+              :loading="copyConfigLoading"
+              :disabled="!syncConfig?.api_url"
+              @click="handleCopyConfig"
+            >
+              一键复制
+            </el-button>
+            <el-button
+              :loading="pasteConfigLoading"
+              @click="handlePasteConfig"
+            >
+              一键粘贴
+            </el-button>
+          </el-button-group>
+          <div class="form-hint">
+            复制：把当前 API 地址 / 租户代码 / API Key 导出为字符串到剪贴板（<strong>含明文 Key</strong>，仅用于本机设备间迁移，请妥善保管）。粘贴：从剪贴板字符串导入并保存。
+          </div>
         </el-form-item>
       </el-form>
     </el-card>
@@ -417,7 +461,7 @@ Authorization: Bearer {api_key}
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { save, open } from '@tauri-apps/plugin-dialog'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -467,12 +511,27 @@ const syncConfig = ref<SyncConfigResponse>({
 })
 
 const restoreLoading = ref(false)
+const copyConfigLoading = ref(false)
+const pasteConfigLoading = ref(false)
 
 const syncForm = reactive({
   api_url: '',
   api_key: '',
   tenant: ''
 })
+
+// 官方云预设地址：选中它时租户代码与 API Key 必填
+const OFFICIAL_CLOUD_URL = 'https://qsl.herbertgao.me'
+const isOfficialCloud = computed(() => syncForm.api_url === OFFICIAL_CLOUD_URL)
+
+// 租户代码输入完毕（blur）自动格式化为合法 slug：小写 + 去非法字符 + 截断 32 位，避免用户手动修改
+function formatTenant() {
+  syncForm.tenant = syncForm.tenant
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '')
+    .slice(0, 32)
+}
 
 // 格式化时间
 function formatDateTime(dateStr: string): string {
@@ -605,6 +664,18 @@ async function handleSaveConfig() {
     return
   }
 
+  // 官方云预设：租户代码 + API Key 必填（API Key 已保存则可不重填）
+  if (isOfficialCloud.value) {
+    if (!tenant) {
+      ElMessage.warning('选择官方云时，租户代码为必填')
+      return
+    }
+    if (!syncForm.api_key && !syncConfig.value.has_api_key) {
+      ElMessage.warning('选择官方云时，API Key 为必填')
+      return
+    }
+  }
+
   try {
     saveConfigLoading.value = true
     const config = await invoke<SyncConfigResponse>('save_sync_config_cmd', {
@@ -626,11 +697,58 @@ async function handleSaveConfig() {
   }
 }
 
+// 一键复制：导出当前同步配置为字符串到剪贴板（含明文 API Key）
+async function handleCopyConfig() {
+  try {
+    copyConfigLoading.value = true
+    const str = await invoke<string>('export_sync_config_string_cmd')
+    await navigator.clipboard.writeText(str)
+    ElMessage.success('配置已复制到剪贴板（含明文 API Key，请妥善保管）')
+    logger.info('[同步配置] 已导出配置字符串')
+  } catch (error) {
+    ElMessage.error(`复制失败：${error}`)
+    logger.error(`[同步配置] 导出失败: ${error}`)
+  } finally {
+    copyConfigLoading.value = false
+  }
+}
+
+// 一键粘贴：从剪贴板字符串导入并保存同步配置
+async function handlePasteConfig() {
+  try {
+    pasteConfigLoading.value = true
+    const str = await navigator.clipboard.readText()
+    if (!str || !str.trim()) {
+      ElMessage.warning('剪贴板为空')
+      return
+    }
+    const config = await invoke<SyncConfigResponse>('import_sync_config_string_cmd', {
+      data: str.trim()
+    })
+    syncConfig.value = config
+    syncForm.api_url = config.api_url
+    syncForm.tenant = config.tenant ?? ''
+    syncForm.api_key = ''
+    ElMessage.success('配置已从剪贴板导入并保存')
+    logger.info('[同步配置] 从字符串导入成功')
+  } catch (error) {
+    ElMessage.error(`粘贴导入失败：${error}`)
+    logger.error(`[同步配置] 导入失败: ${error}`)
+  } finally {
+    pasteConfigLoading.value = false
+  }
+}
+
 // 测试连接
 async function handleTestConnection() {
   try {
     testConnectionLoading.value = true
-    const ping = await invoke<PingResponse>('test_sync_connection_cmd')
+    // 测试表单当前填写的值（无需先保存）；API Key 留空则后端回落到已保存凭据
+    const ping = await invoke<PingResponse>('test_sync_connection_cmd', {
+      apiUrl: syncForm.api_url,
+      apiKey: syncForm.api_key || null,
+      tenant: syncForm.tenant.trim() || null
+    })
     ElMessage.success(ping.tenant ? `连接成功，已认证租户：${ping.tenant}` : '连接成功')
     // fallback：凭据兜底命中默认租户（信息提示、非 mismatch；真正的不匹配由 403 捕获）
     if (ping.fallback) {
@@ -834,9 +952,28 @@ onMounted(() => {
 }
 
 .form-hint {
+  width: 100%; /* 独占一行，始终位于字段下方（避免短提示在 flex-wrap 里挤到字段右侧）*/
   font-size: 12px;
   color: #909399;
   margin-top: 4px;
+}
+
+/* 只读字段展示（客户端 ID 等不可编辑值）：块级 div + padding 留白 + 自然行高，
+   外观近似禁用输入框，但不走 input 渲染路径，规避 WKWebView 对禁用输入框的文字裁切 bug。
+   用 padding 而非固定行高保证文字上下有余量、任何引擎都不裁切 */
+.readonly-field {
+  width: 100%;
+  max-width: 400px;
+  box-sizing: border-box;
+  min-height: 32px;
+  padding: 5px 11px;
+  line-height: 20px;
+  background: var(--el-fill-color-light, #f5f7fa);
+  border: 1px solid var(--el-border-color, #dcdfe6);
+  border-radius: 4px;
+  color: var(--el-text-color-regular, #606266);
+  font-size: 14px;
+  word-break: break-all;
 }
 
 .api-spec-content {

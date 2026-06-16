@@ -45,6 +45,16 @@
 - [x] 6.4 纯本地模式回归：以**调用图审查**确认 tenant 校验/发头逻辑只在云同步路径（`api_url` 非空、经 client.rs）触发、导出导入路径不经 client（D12，此为代码不变量、非可执行单测，避免对不可达路径写恒真断言）；可执行侧由 2.6 `tenant_header_value(None)==None` 兜底覆盖「无 tenant→无头」
 - [ ] 6.5 集成验证三端发头条件（None 不发 / Some 发）+ `/sync` 403 四态分流 + /pull·/ping 403 文案（对 4-C1 已上线 worker 实测：填错 tenant→403 tenant_mismatch）。**前置**：实测须用表驱动凭据 Key 而非 env.API_KEY 兜底 Key——兜底解析为默认租户，declared 须 ≠ 默认租户才能触发 403
 
+## 8. PR review 期间追加的同步配置 UX（D14–D18，已实现）
+
+- [x] 8.1 API 地址改 `el-select`（`filterable allow-create`，预设空值 + `OFFICIAL_CLOUD_URL`）；`isOfficialCloud` computed；选中官方云时 `handleSaveConfig` 校验租户代码 + API Key 必填（D14）
+- [x] 8.2 新增后端 `export_sync_config_string_cmd`（读 config + 凭据 → JSON → Base64，**不含 client_id**）/ `import_sync_config_string_cmd`（解码 → 复用 `save_sync_config_cmd`）+ `ExportedSyncConfig` 内部 DTO；`main.rs` 注册（D15）
+- [x] 8.3 前端「配置迁移」一键复制/粘贴按钮 + handler（`navigator.clipboard` + invoke）；界面提示含明文 Key、仅本机迁移（D15）
+- [x] 8.4 租户代码 `@blur="formatTenant"`：`trim→小写→去非法→截断32`（D16，覆盖 D5）
+- [x] 8.5 `test_sync_connection_cmd` 改 `(api_url, api_key, tenant)` 测表单值；前端传表单值；Key 空回落已存凭据（D17）
+- [x] 8.6 客户端 ID 改只读 `.readonly-field` div（规避 WKWebView 禁用 input re-mount 裁切）；API Key 动态占位符；`form-hint{width:100%}` 提示恒在字段下方（D18 + bug#1）
+- [x] 8.7 验证：`cargo test --lib`/`--bin` 全绿、前端 type-check+lint+build 绿；Playwright(dev:mock 浏览器) 量 CSS/截图核对布局（注：WKWebView 专属裁切 Chromium 复现不了，真机验收见 7.2）
+
 ## 7. 发布与验收（部分用户自跑）
 
 - [ ] 7.1 `cargo tauri build` 出包

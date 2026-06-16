@@ -13,8 +13,22 @@ use crate::sync::client::{
 use crate::sync::config::{
     clear_sync_config, credential_keys, load_sync_config, save_sync_config, SyncConfig,
 };
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
 use tauri::command;
+
+/// 同步配置导出/导入的可移植载荷（仅内部 Base64 序列化用，不导出 TS）
+///
+/// **安全提示**：含明文 `api_key`，Base64 仅编码非加密；导出串等同于密钥本身，
+/// 只用于用户本机在设备间手动迁移配置。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ExportedSyncConfig {
+    api_url: String,
+    #[serde(default)]
+    tenant: Option<String>,
+    #[serde(default)]
+    api_key: Option<String>,
+}
 
 /// 校验租户代码 slug：逐字对齐服务端 schema CHECK（等价正则 `^[a-z0-9-]{1,32}$`）。
 ///
@@ -109,6 +123,38 @@ pub async fn save_sync_config_cmd(
     })
 }
 
+/// 导出同步配置为可移植字符串（Base64 编码的 JSON，**含明文 API Key**）
+///
+/// 供用户在设备间手动迁移配置。返回串等同于密钥、应妥善保管。
+/// 不含 `client_id`（设备本地自动生成，不随配置迁移）。
+#[command]
+pub async fn export_sync_config_string_cmd() -> Result<String, String> {
+    let config = load_sync_config()?.ok_or("未配置同步服务")?;
+    let api_key = get_credential(credential_keys::SYNC_API_KEY)
+        .ok()
+        .flatten();
+    let exported = ExportedSyncConfig {
+        api_url: config.api_url,
+        tenant: config.tenant,
+        api_key,
+    };
+    let json = serde_json::to_string(&exported).map_err(|e| format!("序列化失败: {}", e))?;
+    Ok(STANDARD.encode(json))
+}
+
+/// 从可移植字符串导入同步配置（Base64 解码 + 复用 `save_sync_config_cmd` 落盘，含 slug 校验）
+#[command]
+pub async fn import_sync_config_string_cmd(data: String) -> Result<SyncConfigResponse, String> {
+    let bytes = STANDARD
+        .decode(data.trim())
+        .map_err(|_| "配置字符串格式无效（非 Base64）".to_string())?;
+    let json = String::from_utf8(bytes).map_err(|_| "配置字符串内容无效".to_string())?;
+    let parsed: ExportedSyncConfig =
+        serde_json::from_str(&json).map_err(|_| "配置字符串内容无效（非合法配置）".to_string())?;
+    // 复用保存命令：含 slug 校验、空串归一、凭据落盘
+    save_sync_config_cmd(parsed.api_url, parsed.api_key, parsed.tenant).await
+}
+
 /// 加载同步配置
 #[command]
 pub async fn load_sync_config_cmd() -> Result<Option<SyncConfigResponse>, String> {
@@ -151,20 +197,34 @@ pub async fn clear_sync_config_cmd() -> Result<(), String> {
 }
 
 /// 测试同步连接
+///
+/// 测试**表单当前填写的值**（无需先保存配置即可测）。`api_key` 缺省/空时回落到已保存凭据
+/// （支持「已存 Key、仅改其它项」时测试）；`tenant` 随请求头 `X-Tenant-Id` 发送供交叉校验。
 #[command]
-pub async fn test_sync_connection_cmd() -> Result<PingResponse, String> {
+pub async fn test_sync_connection_cmd(
+    api_url: String,
+    api_key: Option<String>,
+    tenant: Option<String>,
+) -> Result<PingResponse, String> {
     log::info!("🔗 测试同步连接");
 
-    // 加载配置
-    let config = load_sync_config()?.ok_or("未配置同步服务")?;
+    let api_url = api_url.trim();
+    if api_url.is_empty() {
+        return Err("请先填写 API 地址".to_string());
+    }
 
-    // 获取 API Key
-    let api_key = get_credential(credential_keys::SYNC_API_KEY)
-        .map_err(|e| format!("获取 API Key 失败: {}", e))?
-        .ok_or("未配置 API Key")?;
+    // API Key：表单传入优先；为空则回落到已保存凭据
+    let api_key = match api_key.map(|k| k.trim().to_string()).filter(|k| !k.is_empty()) {
+        Some(k) => k,
+        None => get_credential(credential_keys::SYNC_API_KEY)
+            .map_err(|e| format!("获取 API Key 失败: {}", e))?
+            .ok_or("未配置 API Key")?,
+    };
+
+    let tenant = tenant.as_deref().map(str::trim).filter(|s| !s.is_empty());
 
     // 测试连接（带申报租户，供服务端交叉校验 + 回显认证租户）
-    test_connection(&config.api_url, &api_key, config.tenant.as_deref()).await
+    test_connection(api_url, &api_key, tenant).await
 }
 
 /// 执行同步
