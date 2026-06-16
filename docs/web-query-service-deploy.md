@@ -66,6 +66,53 @@
 
 迁移后新表 `tenant_id NOT NULL`，**旧 Worker 的 `INSERT (callsign, openid, …)` 会撞 NOT NULL → 不可单独回退 Worker**。回滚 = 退 Worker 版本 **+** 还原表（建新空 D1 import 备份 dump，或逐表 DROP 后 import；dump 不自动 DROP 已存在表）。未上线第二个真实租户前，全部绑定/订单仍归 `bh2ro`，迁移前后线上行为等价（无回归）。
 
+## 阶段 4-B：查询面按租户路径路由（route-query-by-tenant-path）
+
+公共查询面（Web/移动端按呼号查询）支持 `/t/<slug>/` 路径前缀显式选择租户：`<slug>` 即 `tenant_id`、经 `tenants.status='active'` 校验；bare 入口（root `/`、不带前缀的 `/api/*`）回退 `env.DEFAULT_TENANT`（默认 `bh2ro`）。写入面（`/sync`/`/pull`/`/ping`）不受影响——仍按 Key 解析租户 + `X-Tenant-Id` header 交叉校验，与公开 URL 解耦。
+
+### 无数据库迁移
+
+**本阶段零 D1 迁移**。三张租户表（`tenants` / `tenant_credentials` / `tenant_routes`）与默认租户 seed 已由迁移 0001 上线，纯 Worker 路由 + 前端 + 规范变更，**无需**任何新迁移、`schema.sql` 不变。
+
+**新部署的初始租户 seed**（首次起新部署、tenants 表尚无默认行时）属**部署期 DB 步骤**：须在执行 schema/迁移后插入一条 active 的默认租户行。其 `tenant_id`（slug）**必须** == `env.DEFAULT_TENANT`（本部署 `bh2ro`）。
+
+- **部署契约（红线）**：seed slug ≠ `DEFAULT_TENANT` → bare 查询面以未 seed 的 `tenant_id` 查询 → **静默空结果**（非报错），运营难察觉。务必让二者一致。
+- 现网（已有 0001 的 `bh2ro` seed）无需任何动作——`DEFAULT_TENANT` 缺省即 `bh2ro`、与既有 seed 一致。
+
+### 配置
+
+- `env.DEFAULT_TENANT`（**非密钥**）：在 `wrangler.toml` 的 `[vars]` 配置（示例见 `wrangler.toml.example`）。「改配置文件即可换默认租户」的落点；缺省回退 `bh2ro`。
+
+### CDN 回源（无新增域名）
+
+`/t/*` 与现有 `/api/*`、`/assets/*` **同源、回源至同一 Worker、同一域名**——不新增任何域名。若生产经阿里云 CDN（`qsl.herbert-dev.cn`）回源 Cloudflare 源站（`qsl.herbertgao.me`），须确保 `/t/*` 命中既有「回源到源站」规则（与 `/api/*`、`/assets/*` 一致），不要为 `/t/*` 配置独立路由/拦截规则。
+
+缓存策略按路径分两类：
+
+- **`/t/<slug>/api/*`（含 `/t/<slug>/api/config`、`/api/query`、`/api/callsigns/:cs`）= 动态、不可缓存**：与 bare `/api/*` 同口径（查询结果/租户配置随数据变化，且查询走会话 + PoW 闸门，缓存会破坏防爬与正确性）。CDN 侧确保 `/t/*/api/*` 不被缓存（与现有 `/api/*` 不缓存策略一致）。
+- **`/t/<slug>/`（SPA 外壳 HTML）= 缓存策略同现有 SPA 外壳**：外壳是与 bare root `/` 相同的静态 `index.html`（前缀无关、不为外壳做 slug 校验），缓存口径沿用现网 root `/` 外壳的策略，无需为 `/t/<slug>/` 单设规则。
+- 静态资源（`/assets/*`、`/favicon.svg`）经**绝对路径**取用、**前缀无关**，缓存策略不变。
+
+### lockstep 部署与回滚
+
+- 前端（`src/client`→`public`）按 `location.pathname` 推导租户前缀，由 Worker 同部署（一次 `pnpm run deploy`）。
+- 现网 bare 入口（root `/`、`/api/*`）行为不变；未知/停用 slug 的 `/t/<slug>/api/*` 返 404（不优雅降级到默认站，符合显式租户语义）。
+- 回滚：退 Worker 版本 + 还原前端构建；**无 D1 迁移可退**。
+
+### 部署后冒烟（DEFAULT_TENANT 部署门，非重言式）
+
+冒烟**禁止**用「bare `/api/config` 的 `tenant.id == DEFAULT_TENANT`」断言——它按构造恒真（config 本就回显 `DEFAULT_TENANT`）= 假绿。**必须**改打**显式**路径（用 shell 变量 `$DEFAULT_TENANT` 展开、**禁止**写死 `/t/bh2ro/`）：
+
+```bash
+DEFAULT_TENANT=bh2ro   # 与 wrangler.toml [vars] 一致
+# 显式路径走 active-check，独立证「DEFAULT_TENANT 是 tenants 表中的活跃行」；
+# 误配未 seed slug 时此处返 404、阻止部署
+curl -sf -o /dev/null -w '%{http_code}\n' \
+  "https://<你的域名>/t/${DEFAULT_TENANT}/api/config"   # 期望 200，非 404
+```
+
+其余冒烟：`/t/<未知>/api/config` → 404、`/t//api/query` → 404、`/t` → 404、`/t/<DEFAULT_TENANT>`（无尾斜杠）→ 外壳、`/t/<DEFAULT_TENANT>/sync` → 404、bare `/api/config` 仍工作。
+
 ## 防爬会话 / PoW（query-antibot-session，阶段 3-B）
 
 公开「按呼号查询」不登录、面向公众。查询侧防爬用 **PoW 门票 + 短时会话（绑真实 IP+UA）+ 会话配额 + 会话专属动态签名**把全量爬库成本抬到不划算（爬全库成本 ≈ 会话数 × PoW）。**物理上限诚实声明**：只抬成本、不杜绝遍历；纯 SHA-256 hashcash 对 GPU/ASIC 有数量级摊薄（memory-hard PoW 本期不引入）。

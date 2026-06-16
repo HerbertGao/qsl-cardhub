@@ -37,6 +37,15 @@ id = "<RUN_WRANGLER_KV_CREATE_AND_PASTE_ID_HERE>"
 [vars]
 # API_KEY 用于 /ping 与 /sync 的 Bearer 校验，部署后通过 wrangler secret put API_KEY 设置
 
+# DEFAULT_TENANT：本部署的默认租户 slug（非密钥、可入版本控制示例）。
+#   - bare 入口（root `/`、不带 `/t/<slug>/` 前缀的 `/api/*`）以此值作租户上下文；
+#     写入面 legacy `env.API_KEY` 兜底归属、微信 auth-callback 无 state 兜底亦取此值。
+#   - 缺省（未配置或空串）回退 'bh2ro'（现网兼容）。「改配置文件即可换默认租户」的落点。
+#   - 部署契约（关键）：其值【必须】== tenants 表里那条 active 默认租户的 slug；
+#     不一致 → bare 查询面以未 seed 的 tenant_id 查询 → 静默空结果（非报错）。
+#     详见 docs/web-query-service-deploy.md「阶段 4-B：查询面按租户路径路由」。
+DEFAULT_TENANT = "bh2ro"
+
 # ============================================================
 # 微信服务号配置（可选）
 # ============================================================
