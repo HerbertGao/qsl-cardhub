@@ -4,10 +4,19 @@ on:
   # PR 到 master 分支时触发
   pull_request:
     branches: [master]
+    # 路径范围化：纯查询端 / 纯 openspec 规范 / 纯文档的改动不触发桌面端（Rust/Tauri）构建。
+    # paths-ignore 仅在【全部】改动文件都命中以下模式时跳过——只要触及一个桌面端文件
+    #（src/** web/** Cargo.* tauri.conf.json capabilities/** build.rs 等，均不在下列）就照常全量构建。
+    # ⚠ 前提：Build / Build Summary 不是 master 分支保护的【必需状态检查】（仓主手动合并）。
+    #   若将来把 Build 设为必需检查，本 paths-ignore 跳过会让必需检查永久 pending、卡死合并
+    #   （GitHub path-filter × required-check 死锁）——届时【必须】先改成「必检 gate job 永远运行、
+    #   对无关改动 no-op 报成功」模式，再设必需。
     paths-ignore:
       - '**/*.md'
       - 'docs/**'
       - '.github/workflows/README.md'
+      - 'web_query_service/**'
+      - 'openspec/**'
 
   # 手动触发
   workflow_dispatch:

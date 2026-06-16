@@ -4,16 +4,29 @@
 
 ## 工作流说明
 
-### build.yml - 构建工作流
+### build.yml - 桌面端构建工作流
 
 **触发条件**：
-- Pull Request 到 master 分支
+- Pull Request 到 master 分支（**路径范围化**：纯 `web_query_service/**`、`openspec/**`、docs 的改动**不触发**——见下）
 - 手动触发（workflow_dispatch）
 
 **功能**：
-- 在 macOS (ARM64 + x64)、Windows (x64 + ARM64) 平台并行构建
+- 在 macOS (ARM64 + x64)、Windows (x64 + ARM64) 平台并行构建桌面端（Rust/Tauri）
 - 上传构建产物到 GitHub Artifacts
-- 用于 PR 验证和测试
+- 用于桌面端 PR 验证和测试
+
+**路径范围化**：`paths-ignore` 含 `**/*.md`、`docs/**`、`web_query_service/**`、`openspec/**`。仅当 PR 的**全部**改动文件都落在这些区域时才跳过 Rust 构建；只要触及一个桌面端文件（`src/**`、`web/**`、`Cargo.*`、`tauri.conf.json`、`capabilities/**`、`build.rs` 等）就照常全量构建。前提：`Build` 非分支保护必需检查（仓主手动合并），跳过不卡合并。
+
+### web-query-service.yml - 查询端 CI 工作流
+
+**触发条件**：
+- Pull Request 到 master 分支且改动触及 `web_query_service/**`
+- 手动触发（workflow_dispatch）
+
+**功能**：
+- 单 job（ubuntu-latest）跑查询端自己的快速检查：`pnpm install` + `pnpm run test:unit`（`node --test`）+ `pnpm run build`（`vue-tsc + vite`）
+- **不**执行 `cargo tauri build` 等桌面端构建
+- worker 冒烟（`run_worker_smoke.sh`，依赖 `wrangler dev`）较重，不入 CI，留本地/部署前手动
 
 ### release.yml - 发布工作流
 
@@ -123,8 +136,8 @@ git push origin v0.4.0
 
 为了加快构建速度，工作流使用了以下缓存：
 
-- **Cargo 缓存**：`~/.cargo`, `target/`
-- **npm 缓存**：`node_modules/`, `~/.npm`
+- **Cargo 缓存**（桌面端）：`~/.cargo`, `target/`
+- **pnpm 缓存**：经 `actions/setup-node` 的 `cache: pnpm` + `cache-dependency-path` 指向对应 `pnpm-lock.yaml`（桌面端 `web/pnpm-lock.yaml`、查询端 `web_query_service/pnpm-lock.yaml`）。本仓用 pnpm、非 npm。
 
 缓存键基于 lockfile 的哈希值，依赖更新时会自动失效。
 

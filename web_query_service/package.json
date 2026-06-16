@@ -11,7 +11,7 @@
     "dev:client": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test:unit": "node --test \"verify/**/*.test.js\"",
+    "test:unit": "node --test verify/*.test.js",
     "deploy": "pnpm run build && wrangler deploy",
     "db:create": "wrangler d1 create qsl-sync",
     "db:migrate": "wrangler d1 execute qsl-sync --remote --file=./schema.sql",
