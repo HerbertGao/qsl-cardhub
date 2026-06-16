@@ -7,7 +7,18 @@
  * - GET /query 按呼号查询页面（含订阅收卡入口）
  */
 
-import { getClientIP } from './client-ip.js';
+import { getClientIP, clientBindingKey } from './client-ip.js';
+import {
+  verifyPow,
+  makeToken,
+  parseToken,
+  verifySessionSig,
+  difficultyFor,
+  unknownDifficulty,
+  uaHash,
+  sessionValid,
+  randomHex,
+} from './session.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -45,7 +56,7 @@ const RATE_LIMIT_WINDOW = 60; // 窗口时间（秒）
  *   传入则用 `ratelimit:${bucket}:${ip}` 独立计数（如订阅回调用 'authcb'，不与查询挤占预算）。
  * @returns {Promise<{allowed: boolean, remaining: number, resetAt: number}>}
  */
-async function checkRateLimit(env, ip, bucket) {
+export async function checkRateLimit(env, ip, bucket) {
   if (!env.RATE_LIMIT) {
     // KV 未配置时跳过限流（fail-open，可用性优先；KV 为部署前置）
     return { allowed: true, remaining: RATE_LIMIT_MAX, resetAt: 0 };
@@ -56,24 +67,31 @@ async function checkRateLimit(env, ip, bucket) {
   const windowStart = now - (now % RATE_LIMIT_WINDOW);
   const resetAt = windowStart + RATE_LIMIT_WINDOW;
 
-  const stored = await env.RATE_LIMIT.get(key, { type: 'json' });
-  let count = 0;
+  try {
+    const stored = await env.RATE_LIMIT.get(key, { type: 'json' });
+    let count = 0;
 
-  if (stored && stored.window === windowStart) {
-    count = stored.count;
+    if (stored && stored.window === windowStart) {
+      count = stored.count;
+    }
+
+    if (count >= RATE_LIMIT_MAX) {
+      return { allowed: false, remaining: 0, resetAt };
+    }
+
+    // 递增计数
+    count++;
+    await env.RATE_LIMIT.put(key, JSON.stringify({ window: windowStart, count }), {
+      expirationTtl: RATE_LIMIT_WINDOW + 10, // 多加 10 秒缓冲
+    });
+
+    return { allowed: true, remaining: RATE_LIMIT_MAX - count, resetAt };
+  } catch {
+    // 纯 IP 限流（查询桶 / authcb 桶）是**可用性优先的 fail-open** 闸：KV 运行时读写失败/超时时
+    // 不阻断请求（返回 allowed=true），由其后的会话校验（fail-closed）主导放行决定。
+    // 注：反滥用关键键（seed/session/quota/nonce/握手桶）走各自 fail-closed 路径，不经本函数。
+    return { allowed: true, remaining: RATE_LIMIT_MAX, resetAt };
   }
-
-  if (count >= RATE_LIMIT_MAX) {
-    return { allowed: false, remaining: 0, resetAt };
-  }
-
-  // 递增计数
-  count++;
-  await env.RATE_LIMIT.put(key, JSON.stringify({ window: windowStart, count }), {
-    expirationTtl: RATE_LIMIT_WINDOW + 10, // 多加 10 秒缓冲
-  });
-
-  return { allowed: true, remaining: RATE_LIMIT_MAX - count, resetAt };
 }
 
 // ============================================================
@@ -93,113 +111,138 @@ async function sha256(message) {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-/**
- * 验证请求签名
- * @returns {Promise<{valid: boolean, error?: string}>}
- */
-async function verifySignature(env, request, url) {
-  if (!env.CLIENT_SIGN_KEY) {
-    // 未配置签名密钥时跳过验证
-    return { valid: true };
-  }
+// ============================================================
+// 防爬会话 / PoW（query-antibot-session 规范）
+// ============================================================
+const SESSION_TTL = 10 * 60; // 会话 TTL（秒）
+const SESSION_TTL_MS = SESSION_TTL * 1000;
+const POWSEED_TTL = 2 * 60; // PoW 题目 TTL（秒，一次性）
+const POWRATE_TTL = 5 * 60; // 自适应难度计数窗（秒）
+const QUOTA = 50; // 常规单会话查询配额
+const QUOTA_UNKNOWN = 3; // unknown 来源会话压低配额（不绑 IP、可搬移，趋零搬移价值）
+const HANDSHAKE_RATE_MAX = 30; // 握手桶每分钟上限（独立于查询桶 RATE_LIMIT_MAX）
 
+/**
+ * 会话/PoW 硬部署前置：KV 已绑 + SESSION_SECRET 已配。任一缺失 → 会话功能不可用（fail-closed 503）。
+ */
+export function sessionSubsystemReady(env) {
+  return !!(env.RATE_LIMIT && env.SESSION_SECRET);
+}
+
+/**
+ * 握手桶前置限流（独立桶 `ratelimit:session:<bkey>`，**fail-closed**）。
+ * KV 读写失败时抛错 → 调用方 catch → 503（**禁止**复用查询桶 checkRateLimit 的 fail-open 短路）。
+ * @returns {Promise<{allowed: boolean}>}
+ */
+export async function handshakeRateLimit(env, bkey) {
+  const key = `ratelimit:session:${bkey}`;
+  const now = Math.floor(Date.now() / 1000);
+  const windowStart = now - (now % RATE_LIMIT_WINDOW);
+  const stored = await env.RATE_LIMIT.get(key, { type: 'json' });
+  let count = stored && stored.window === windowStart ? stored.count : 0;
+  if (count >= HANDSHAKE_RATE_MAX) return { allowed: false };
+  count++;
+  await env.RATE_LIMIT.put(key, JSON.stringify({ window: windowStart, count }), {
+    expirationTtl: RATE_LIMIT_WINDOW + 10,
+  });
+  return { allowed: true };
+}
+
+/**
+ * 计算 challenge 难度。powrate 读写失败 **fail-secure → DIFF_MAX**（禁跌回 baseMin，防攻击者诱发读失败降难度）。
+ * unknown 来源恒取最高档（≡ DIFF_MAX）。
+ * @returns {Promise<number>}
+ */
+export async function computeDifficulty(env, bkey) {
+  if (bkey === 'unknown') return unknownDifficulty();
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const windowStart = now - (now % POWRATE_TTL);
+    const pr = await env.RATE_LIMIT.get(`powrate:${bkey}`, { type: 'json' });
+    const rate = pr && pr.window === windowStart ? pr.count : 0;
+    return difficultyFor(rate); // 只读算难度，不写——powrate 递增见 bumpPowrate（在 seed 落库后才计数）
+  } catch {
+    return unknownDifficulty(); // powrate 读失败 fail-secure → DIFF_MAX
+  }
+}
+
+/**
+ * 递增 powrate 计数（best-effort）。**在 `powseed` 写入成功之后**调用——失败的 challenge（powseed 写失败→503）
+ * 不应抬高该 IP 的自适应难度。bump 自身失败仅丢一次计数、不影响已签发的 seed（故 swallow）。
+ */
+export async function bumpPowrate(env, bkey) {
+  if (bkey === 'unknown') return;
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const windowStart = now - (now % POWRATE_TTL);
+    const pr = await env.RATE_LIMIT.get(`powrate:${bkey}`, { type: 'json' });
+    const rate = pr && pr.window === windowStart ? pr.count : 0;
+    await env.RATE_LIMIT.put(`powrate:${bkey}`, JSON.stringify({ window: windowStart, count: rate + 1 }), {
+      expirationTtl: POWRATE_TTL + 10,
+    });
+  } catch { /* best-effort：bump 失败不影响已签发 seed */ }
+}
+
+/**
+ * 查询端点会话校验（fail-closed）：token HMAC ∧ KV 命中 session ∧ 绑定项（exp/ip/ua）∧ 会话签名 ∧
+ * _ts 时窗 ∧ _nonce 防重放 ∧ 会话配额。任一不过返回相应拒绝码。
+ * KV 运行时失败/超时 → fail-closed（503），**禁止** fail-open 放行。
+ * @returns {Promise<{ok: true} | {ok: false, status: number, message: string}>}
+ */
+export async function validateQuerySession(env, request, url, bkey) {
+  if (!sessionSubsystemReady(env)) return { ok: false, status: 503, message: '会话功能不可用' };
+  const token = url.searchParams.get('token');
   const ts = url.searchParams.get('_ts');
   const nonce = url.searchParams.get('_nonce');
   const sig = url.searchParams.get('_sig');
-
-  if (!ts || !nonce || !sig) {
-    return { valid: false, error: '缺少签名参数' };
+  if (!token || !ts || !nonce || !sig) return { ok: false, status: 401, message: '缺少会话凭据' };
+  // _nonce 字符集/长度约束（hex/base64url，8–128）——天然杜绝 `nonce:<nonce>` KV 键的分隔符注入/超长
+  if (!/^[A-Za-z0-9_-]{8,128}$/.test(nonce)) return { ok: false, status: 401, message: '会话凭据格式无效' };
+  // _ts 时窗（与会话失效区分：时钟漂移/过期签名 → 403；会话无效 → 401）
+  const tsNum = parseInt(ts, 10);
+  if (Number.isNaN(tsNum) || Math.abs(Date.now() - tsNum) > SIGN_TIME_WINDOW) {
+    return { ok: false, status: 403, message: '签名已过期' };
   }
-
-  // 1. 时间窗口检查
-  const timestamp = parseInt(ts, 10);
-  const now = Date.now();
-  if (isNaN(timestamp) || Math.abs(now - timestamp) > SIGN_TIME_WINDOW) {
-    return { valid: false, error: '签名已过期' };
-  }
-
-  // 2. nonce 唯一性检查（防重放）
-  if (env.RATE_LIMIT) {
+  try {
+    const sid = await parseToken(token, env.SESSION_SECRET);
+    if (!sid) return { ok: false, status: 401, message: '会话无效' };
+    const raw = await env.RATE_LIMIT.get(`session:${sid}`);
+    if (!raw) return { ok: false, status: 401, message: '会话无效或已过期' };
+    let sess;
+    try { sess = JSON.parse(raw); } catch { return { ok: false, status: 401, message: '会话无效' }; }
+    const uah = await uaHash(request.headers.get('User-Agent'));
+    if (!sessionValid(sess, bkey, uah, Date.now())) return { ok: false, status: 401, message: '会话无效或已过期' };
+    // 会话签名（sk）—— canonicalPayload 由共享模块构造（单一事实源）
+    const sigOk = await verifySessionSig({ sid, path: url.pathname, params: url.searchParams, ts, nonce }, sess.sk, sig);
+    if (!sigOk) return { ok: false, status: 401, message: '签名无效' };
+    // _nonce 防重放（fail-closed）
     const nonceKey = `nonce:${nonce}`;
-    const existing = await env.RATE_LIMIT.get(nonceKey);
-    if (existing) {
-      return { valid: false, error: '请求已处理' };
-    }
+    if (await env.RATE_LIMIT.get(nonceKey)) return { ok: false, status: 401, message: '请求已处理' };
     await env.RATE_LIMIT.put(nonceKey, '1', { expirationTtl: NONCE_TTL });
+    // 会话配额：此处只**校验**未超限（unknown 会话取压低的 QUOTA_UNKNOWN），**不**在此递增——
+    // 递增推迟到查询成功返回数据后由 chargeQuota 执行（失败查询/500/坏 metadata 不应消耗配额）。
+    const quotaMax = sess.binding_mode === 'none' ? QUOTA_UNKNOWN : QUOTA;
+    const qStored = await env.RATE_LIMIT.get(`sessionq:${sid}`, { type: 'json' });
+    const used = qStored && typeof qStored.count === 'number' ? qStored.count : 0;
+    if (used >= quotaMax) return { ok: false, status: 429, message: '会话配额已用尽，请重新获取会话' };
+    return { ok: true, sid };
+  } catch {
+    // KV 运行时失败/超时 → fail-closed（禁冒泡到顶层 catch 变 500）
+    return { ok: false, status: 503, message: '会话功能暂不可用' };
   }
-
-  // 3. 签名正确性校验
-  // 获取主要参数（排除签名相关参数）
-  const params = new URLSearchParams(url.searchParams);
-  params.delete('_ts');
-  params.delete('_nonce');
-  params.delete('_sig');
-  params.sort(); // 按字母排序确保一致性
-
-  const path = url.pathname;
-  const paramStr = params.toString();
-  const payload = `${path}:${paramStr}:${ts}:${nonce}`;
-  const expectedSig = await sha256(payload + env.CLIENT_SIGN_KEY);
-
-  if (sig !== expectedSig) {
-    return { valid: false, error: '签名无效' };
-  }
-
-  return { valid: true };
-}
-
-// ============================================================
-// 验证码配置
-// ============================================================
-const CAPTCHA_TTL = 5 * 60 * 1000; // 验证码有效期 5 分钟
-
-/**
- * 生成 HMAC-SHA256 签名
- */
-async function hmacSha256(message, secret) {
-  const encoder = new TextEncoder();
-  const keyData = encoder.encode(secret);
-  const key = await crypto.subtle.importKey(
-    'raw',
-    keyData,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(message));
-  const hashArray = Array.from(new Uint8Array(signature));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**
- * 生成算术验证码
- * @returns {{question: string, answer: number, token: string, expires: number}}
+ * 递增会话查询配额（best-effort）。**在查询成功返回数据后**调用——失败查询（D1 错误 / 坏 metadata 致
+ * 500 / 顶层异常）不应消耗配额。bump 自身失败仅丢一次计数（KV 近似，design 决策5），不影响已返回数据。
  */
-async function generateCaptcha(env) {
-  // 生成随机算术题
-  const operators = ['+', '-'];
-  const operator = operators[Math.floor(Math.random() * operators.length)];
-  let num1, num2, answer;
-
-  if (operator === '+') {
-    num1 = Math.floor(Math.random() * 50) + 1; // 1-50
-    num2 = Math.floor(Math.random() * 50) + 1; // 1-50
-    answer = num1 + num2;
-  } else {
-    num1 = Math.floor(Math.random() * 50) + 20; // 20-70
-    num2 = Math.floor(Math.random() * 20) + 1; // 1-20
-    answer = num1 - num2;
-  }
-
-  const question = `${num1} ${operator} ${num2} = ?`;
-  const expires = Date.now() + CAPTCHA_TTL;
-
-  // 生成加密 token
-  const payload = `${answer}:${expires}`;
-  const signature = await hmacSha256(payload, env.CAPTCHA_SECRET || 'default-secret');
-  const token = btoa(JSON.stringify({ a: answer, e: expires, s: signature }));
-
-  return { question, answer, token, expires };
+export async function chargeQuota(env, sid) {
+  try {
+    const qKey = `sessionq:${sid}`;
+    const qStored = await env.RATE_LIMIT.get(qKey, { type: 'json' });
+    const used = qStored && typeof qStored.count === 'number' ? qStored.count : 0;
+    await env.RATE_LIMIT.put(qKey, JSON.stringify({ count: used + 1 }), { expirationTtl: SESSION_TTL });
+  } catch { /* best-effort：配额递增失败不影响已返回的查询结果 */ }
 }
 
 /**
@@ -529,29 +572,78 @@ export default {
         });
       }
 
-      // GET /api/captcha 生成算术验证码
-      if (path === '/api/captcha' && method === 'GET') {
-        // 应用 Layer 0: IP 限流
-        const clientIP = getClientIP(request, env);
-        const rateLimit = await checkRateLimit(env, clientIP);
-        if (!rateLimit.allowed) {
-          return json({
-            success: false,
-            message: '请求过于频繁，请稍后再试',
-            retry_after: rateLimit.resetAt - Math.floor(Date.now() / 1000),
-          }, 429);
+      // GET /api/session/challenge 下发 PoW 题（query-antibot-session）
+      if (path === '/api/session/challenge' && method === 'GET') {
+        if (!sessionSubsystemReady(env)) {
+          return json({ success: false, message: '会话功能不可用' }, 503);
         }
+        const bkey = clientBindingKey(getClientIP(request, env));
+        try {
+          const hs = await handshakeRateLimit(env, bkey); // 握手桶（fail-closed）
+          if (!hs.allowed) {
+            return json({ success: false, message: '请求过于频繁，请稍后再试' }, 429);
+          }
+          const difficulty = await computeDifficulty(env, bkey); // 只读算难度；powrate 读失败 fail-secure→DIFF_MAX
+          const seed = randomHex(16);
+          const record = {
+            difficulty,
+            challenge_ip: bkey, // 归一键（与兑换比对同口径）
+            challenge_ua_hash: await uaHash(request.headers.get('User-Agent')),
+            exp: Date.now() + POWSEED_TTL * 1000,
+          };
+          // 写 powseed 失败 → fail-closed（禁返回不可兑换的 seed）；此前未递增 powrate
+          await env.RATE_LIMIT.put(`powseed:${seed}`, JSON.stringify(record), { expirationTtl: POWSEED_TTL });
+          await bumpPowrate(env, bkey); // seed 落库成功后才递增 powrate（失败 challenge 不抬难度）
+          return json({ success: true, seed, difficulty });
+        } catch {
+          return json({ success: false, message: '会话功能暂不可用' }, 503);
+        }
+      }
 
-        if (!env.CAPTCHA_SECRET) {
-          return json({ success: false, message: '验证码功能未启用' }, 503);
+      // POST /api/session 验 PoW → 签发短时会话（query-antibot-session）
+      if (path === '/api/session' && method === 'POST') {
+        if (!sessionSubsystemReady(env)) {
+          return json({ success: false, message: '会话功能不可用' }, 503);
         }
-        const captcha = await generateCaptcha(env);
-        return json({
-          success: true,
-          question: captcha.question,
-          token: captcha.token,
-          expires: captcha.expires,
-        });
+        const bkey = clientBindingKey(getClientIP(request, env));
+        let body;
+        try { body = await request.json(); } catch { return json({ success: false, message: '无效 JSON' }, 400); }
+        const seed = body && typeof body.seed === 'string' ? body.seed : null;
+        const nonce = body && typeof body.nonce === 'string' ? body.nonce : null;
+        if (!seed || !nonce) return json({ success: false, message: '缺少 seed/nonce' }, 400);
+        try {
+          const hs = await handshakeRateLimit(env, bkey); // 握手桶（fail-closed）
+          if (!hs.allowed) return json({ success: false, message: '请求过于频繁，请稍后再试' }, 429);
+          const rawSeed = await env.RATE_LIMIT.get(`powseed:${seed}`);
+          // code='seed_not_found' 供客户端区分「KV 写后读窗导致 seed 暂不可见」→ 短退避重取 challenge 一次
+          if (!rawSeed) return json({ success: false, message: '题目无效或已过期', code: 'seed_not_found' }, 403);
+          await env.RATE_LIMIT.delete(`powseed:${seed}`); // 读后立即删（一次性、防并发重放）
+          let rec;
+          try { rec = JSON.parse(rawSeed); } catch { return json({ success: false, message: '题目无效' }, 403); }
+          if (!(await verifyPow(seed, nonce, rec.difficulty))) {
+            return json({ success: false, message: '工作量证明不足' }, 403);
+          }
+          // 领题者 === 兑换者（归一键 + UA），防低难度 IP 领题→他处兑换绕开自适应难度
+          if (rec.challenge_ip !== bkey || rec.challenge_ua_hash !== (await uaHash(request.headers.get('User-Agent')))) {
+            return json({ success: false, message: '会话上下文不一致' }, 403);
+          }
+          const isUnknown = bkey === 'unknown';
+          const sid = randomHex(18);
+          const sk = randomHex(32);
+          const exp = Date.now() + SESSION_TTL_MS;
+          const record = {
+            binding_mode: isUnknown ? 'none' : 'ip',
+            ip: isUnknown ? null : bkey,
+            ua_hash: await uaHash(request.headers.get('User-Agent')),
+            exp,
+            sk,
+          };
+          await env.RATE_LIMIT.put(`session:${sid}`, JSON.stringify(record), { expirationTtl: SESSION_TTL });
+          const token = await makeToken(sid, env.SESSION_SECRET);
+          return json({ success: true, token, sk, exp, quota: isUnknown ? QUOTA_UNKNOWN : QUOTA });
+        } catch {
+          return json({ success: false, message: '会话功能暂不可用' }, 503);
+        }
       }
 
       // GET /api/callsigns/:callsign 或 /api/query?callsign=
@@ -561,9 +653,10 @@ export default {
       const callsign = callsignFromPath || callsignFromQuery;
 
       if (callsign && method === 'GET' && (path.startsWith('/api/callsigns/') || path === '/api/query')) {
-        // 应用 Layer 0: IP 限流
-        const clientIP = getClientIP(request, env);
-        const rateLimit = await checkRateLimit(env, clientIP);
+        const bkey = clientBindingKey(getClientIP(request, env));
+        // Layer 0: 纯 IP 限流（查询桶 `ratelimit:<bkey>`，fail-open）——**置于会话校验之前**。
+        // 顺序不变量：限流触发先返 429；fail-open 绝不在会话校验之前短路放行，会话校验(fail-closed)仍主导。
+        const rateLimit = await checkRateLimit(env, bkey);
         if (!rateLimit.allowed) {
           return json({
             success: false,
@@ -572,10 +665,10 @@ export default {
           }, 429);
         }
 
-        // 应用 Layer 1: 签名校验
-        const sigResult = await verifySignature(env, request, url);
-        if (!sigResult.valid) {
-          return json({ success: false, message: sigResult.error || '签名验证失败' }, 403);
+        // Layer 1: 会话校验（token + 会话签名 + 配额，fail-closed）取代静态 CLIENT_SIGN_KEY 签名
+        const sessionCheck = await validateQuerySession(env, request, url, bkey);
+        if (!sessionCheck.ok) {
+          return json({ success: false, message: sessionCheck.message }, sessionCheck.status);
         }
 
         const DB = env.DB;
@@ -612,6 +705,8 @@ export default {
           };
         });
 
+        // 查询成功（items 已构建、无异常）→ 此时才消耗一次会话配额
+        await chargeQuota(env, sessionCheck.sid);
         return json({ success: true, callsign: callsign.toUpperCase(), items });
       }
 
@@ -726,6 +821,8 @@ export default {
         // IP 限流：独立计数桶 authcb（不与查询共桶、互不挤占预算），
         // 计数 IP 取自可信真实客户端 IP 解析（见 client-ip.js / trusted-client-ip 规范）。
         // checkRateLimit 在 RATE_LIMIT KV 未配置时 fail-open（可用性优先）→ KV 为部署前置。
+        // 订阅回调（OAuth 被动跳转）属本阶段非目标：限流键沿用真实 IP（getClientIP），
+        // 不做 clientBindingKey 的 /64 归一——避免同 /64 内不相关订阅者共享 authcb 桶（保持订阅路径原状）。
         const authcbIP = getClientIP(request, env);
         const authcbRate = await checkRateLimit(env, authcbIP, 'authcb');
         if (!authcbRate.allowed) {
@@ -761,24 +858,21 @@ export default {
         return new Response(html, { headers: { 'Content-Type': 'text/html; charset=UTF-8', ...CORS_HEADERS } });
       }
 
-      // GET /api/config 前端配置（包含功能开关、签名密钥和 WECHAT_APPID）
+      // GET /api/config 前端配置（功能开关 + WECHAT_APPID + 备案；不再下发查询签名密钥/验证码配置）
       if (path === '/api/config' && method === 'GET') {
         const wechatSubscribeEnabled = !!(env.WECHAT_APPID && env.WECHAT_SECRET);
         const wechatPushEnabled = !!(env.WECHAT_APPID && env.WECHAT_SECRET && env.WECHAT_TEMPLATE_ID);
-        // 注意：captcha 仅为前端 UI，服务端不校验其 token；features.captcha 仍下发，客户端据此弹出的验证码无服务端校验作用
-        const captchaEnabled = !!(env.CLIENT_SIGN_KEY && env.CAPTCHA_SECRET);
         let filing = null;
         if (env.SITE_FILING) {
           try { filing = JSON.parse(env.SITE_FILING); } catch { /* ignore invalid JSON */ }
         }
+        // 退役：禁止下发 sign_key（静态 CLIENT_SIGN_KEY 退役）与 captcha 相关配置——查询签名改用会话专属 sk。
         return json({
           features: {
             wechat_subscribe: wechatSubscribeEnabled,
             wechat_push: wechatPushEnabled,
-            captcha: captchaEnabled,
           },
           wechat_appid: wechatSubscribeEnabled ? env.WECHAT_APPID : null,
-          sign_key: env.CLIENT_SIGN_KEY || null,
           filing,
         });
       }

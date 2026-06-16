@@ -1,29 +1,4 @@
-## 目的
-
-为云端查询服务提供自建的轻量级防刷机制，防止简单脚本（curl/requests）批量调用接口、爬虫遍历呼号抓取数据以及自动化批量绑定虚假呼号。由于 QSL 查询服务攻击价值较低，不需要应对专业的验证码破解服务，采用自建轻量方案即可。
-## 需求
-### 需求：IP 限流
-
-系统必须对所有 API 请求按 IP 进行频率限制，默认限制为 20 次/分钟。超限请求必须返回 HTTP 429 状态码及友好提示。计数必须使用 Cloudflare KV 存储，支持自动过期。计数键中的 IP **必须**取自「可信真实客户端 IP 解析」（见 `trusted-client-ip` 规范）得到的真实用户 IP，**禁止**直接使用 `CF-Connecting-IP` 或任何客户端可注入头作计数键——在前置阿里云 CDN 架构下，经 CDN 回源时 `CF-Connecting-IP` 是 CDN 回源节点 IP（把大量真实用户归并到少数桶、限流粒度失真），须改取经密钥回源头（`X-Origin-Auth`）校验、采信 CDN 写入的不可伪造真实 IP 头的可信解析，方能在直连与经 CDN 两种入口下都按真实用户计数。
-
-> 说明：本「IP 限流」是抬高自动化批量调用成本（anti-abuse），非访问控制；其有效性依赖计数键能区分真实用户。CDN 路径下若按 CDN 节点 IP 计数则形同虚设（见 `trusted-client-ip`）。
-
-#### 场景：请求频率超过限制
-
-- **当** 同一真实用户 IP 在一分钟内的 API 请求次数超过 20 次
-- **那么** 系统拒绝该请求并返回 HTTP 429 状态码及友好提示
-
-#### 场景：请求频率在限制内
-
-- **当** 同一真实用户 IP 在一分钟内的 API 请求次数不超过 20 次
-- **那么** 系统使用 Cloudflare KV 存储记录计数（支持自动过期）并放行该请求
-
-#### 场景：CDN 路径下按真实用户 IP 计数
-
-- **当** 请求经阿里云 CDN 回源到达受限流的 API 端点
-- **那么** 计数键中的 IP **必须**为经密钥回源头校验后采信的真实用户 IP（取自 CDN 写入的不可伪造头）
-- **并且** **禁止**将不同真实用户归并到同一 CDN 回源节点 IP 的计数桶
-- **并且** 客户端伪造 `X-Forwarded-For` 经 CDN 透传后**禁止**绕过该限流
+## 修改需求
 
 ### 需求：用户体验
 
@@ -68,3 +43,29 @@
 - **那么** 这些手段均不在本能力范围内，不予实现
 - **并且** 查询侧 PoW、短时会话、会话配额、按真实 IP 自适应难度属本能力范围内，**不**视为被禁的行为分析/风控系统
 
+## 移除需求
+
+### 需求：算术验证码
+
+**Reason**: 算术验证码为「剧场」——仅在订阅入口弹出、不防护查询本身且可绕过；由 PoW + 短时会话体系统一替换（见 `query-antibot-session`）。
+**Migration**: **查询侧**防自动化由 PoW + 会话 + 配额承担（见 `query-antibot-session`）；**订阅入口**仅移除算术验证码交互（点击直接进入微信 OAuth 授权），其 `/api/wechat/auth-callback` 回调**仍只按既有 IP 限流 + 微信 OAuth code 约束**处理、**不**升级为 PoW+会话（见非目标）；前端移除验证码交互。
+
+### 需求：验证码生成接口
+
+**Reason**: `GET /api/captcha` 随算术验证码一并移除。
+**Migration**: 改用 `GET /api/session/challenge`（PoW 题）+ `POST /api/session`（验 PoW 签发会话），见 `query-antibot-session`。
+
+### 需求：验证码校验参数
+
+**Reason**: 订阅不再携带 `captcha_token`/`captcha_answer`（算术验证码移除）。
+**Migration**: 自动化防护改由会话机制承担；订阅入口不再需要验证码参数。
+
+### 需求：请求签名校验
+
+**Reason**: 基于静态可公开 `CLIENT_SIGN_KEY` 的签名对防爬零收益（攻击者直接持公开 key 签名）；由会话专属动态签名取代。
+**Migration**: 查询签名改用会话专属 `sk`（见 `query-antibot-session`「查询侧会话校验与动态签名」），`_ts`/`_nonce`/时窗/nonce 防重放机制保留但密钥改为 `sk`。
+
+### 需求：请求签名格式
+
+**Reason**: 签名密钥从静态 `CLIENT_SIGN_KEY` 改为会话专属 `sk`，旧的 `payload + 密钥` 取 SHA-256 摘要的格式定义失效。
+**Migration**: 新签名格式见 `query-antibot-session`：`_sig = HMAC-SHA256(sk, canonicalPayload)`（`canonicalPayload` 定义见 `query-antibot-session`「查询侧会话校验与动态签名」；**必须** HMAC，**禁止**对 `payload + sk` 取摘要的旧式），并额外携带会话 token。

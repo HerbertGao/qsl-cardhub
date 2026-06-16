@@ -46,6 +46,36 @@
 
 - **顺丰路由推送**：服务端提供两条路径：正式 `POST /api/sf/route-push`、沙箱 `POST /api/sf/route-push/sandbox`；沙箱触发的用户推送内容带「【沙箱】」标记。请求/响应格式详见 OpenSpec 规范 `openspec/specs/sf-route-push-receiver/spec.md`。
 
+## 防爬会话 / PoW（query-antibot-session，阶段 3-B）
+
+公开「按呼号查询」不登录、面向公众。查询侧防爬用 **PoW 门票 + 短时会话（绑真实 IP+UA）+ 会话配额 + 会话专属动态签名**把全量爬库成本抬到不划算（爬全库成本 ≈ 会话数 × PoW）。**物理上限诚实声明**：只抬成本、不杜绝遍历；纯 SHA-256 hashcash 对 GPU/ASIC 有数量级摊薄（memory-hard PoW 本期不引入）。
+
+握手流程：`GET /api/session/challenge` 下发 `{seed, difficulty}` → 前端 PoW（Web Worker 内同步 sha256 找 nonce 使 `sha256(seed+":"+nonce)` 前导零 ≥ difficulty）→ `POST /api/session {seed, nonce}` 验 PoW 签发 `{token, sk, exp, quota}` → 查询带 `token + _ts + _nonce + _sig`（`_sig = HMAC-SHA256(sk, canonicalPayload)`）。
+
+### 硬部署前置
+
+- **`RATE_LIMIT` KV 必须绑定**：会话存储 / PoW 防重放 / 配额 / 自适应难度计数依赖 KV。与纯 IP 限流（KV 缺失 fail-open）不同，会话相关端点在 KV 未绑定时 **fail-closed**（`/api/session*` 返 503、无有效会话的查询被拒），**绝不**因缺 KV 静默放行无会话查询。
+- **`SESSION_SECRET`**：会话 token 的 HMAC-SHA256 密钥（机密）。
+  ```bash
+  openssl rand -hex 32 | npx wrangler secret put SESSION_SECRET
+  ```
+  未配置 → 会话功能 fail-closed（503）。泄漏可伪造 token，但仍受「KV 必命中 session + IP/UA 绑定 + 配额」三重约束；可轮换（轮换瞬间在途会话失效、客户端自动重走 PoW）。
+
+### 参数（apply 时按实测调，须落在约束区间内）
+
+- PoW 难度：`BASE`（基线，手机 ~0.1–0.3s）、`BASE_MIN`（正下限 >0，恒有真实 PoW）、`DIFF_MAX`（上限封顶，封顶仍手机可解，避免共享出口 IP 正常用户 DoS）；按真实 IP（IPv6 /64、IPv4 /32 归一）自适应升档、受 `DIFF_MAX` 封顶。
+- 会话 TTL ~10min；常规配额 `QUOTA`≈50；`unknown` 来源配额 `QUOTA_unknown`≤3（不绑 IP、可搬移，压低使搬移价值趋零）。
+
+### 退役
+
+- `CLIENT_SIGN_KEY`（静态查询签名密钥，经 `/api/config` 明文下发=可公开值、对防爬零收益）已由会话专属 `sk` 取代；`/api/config` 不再下发 `sign_key`。
+- `CAPTCHA_SECRET`（算术验证码）已移除（PoW 取代）。两者可清理残留 Secret。
+
+### lockstep 部署与回滚
+
+- 前端（`src/client`→`public`）由 Worker 同部署，BREAKING、**不留静态 `sign_key` 兼容期**（旧缓存页面刷新即恢复）。一次 `pnpm run deploy`（`vue-tsc + vite build` 前端 + `wrangler deploy` worker）同发。
+- 回滚：退 Worker 版本 + 还原前端构建；无 D1 迁移。
+
 ## CDN 真实 IP 与限流
 
 生产经**阿里云 CDN**（`qsl.herbert-dev.cn`，备案域名、大陆入口）回源到 **Cloudflare 源站**（`qsl.herbertgao.me`）。经 CDN 路径时 Worker 收到的 `CF-Connecting-IP` 是**阿里云 CDN 回源节点 IP、不是真实用户 IP**；真实用户 IP 由阿里云 CDN 在回源请求头里注入。若仍按 `CF-Connecting-IP` 计数，成千上万真实用户会被**归并到少数 CDN 回源 IP 桶**，限流粒度失真。

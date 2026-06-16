@@ -3,8 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import SearchBox from './components/SearchBox.vue'
 import ResultList from './components/ResultList.vue'
 import SubscribeCard from './components/SubscribeCard.vue'
-import MathCaptcha from './components/MathCaptcha.vue'
-import { buildSignedUrl } from './utils/sign'
+import { queryCallsign } from './utils/session'
 
 interface CardItem {
   id: string
@@ -34,9 +33,6 @@ const error = ref('')
 const result = ref<QueryResponse | null>(null)
 const wechatAppId = ref('')
 const wechatSubscribeEnabled = ref(false)
-const signKey = ref<string | null>(null)
-const captchaEnabled = ref(false)
-const showCaptcha = ref(false)
 const filing = ref<{ domain?: string; icp?: string; police?: string; police_code?: string } | null>(null)
 
 const showFiling = computed(() => filing.value?.domain && window.location.hostname === filing.value.domain)
@@ -48,9 +44,7 @@ onMounted(async () => {
     const response = await fetch('/api/config')
     const data = await response.json()
     wechatSubscribeEnabled.value = data.features?.wechat_subscribe ?? false
-    captchaEnabled.value = data.features?.captcha ?? false
     wechatAppId.value = data.wechat_appid || ''
-    signKey.value = data.sign_key || null
     filing.value = data.filing || null
   } catch {
     // 配置加载失败不影响查询功能
@@ -66,21 +60,14 @@ async function handleSearch(query: string) {
   result.value = null
 
   try {
-    // 构建带签名的请求 URL
-    const url = await buildSignedUrl(
-      `/api/callsigns/${encodeURIComponent(callsign.value)}`,
-      {},
-      signKey.value
-    )
-    const response = await fetch(url)
-    const data: QueryResponse = await response.json()
-
-    if (!data.success) {
-      error.value = data.message || '查询失败'
+    // 经会话状态机查询（内部自动完成 PoW 握手、401/429 重试一次）
+    const { status, data } = await queryCallsign(callsign.value)
+    const body = (data || {}) as QueryResponse
+    if (status !== 200 || !body.success) {
+      error.value = body.message || (status === 429 ? '请求过于频繁，请稍后再试' : '查询失败')
       return
     }
-
-    result.value = data
+    result.value = body
   } catch (e) {
     error.value = e instanceof Error ? e.message : '网络请求失败'
   } finally {
@@ -93,26 +80,8 @@ function handleSubscribe() {
     alert('订阅收卡需要配置微信服务号，请联系管理员。')
     return
   }
-
-  // 如果启用了验证码，先显示验证码弹窗
-  if (captchaEnabled.value) {
-    showCaptcha.value = true
-    return
-  }
-
-  // 否则直接跳转微信授权
+  // 订阅入口已移除算术验证码，直接进入微信 OAuth 授权（回调仍按既有 IP 限流，不升级为 PoW+会话）
   redirectToWechatAuth()
-}
-
-function handleCaptchaSuccess(_token: string, _answer: number) {
-  // 验证码验证成功，关闭弹窗并跳转微信授权
-  // 注：当前实现中验证码仅在前端验证，后续可扩展为后端验证
-  showCaptcha.value = false
-  redirectToWechatAuth()
-}
-
-function handleCaptchaCancel() {
-  showCaptcha.value = false
 }
 
 function redirectToWechatAuth() {
@@ -158,13 +127,6 @@ function redirectToWechatAuth() {
         />
       </div>
     </main>
-
-    <!-- 验证码弹窗 -->
-    <MathCaptcha
-      :visible="showCaptcha"
-      @success="handleCaptchaSuccess"
-      @cancel="handleCaptchaCancel"
-    />
 
     <footer class="footer">
       <div v-if="showFiling" class="filing">
