@@ -13,8 +13,11 @@ workers_dev = true
 preview_urls = true
 
 # 静态资源目录（构建后的前端文件）
+# binding 必填：worker 经 env.ASSETS 取静态资源并为 SPA 客户端路由（含 /t/<slug>/ 租户入口）
+# 返回 index.html 内容；缺 binding 则 env.ASSETS 未定义、worker 的 SPA 回退失效、/t/<slug>/ 404。
 [assets]
 directory = "./public"
+binding = "ASSETS"
 
 # D1 数据库绑定（创建后填入 database_id）
 [[d1_databases]]

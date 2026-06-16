@@ -1057,17 +1057,23 @@ export default {
         });
       }
 
-      // 其他路径交由静态资源处理（Cloudflare Assets）
-      // 如果是 SPA 路由（非 API、非静态资源扩展名），返回 env.ASSETS 中的 index.html
+      // 其他路径交由静态资源处理（Cloudflare Assets）。
+      // SPA 客户端路由（含 /t/<slug>/ 租户入口）须返回 index.html 内容（200）且【保留浏览器 URL】——
+      // 否则前缀丢失、前端 tenantBase() 读不到租户、错当默认租户。注意 wrangler assets 对目录式路径
+      //（/t/<slug>/）与 /index.html 会 307→/（透传会把浏览器重定向到根、丢掉 /t/<slug>/ 前缀），
+      // 故对「无扩展名的非资产路径」直接取根 '/' 的 200 内容返回（不重定向）。
       if (env.ASSETS) {
-        // API 路径已在上方处理，其余交给 Assets
         const assetResponse = await env.ASSETS.fetch(request);
-        // 如果是 404 且路径不含扩展名，返回 index.html 以支持 SPA（守卫读 routePath：
-        // /t/<slug>/ → routePath='/' 无点 → index.html；/t/<slug>/x.js → routePath='/x.js' 有点 → 不回退、404）
-        if (assetResponse.status === 404 && !routePath.includes('.')) {
-          const indexRequest = new Request(new URL('/index.html', url.origin), request);
-          return env.ASSETS.fetch(indexRequest);
+        // 真实静态资产命中（200，如 /assets/*、/favicon.svg）→ 直接返回。
+        if (assetResponse.status === 200) {
+          return assetResponse;
         }
+        // 无扩展名的非资产路径 = SPA 路由 → 返回根 index.html 内容（200、URL 保留、不重定向丢前缀）。
+        // 守卫读 routePath：/t/<slug>/ → routePath='/' 无点 → 外壳；/t/<slug>/x.js → '/x.js' 有点 → 不回退。
+        if (!routePath.includes('.')) {
+          return env.ASSETS.fetch(new Request(new URL('/', url.origin), request));
+        }
+        // 带扩展名但不存在的资产 → 返回原响应（404 等）。
         return assetResponse;
       }
 

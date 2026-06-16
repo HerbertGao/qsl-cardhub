@@ -612,3 +612,48 @@ test('8.7 gate: /t/x/pull (GET) → 404（补齐 /pull 的前缀存在 gate fetc
   const res = await worker.fetch(req('/t/x/pull'), env, ctx);
   assert.equal(res.status, 404, '/t/x/pull routePath=/pull 应被前缀存在 gate 拦为 404');
 });
+
+// (本地冒烟抓到的真部署缺陷锚) env.ASSETS mock 镜像 wrangler 真实行为：'/' 与真实资产→200，
+// 无扩展名目录式路径（/t/<slug>/、/foobar）→ 307→/（旧 fallback `if(status===404)` 漏处理的关键），
+// 带扩展名不存在→404。旧逻辑会把 307 透传给浏览器、重定向到 / 丢失 /t/<slug>/ 前缀。
+function spaAssets() {
+  return {
+    fetch: async (request) => {
+      const p = new URL(request.url).pathname;
+      if (p === '/' || p === '/index.html') {
+        return new Response('<!DOCTYPE html><html>SPA-SHELL</html>', { status: 200, headers: { 'content-type': 'text/html' } });
+      }
+      if (p.startsWith('/assets/') || p === '/favicon.svg') {
+        return new Response('REAL-ASSET', { status: 200 });
+      }
+      if (!p.includes('.')) {
+        return new Response(null, { status: 307, headers: { location: '/' } });
+      }
+      return new Response(null, { status: 404 });
+    },
+  };
+}
+
+test('8.7 SPA 外壳: /t/<slug>/ 等无扩展名 SPA 路由经 worker 返 index 内容（200、不重定向丢前缀）', async () => {
+  const env = makeConfigEnv({ activeTenants: ['bh2ro'] });
+  env.ASSETS = spaAssets();
+  // 关键：env.ASSETS 对 /t/<slug>/ 返 307（非 404），worker 须改取根 '/' 的 200 内容、保留浏览器 URL；
+  // 旧 `if(status===404)` 逻辑会把 307 透传→浏览器重定向到 /→tenantBase() 丢前缀错当默认租户。
+  for (const p of ['/t/bh2ro', '/t/bh2ro/', '/foobar', '/']) {
+    const res = await worker.fetch(req(p), env, ctx);
+    assert.equal(res.status, 200, `${p} SPA 路由应返 200 外壳内容（非 307/404）`);
+    assert.match(await res.text(), /SPA-SHELL/, `${p} 应是 index.html 内容`);
+  }
+});
+
+test('8.7 SPA 外壳: 真实资产直达 + 带扩展名不存在不回退外壳', async () => {
+  const env = makeConfigEnv({ activeTenants: ['bh2ro'] });
+  env.ASSETS = spaAssets();
+  const fav = await worker.fetch(req('/favicon.svg'), env, ctx);
+  assert.equal(fav.status, 200, '/favicon.svg 真实资产直达 200');
+  assert.match(await fav.text(), /REAL-ASSET/);
+  // /t/<slug>/x.js（routePath 有扩展名、非资产）→ 不回退外壳，返原响应（非 200 外壳内容）
+  const js = await worker.fetch(req('/t/bh2ro/x.js'), env, ctx);
+  assert.notEqual(js.status, 200, '/t/<slug>/x.js 不应回退外壳（routePath 含扩展名）');
+  assert.doesNotMatch(await js.text(), /SPA-SHELL/, '/t/<slug>/x.js 不应返回外壳内容');
+});
