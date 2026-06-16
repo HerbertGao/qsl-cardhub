@@ -31,6 +31,15 @@ export type { Template } from './generated/Template'
 export type { TsplPrintConfig } from './generated/TsplPrintConfig'
 export type { SinglePrinterConfig } from './generated/SinglePrinterConfig'
 
+// 云端同步类型（4-C2）
+export type { ExportStats } from './generated/ExportStats'
+export type { SyncStats } from './generated/SyncStats'
+export type { SyncResponse } from './generated/SyncResponse'
+export type { PingResponse } from './generated/PingResponse'
+export type { SyncConfigResponse } from './generated/SyncConfigResponse'
+export type { SyncCmdResult } from './generated/SyncCmdResult'
+export type { RestoreResult } from './generated/RestoreResult'
+
 // ==================== 手动维护的类型（未在 Rust 中定义或参数类型） ====================
 
 // 兼容别名

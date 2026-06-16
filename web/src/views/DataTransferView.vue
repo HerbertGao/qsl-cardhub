@@ -128,6 +128,17 @@
           </div>
         </el-form-item>
 
+        <el-form-item label="租户代码">
+          <el-input
+            v-model="syncForm.tenant"
+            placeholder="如 bh2ro（留空走兼容模式）"
+            style="max-width: 400px"
+          />
+          <div class="form-hint">
+            申报所属租户（小写字母 / 数字 / 连字符，1-32 位）；归属以 API Key 为准，此处仅申报 + 交叉校验。留空则不申报、按兼容模式同步。
+          </div>
+        </el-form-item>
+
         <el-form-item label="客户端 ID">
           <el-input
             v-model="syncConfig.client_id"
@@ -411,15 +422,15 @@ import { invoke } from '@tauri-apps/api/core'
 import { save, open } from '@tauri-apps/plugin-dialog'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { logger } from '@/utils/logger'
+import type {
+  ExportStats,
+  PingResponse,
+  RestoreResult,
+  SyncCmdResult,
+  SyncConfigResponse,
+} from '@/types/models'
 
 // 类型定义
-interface ExportStats {
-  projects: number
-  cards: number
-  sf_senders: number
-  sf_orders: number
-}
-
 interface ImportPreview {
   version: string
   db_version: number
@@ -431,32 +442,6 @@ interface ImportPreview {
   error_message: string | null
   local_db_version: number
   local_db_version_display: string
-}
-
-interface SyncConfigResponse {
-  api_url: string
-  client_id: string
-  last_sync_at: string | null
-  has_api_key: boolean
-  base_version: number | null
-}
-
-// 同步命令三态结果（与后端 SyncCmdResult 对齐）
-type SyncCmdResult =
-  | {
-      status: 'success'
-      response: { success: boolean; message: string }
-      stats: ExportStats
-      sync_time: string
-      server_version: number | null
-    }
-  | { status: 'auth_failed' }
-  | { status: 'conflict'; server_version: number | null }
-
-// 从云端恢复结果（与后端 RestoreResult 对齐）
-interface RestoreResult {
-  server_version: number | null
-  stats: ExportStats
 }
 
 // 状态
@@ -477,14 +462,16 @@ const syncConfig = ref<SyncConfigResponse>({
   client_id: '',
   last_sync_at: null,
   has_api_key: false,
-  base_version: null
+  base_version: null,
+  tenant: null
 })
 
 const restoreLoading = ref(false)
 
 const syncForm = reactive({
   api_url: '',
-  api_key: ''
+  api_key: '',
+  tenant: ''
 })
 
 // 格式化时间
@@ -597,6 +584,7 @@ async function loadSyncConfig() {
     if (config) {
       syncConfig.value = config
       syncForm.api_url = config.api_url
+      syncForm.tenant = config.tenant ?? ''
     }
   } catch (error) {
     logger.error(`[同步配置] 加载失败: ${error}`)
@@ -610,15 +598,24 @@ async function handleSaveConfig() {
     return
   }
 
+  // 即时 slug 校验（与服务端 schema CHECK 对齐），拒大写/非法字符；服务端为权威校验
+  const tenant = syncForm.tenant.trim()
+  if (tenant && !/^[a-z0-9-]{1,32}$/.test(tenant)) {
+    ElMessage.warning('租户代码只能是小写字母、数字、连字符，长度 1-32 位')
+    return
+  }
+
   try {
     saveConfigLoading.value = true
     const config = await invoke<SyncConfigResponse>('save_sync_config_cmd', {
       apiUrl: syncForm.api_url,
-      apiKey: syncForm.api_key || null
+      apiKey: syncForm.api_key || null,
+      tenant: tenant || null
     })
 
     syncConfig.value = config
     syncForm.api_key = ''
+    syncForm.tenant = config.tenant ?? ''
     ElMessage.success('配置已保存')
     logger.info('[同步配置] 保存成功')
   } catch (error) {
@@ -633,8 +630,12 @@ async function handleSaveConfig() {
 async function handleTestConnection() {
   try {
     testConnectionLoading.value = true
-    await invoke('test_sync_connection_cmd')
-    ElMessage.success('连接成功')
+    const ping = await invoke<PingResponse>('test_sync_connection_cmd')
+    ElMessage.success(ping.tenant ? `连接成功，已认证租户：${ping.tenant}` : '连接成功')
+    // fallback：凭据兜底命中默认租户（信息提示、非 mismatch；真正的不匹配由 403 捕获）
+    if (ping.fallback) {
+      ElMessage.warning('凭据命中默认租户兜底，请确认 API Key 归属')
+    }
     logger.info('[同步配置] 连接测试成功')
   } catch (error) {
     ElMessage.error(`连接失败：${error}`)
@@ -643,6 +644,15 @@ async function handleTestConnection() {
     testConnectionLoading.value = false
   }
 }
+
+// 穷尽检查辅助：所有 union 分支处理后，残余类型应为 never；漏 case 时 TS 编译报错
+function assertNever(x: never): never {
+  throw new Error(`未处理的同步结果状态: ${JSON.stringify(x)}`)
+}
+
+// 编译期钉住 SyncCmdResult 的 discriminant 形状（status + snake_case 单元变体）：
+// ts-rs 渲染若漂移（如 status 改名 / auth_failed 变非对象）此处即编译报错
+void ({ status: 'auth_failed' } satisfies SyncCmdResult)
 
 // 执行同步（force 为 true 时走强制覆盖逃生门）
 async function handleSync(force = false) {
@@ -670,10 +680,14 @@ async function handleSync(force = false) {
         await handleSyncConflict(result.server_version)
         break
       }
-      default: {
-        logger.warn(`[同步] 未知结果状态: ${(result as { status: string }).status}`)
-        ElMessage.error('同步返回未知状态')
+      case 'tenant_mismatch': {
+        ElMessage.error('租户代码与 API Key 归属的租户不一致，请检查租户代码')
+        logger.error('[同步] 租户不匹配 (403 tenant_mismatch)')
         break
+      }
+      default: {
+        // 穷尽检查（D11）：四态全覆盖后此分支不可达；新增状态未处理时 TS 在此编译报错
+        assertNever(result)
       }
     }
   } catch (error) {
@@ -774,10 +788,12 @@ async function handleClearConfig() {
       client_id: syncConfig.value.client_id,
       last_sync_at: null,
       has_api_key: false,
-      base_version: null
+      base_version: null,
+      tenant: null
     }
     syncForm.api_url = ''
     syncForm.api_key = ''
+    syncForm.tenant = ''
 
     ElMessage.success('配置已清除')
     logger.info('[同步配置] 配置已清除')

@@ -19,6 +19,9 @@ pub struct SyncConfig {
     /// API 地址
     pub api_url: String,
     /// 客户端标识（UUID 格式）
+    ///
+    /// 注意：`client_id` 是**设备身份**（乐观并发护栏 / `sync_meta.last_client_id` 用），
+    /// 与 `tenant`（申报归属）正交，**不是**租户/数据归属的依据。
     pub client_id: String,
     /// 上次同步时间（ISO 8601 格式）
     pub last_sync_at: Option<String>,
@@ -28,6 +31,15 @@ pub struct SyncConfig {
     /// 同步成功（200）后必须刷新为响应回传的 `server_version` 并落盘。
     #[serde(default)]
     pub base_version: Option<i64>,
+    /// 申报的所属租户代码（slug）
+    ///
+    /// 仅用于在云端请求头 `X-Tenant-Id` 中**申报**租户身份，供服务端交叉校验
+    /// （见 `crossCheckTenant`）。**红线**：租户归属的真源永远是写凭据
+    /// （`key→tenant`），此字段**绝不**作为写入/读取的归属目标——只申报、不决定归属。
+    /// `None`/空时不发送 `X-Tenant-Id`，行为与未引入本字段前逐字一致（软约束）。
+    /// `#[serde(default)]` 兼容旧 `sync.toml`（无此字段时回退 `None`）。
+    #[serde(default)]
+    pub tenant: Option<String>,
 }
 
 impl Default for SyncConfig {
@@ -37,6 +49,7 @@ impl Default for SyncConfig {
             client_id: Uuid::new_v4().to_string(),
             last_sync_at: None,
             base_version: None,
+            tenant: None,
         }
     }
 }
@@ -132,5 +145,19 @@ client_id = "test-client-id"
         assert_eq!(config.api_url, "https://example.com");
         assert_eq!(config.client_id, "test-client-id");
         assert!(config.base_version.is_none());
+    }
+
+    #[test]
+    fn test_config_without_tenant_field_parses() {
+        // 旧 sync.toml 无 tenant 字段时，#[serde(default)] 应回退为 None（向后兼容核心断言）
+        let toml_str = r#"
+api_url = "https://example.com"
+client_id = "test-client-id"
+base_version = 7
+"#;
+        let config: SyncConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.api_url, "https://example.com");
+        assert_eq!(config.base_version, Some(7));
+        assert!(config.tenant.is_none());
     }
 }

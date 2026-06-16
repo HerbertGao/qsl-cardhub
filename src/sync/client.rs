@@ -9,9 +9,35 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
+#[cfg(feature = "ts-rs")]
+use ts_rs::TS;
+
 /// `bool` 缺省（false）时跳过序列化的辅助函数
 fn is_false(b: &bool) -> bool {
     !*b
+}
+
+/// 计算要发送的 `X-Tenant-Id` 头值（纯函数，便于单测、无需 HTTP mock）
+///
+/// 仅当 `tenant` 为 `Some` 且 trim 后非空时返回 `Some(归一化后的 slug)`；
+/// `None`/空白一律返回 `None`（→ 调用方不发头，行为与未引入本能力前逐字一致）。
+fn tenant_header_value(tenant: Option<&str>) -> Option<String> {
+    tenant
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
+}
+
+/// 判定 403 响应体是否为租户不匹配（纯函数，便于单测）
+///
+/// 解析 JSON 取 `code == "tenant_mismatch"`；非 JSON / 缺 `code` 字段 → `false`
+/// （容错降级、禁 panic，仿 `ConflictBody` 的 `.ok().and_then` 先例）。
+fn is_tenant_mismatch_body(body: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|v| v.get("code").and_then(|c| c.as_str()).map(str::to_owned))
+        .as_deref()
+        == Some("tenant_mismatch")
 }
 
 /// 同步请求
@@ -57,6 +83,8 @@ pub struct SyncData {
 
 /// 同步响应
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct SyncResponse {
     /// 是否成功
     pub success: bool,
@@ -70,6 +98,7 @@ pub struct SyncResponse {
     pub stats: Option<SyncStats>,
     /// 写入后的新云端版本（200 时回传，旧服务端缺省为 None）
     #[serde(default)]
+    #[cfg_attr(feature = "ts-rs", ts(type = "number | null"))]
     pub server_version: Option<i64>,
 }
 
@@ -96,10 +125,14 @@ pub enum SyncOutcome {
     AuthFailed,
     /// 版本冲突（409），携带云端当前版本（解析失败/行缺失时为 None）
     Conflict { server_version: Option<i64> },
+    /// 租户不匹配（403 `tenant_mismatch`）：申报的租户与写凭据解析出的租户不一致
+    TenantMismatch,
 }
 
 /// 同步统计
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct SyncStats {
     /// 项目数
     pub projects: u32,
@@ -113,6 +146,8 @@ pub struct SyncStats {
 
 /// Ping 响应
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
 pub struct PingResponse {
     /// 是否成功
     pub success: bool,
@@ -121,6 +156,84 @@ pub struct PingResponse {
     /// 服务器时间
     #[serde(default)]
     pub server_time: Option<String>,
+    /// 服务端回显的已认证租户（4-C1 起回显；旧服务端缺省 None）
+    #[serde(default)]
+    pub tenant: Option<String>,
+    /// 是否经凭据兜底命中默认租户（信息提示、非 mismatch；旧服务端缺省 None）
+    #[serde(default)]
+    pub fallback: Option<bool>,
+}
+
+// ── Tauri 命令面 DTO ──
+// 这些类型供 `commands::sync` 的命令返回；放在 lib 可达的 `sync::client`（而非 binary-only
+// 的 `commands`）以便 `tests/export_bindings.rs`（lib 集成测试）能 `export_all` 生成 TS。
+
+/// 同步配置响应（不含敏感信息）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
+pub struct SyncConfigResponse {
+    /// API 地址
+    pub api_url: String,
+    /// 客户端标识
+    pub client_id: String,
+    /// 上次同步时间
+    pub last_sync_at: Option<String>,
+    /// 是否已配置 API Key
+    pub has_api_key: bool,
+    /// 本地持久化的云端基线版本（只读展示）
+    #[cfg_attr(feature = "ts-rs", ts(type = "number | null"))]
+    pub base_version: Option<i64>,
+    /// 申报的所属租户代码（只读展示；None/空表示未配置、走兼容模式）
+    pub tenant: Option<String>,
+}
+
+/// 同步命令四态结果（供前端分流）
+///
+/// 序列化为带 `status` 标签的对象：
+/// - `{"status":"success", ...}`
+/// - `{"status":"auth_failed"}`
+/// - `{"status":"conflict","server_version":N}`（云端当前版本，解析失败时为 null）
+/// - `{"status":"tenant_mismatch"}`（申报租户与凭据归属不一致）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum SyncCmdResult {
+    /// 同步成功
+    Success {
+        /// 服务器响应
+        response: SyncResponse,
+        /// 本地统计
+        stats: ExportStats,
+        /// 同步时间
+        sync_time: String,
+        /// 写入后的新云端版本
+        #[cfg_attr(feature = "ts-rs", ts(type = "number | null"))]
+        server_version: Option<i64>,
+    },
+    /// 认证失败（401）
+    AuthFailed,
+    /// 版本冲突（409）
+    Conflict {
+        /// 云端当前版本（解析失败/行缺失时为 null）
+        #[cfg_attr(feature = "ts-rs", ts(type = "number | null"))]
+        server_version: Option<i64>,
+    },
+    /// 租户不匹配（403 `tenant_mismatch`）：申报的租户与 API Key 归属的租户不一致
+    TenantMismatch,
+}
+
+/// 从云端恢复结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS))]
+#[cfg_attr(feature = "ts-rs", ts(export))]
+pub struct RestoreResult {
+    /// 恢复后对齐的云端版本（快照缺 sync_meta 行时为 null）
+    #[cfg_attr(feature = "ts-rs", ts(type = "number | null"))]
+    pub server_version: Option<i64>,
+    /// 恢复的数据统计
+    pub stats: ExportStats,
 }
 
 /// 从云端拉取的全量快照响应（GET /pull）
@@ -151,7 +264,13 @@ fn create_client() -> Result<Client, String> {
 }
 
 /// 测试云端连接
-pub async fn test_connection(api_url: &str, api_key: &str) -> Result<PingResponse, String> {
+///
+/// `tenant` 为申报的租户代码（`Some` 且非空时随请求头 `X-Tenant-Id` 发送，供服务端交叉校验）。
+pub async fn test_connection(
+    api_url: &str,
+    api_key: &str,
+    tenant: Option<&str>,
+) -> Result<PingResponse, String> {
     let client = create_client()?;
 
     // 确保 URL 以 /ping 结尾
@@ -163,25 +282,37 @@ pub async fn test_connection(api_url: &str, api_key: &str) -> Result<PingRespons
 
     log::info!("🔗 测试连接: {}", ping_url);
 
-    let response = client
+    let mut req = client
         .get(&ping_url)
-        .header("Authorization", format!("Bearer {}", api_key))
-        .send()
-        .await
-        .map_err(|e| {
-            if e.is_connect() {
-                "无法连接到服务器，请检查网络".to_string()
-            } else if e.is_timeout() {
-                "连接超时，请稍后重试".to_string()
-            } else {
-                format!("网络请求失败: {}", e)
-            }
-        })?;
+        .header("Authorization", format!("Bearer {}", api_key));
+    // 仅当申报了非空租户代码时发头（None/空白→不发头，行为与旧版逐字一致）
+    if let Some(t) = tenant_header_value(tenant) {
+        req = req.header("X-Tenant-Id", t);
+    }
+
+    let response = req.send().await.map_err(|e| {
+        if e.is_connect() {
+            "无法连接到服务器，请检查网络".to_string()
+        } else if e.is_timeout() {
+            "连接超时，请稍后重试".to_string()
+        } else {
+            format!("网络请求失败: {}", e)
+        }
+    })?;
 
     let status = response.status();
 
     if status == reqwest::StatusCode::UNAUTHORIZED {
         return Err("API Key 无效，请检查配置".to_string());
+    }
+
+    // 403 租户不匹配：给可识别文案，禁吞成泛化错误
+    if status == reqwest::StatusCode::FORBIDDEN {
+        let body = response.text().await.unwrap_or_default();
+        if is_tenant_mismatch_body(&body) {
+            return Err("租户代码与 API Key 归属的租户不一致，请检查租户代码".to_string());
+        }
+        return Err(format!("服务器返回错误 (403): {}", body));
     }
 
     if !status.is_success() {
@@ -263,10 +394,15 @@ pub async fn sync_data(
     );
 
     // 发送同步请求
-    let response = client
+    let mut req = client
         .post(&sync_url)
         .header("Authorization", format!("Bearer {}", api_key))
-        .header("Content-Type", "application/json")
+        .header("Content-Type", "application/json");
+    // 仅当申报了非空租户代码时发头（None/空白→不发头，行为与旧版逐字一致）
+    if let Some(t) = tenant_header_value(config.tenant.as_deref()) {
+        req = req.header("X-Tenant-Id", t);
+    }
+    let response = req
         .json(&sync_request)
         .send()
         .await
@@ -284,6 +420,16 @@ pub async fn sync_data(
 
     if status == reqwest::StatusCode::UNAUTHORIZED {
         return Ok(SyncOutcome::AuthFailed);
+    }
+
+    // 403 租户不匹配：申报租户 ≠ 写凭据解析租户 → 类型化第四态（与 401/409/Err 区分）
+    if status == reqwest::StatusCode::FORBIDDEN {
+        let body = response.text().await.unwrap_or_default();
+        if is_tenant_mismatch_body(&body) {
+            log::warn!("⚠️ 租户不匹配 (403 tenant_mismatch)");
+            return Ok(SyncOutcome::TenantMismatch);
+        }
+        return Err(format!("同步失败 (403): {}", body));
     }
 
     // 409 版本冲突：解析为类型化结果，携带云端当前版本。
@@ -324,7 +470,11 @@ pub async fn sync_data(
 ///
 /// 401 映射为「认证失败，请检查 API Key」；网络/解析错误返回对应 `Err`。
 /// 调用方在收到 `Err` 时**必须**短路、禁进入本地导入，以保证本地库零改动。
-pub async fn pull_data(api_url: &str, api_key: &str) -> Result<PullResponse, String> {
+pub async fn pull_data(
+    api_url: &str,
+    api_key: &str,
+    tenant: Option<&str>,
+) -> Result<PullResponse, String> {
     let client = create_client()?;
 
     // 确保 URL 以 /pull 结尾
@@ -336,25 +486,37 @@ pub async fn pull_data(api_url: &str, api_key: &str) -> Result<PullResponse, Str
 
     log::info!("⬇️ 从云端拉取快照: {}", pull_url);
 
-    let response = client
+    let mut req = client
         .get(&pull_url)
-        .header("Authorization", format!("Bearer {}", api_key))
-        .send()
-        .await
-        .map_err(|e| {
-            if e.is_connect() {
-                "无法连接到服务器，请检查网络".to_string()
-            } else if e.is_timeout() {
-                "连接超时，请稍后重试".to_string()
-            } else {
-                format!("网络请求失败: {}", e)
-            }
-        })?;
+        .header("Authorization", format!("Bearer {}", api_key));
+    // 仅当申报了非空租户代码时发头（None/空白→不发头）
+    if let Some(t) = tenant_header_value(tenant) {
+        req = req.header("X-Tenant-Id", t);
+    }
+
+    let response = req.send().await.map_err(|e| {
+        if e.is_connect() {
+            "无法连接到服务器，请检查网络".to_string()
+        } else if e.is_timeout() {
+            "连接超时，请稍后重试".to_string()
+        } else {
+            format!("网络请求失败: {}", e)
+        }
+    })?;
 
     let status = response.status();
 
     if status == reqwest::StatusCode::UNAUTHORIZED {
         return Err("认证失败，请检查 API Key".to_string());
+    }
+
+    // 403 租户不匹配：给可识别文案，禁吞成泛化「拉取失败」
+    if status == reqwest::StatusCode::FORBIDDEN {
+        let body = response.text().await.unwrap_or_default();
+        if is_tenant_mismatch_body(&body) {
+            return Err("租户代码与 API Key 归属的租户不一致，请检查租户代码".to_string());
+        }
+        return Err(format!("拉取失败 (403): {}", body));
     }
 
     if !status.is_success() {
@@ -561,5 +723,26 @@ mod tests {
         let resp = serde_json::from_str::<PullResponse>(json);
         assert!(resp.is_ok(), "server_version=null 应容忍反序列化、不 abort");
         assert!(resp.unwrap().server_version.is_none());
+    }
+
+    #[test]
+    fn test_tenant_header_value() {
+        // None/空白→不发头（向后兼容核心断言）；非空→归一化 trim 后值
+        assert_eq!(tenant_header_value(None), None);
+        assert_eq!(tenant_header_value(Some("")), None);
+        assert_eq!(tenant_header_value(Some("   ")), None);
+        assert_eq!(tenant_header_value(Some("bh2ro")), Some("bh2ro".to_string()));
+        assert_eq!(tenant_header_value(Some("  bh2ro  ")), Some("bh2ro".to_string()));
+    }
+
+    #[test]
+    fn test_is_tenant_mismatch_body() {
+        // code=='tenant_mismatch'→true；其它/缺 code/非 JSON→false（容错降级、不 panic）
+        assert!(is_tenant_mismatch_body(r#"{"code":"tenant_mismatch"}"#));
+        assert!(is_tenant_mismatch_body(r#"{"code":"tenant_mismatch","message":"x"}"#));
+        assert!(!is_tenant_mismatch_body(r#"{"code":"auth_failed"}"#));
+        assert!(!is_tenant_mismatch_body(r#"{}"#));
+        assert!(!is_tenant_mismatch_body("not json at all"));
+        assert!(!is_tenant_mismatch_body(""));
     }
 }
