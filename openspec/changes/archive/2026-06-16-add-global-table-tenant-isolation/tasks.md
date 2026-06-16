@@ -29,10 +29,10 @@
 ## 5. 文档与运维交付
 
 - [x] 5.1 在 `docs/web-query-service-deploy.md` 增补「阶段 4-A 全局表租户化迁移（0002）」节（export 备份 → `wrangler d1 execute --file --remote` → 配对部署 worker → 回滚剧本：退 worker 版本 + 还原表 dump，强调不可单退 worker）
-- [ ] 5.2【用户自跑】`wrangler d1 export qsl-sync --remote` 全量备份生产 D1（回滚点）
-- [ ] 5.3【用户自跑】`wrangler d1 execute qsl-sync --remote --file=web_query_service/migrations/0002_global_table_tenant.sql` 执行迁移
-- [ ] 5.4【用户自跑/代理代部署】`pnpm run deploy` 部署配对 worker，记录新版本号与回滚目标版本
-- [ ] 5.5【验收】现网订阅绑定/顺丰推送行为与现状等价（bh2ro 路径）；记录 worker 版本
+- [x] 5.2【用户自跑】`wrangler d1 export qsl-sync --remote` 全量备份 → `~/qsl-d1-backup-before-0002.sql`
+- [x] 5.3【用户自跑】`wrangler d1 execute --remote --file=…/0002_*.sql` 执行迁移成功（5 queries、changed_db；远端确认新表 tenant_id+PK+NOCASE 索引、sf_route_log 未碰、绑定表 0 行）
+- [x] 5.4【代理代部署】`pnpm run deploy` → worker 版本 **facccf8a-07d9-4a87-9ccd-a8b57a54f022**（回滚目标 **bf733673**）
+- [x] 5.5【验收】生产冒烟全绿：/ping 401 / /api/config 200(无 sign_key) / /api/query 401；auth-callback 差分 nope→400 无效租户 / bh2ro:&lt;script&gt;→400 无效呼号 / %25→400 无效 state / bh2ro:CALL→503（过租户校验，止于微信未配=线上未配微信服务号、订阅推送本未启用）。bh2ro 路径行为等价、零回归
 
 ## 6. 归档
 
