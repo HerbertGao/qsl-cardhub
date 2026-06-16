@@ -4,6 +4,7 @@ import SearchBox from './components/SearchBox.vue'
 import ResultList from './components/ResultList.vue'
 import SubscribeCard from './components/SubscribeCard.vue'
 import { queryCallsign } from './utils/session'
+import { tenantBase, tenantSlug } from './utils/tenant'
 
 interface CardItem {
   id: string
@@ -34,6 +35,9 @@ const result = ref<QueryResponse | null>(null)
 const wechatAppId = ref('')
 const wechatSubscribeEnabled = ref(false)
 const filing = ref<{ domain?: string; icp?: string; police?: string; police_code?: string } | null>(null)
+const tenantName = ref<string | null>(null)
+// 租户无效错误态：显式 `/t/<slug>/api/config` 返回 404 → 该 slug 非活跃租户
+const tenantInvalid = ref(false)
 
 const showFiling = computed(() => filing.value?.domain && window.location.hostname === filing.value.domain)
 
@@ -41,8 +45,15 @@ const hasResults = computed(() => result.value?.success && (result.value.items?.
 
 onMounted(async () => {
   try {
-    const response = await fetch('/api/config')
+    const response = await fetch(`${tenantBase()}/api/config`)
+    // 显式前缀数据端点：未知/停用 slug → 404，驱动「租户不存在」错误态
+    if (response.status === 404) {
+      tenantInvalid.value = true
+      return
+    }
     const data = await response.json()
+    // 嵌套租户身份 { id, name }
+    tenantName.value = data.tenant?.name ?? null
     wechatSubscribeEnabled.value = data.features?.wechat_subscribe ?? false
     wechatAppId.value = data.wechat_appid || ''
     filing.value = data.filing || null
@@ -85,8 +96,13 @@ function handleSubscribe() {
 }
 
 function redirectToWechatAuth() {
+  // redirect_uri 保持 bare（微信只认固定回调域、且 /t/api/wechat/* → 404）
   const redirectUri = `${window.location.origin}/api/wechat/auth-callback`
-  const authUrl = `https://open.weixin.qq.com/connect/oauth2/authorize?appid=${wechatAppId.value}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=snsapi_userinfo&state=${encodeURIComponent(callsign.value)}#wechat_redirect`
+  // 订阅租户取自 URL 派生 slug（非 config.tenant.id，避免 config 未就绪时空租户）：
+  // /t/<slug>/ 页 → `slug:callsign`；bare 页（slug 空）→ 无冒号 `callsign`（callback 兜底取 DEFAULT_TENANT）
+  const slug = tenantSlug()
+  const stateRaw = slug ? `${slug}:${callsign.value}` : callsign.value
+  const authUrl = `https://open.weixin.qq.com/connect/oauth2/authorize?appid=${wechatAppId.value}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=snsapi_userinfo&state=${encodeURIComponent(stateRaw)}#wechat_redirect`
   window.location.href = authUrl
 }
 </script>
@@ -97,11 +113,20 @@ function redirectToWechatAuth() {
       <div class="header-content">
         <h1 class="title">QSL 收卡查询</h1>
         <p class="subtitle">业余无线电卡片管理系统</p>
+        <p v-if="tenantName" class="tenant-name">{{ tenantName }}</p>
       </div>
     </header>
 
     <main class="main">
-      <div class="container">
+      <div v-if="tenantInvalid" class="container">
+        <div class="error-message">
+          <svg class="error-icon" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+          </svg>
+          <span>租户不存在或已停用，请检查访问地址。</span>
+        </div>
+      </div>
+      <div v-else class="container">
         <SearchBox
           :loading="loading"
           @search="handleSearch"
@@ -180,6 +205,13 @@ function redirectToWechatAuth() {
 .subtitle {
   font-size: 1rem;
   opacity: 0.9;
+}
+
+.tenant-name {
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  opacity: 0.95;
 }
 
 .main {

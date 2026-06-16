@@ -5,6 +5,7 @@
 import { createSessionManager } from '../../worker/session-client.js'
 import { sha256Hex, leadingZeroBits } from '../../worker/sha256.js'
 import { signQuery } from './sign'
+import { tenantBase } from './tenant'
 
 /** 在 Web Worker 中算 PoW；Worker 不可用时降级主线程同步算（小难度可接受）。 */
 function solvePow(seed: string, difficulty: number): Promise<string> {
@@ -42,14 +43,14 @@ function solvePowMainThread(seed: string, difficulty: number): string {
 
 const manager = createSessionManager({
   getChallenge: async () => {
-    const r = await fetch('/api/session/challenge')
+    const r = await fetch(`${tenantBase()}/api/session/challenge`)
     const d = await r.json()
     if (!d.success) throw new Error(d.message || '获取题目失败')
     return { seed: d.seed, difficulty: d.difficulty }
   },
   solvePow,
   postSession: async (seed: string, nonce: string) => {
-    const r = await fetch('/api/session', {
+    const r = await fetch(`${tenantBase()}/api/session`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ seed, nonce }),
@@ -76,6 +77,6 @@ export interface QueryResult {
 
 /** 带会话查询某呼号；状态机内部自动握手 + 401/配额429 重试一次（限流429 不重握手）。 */
 export async function queryCallsign(callsign: string): Promise<QueryResult> {
-  const res = await manager.requestQuery(`/api/callsigns/${encodeURIComponent(callsign)}`, {})
+  const res = await manager.requestQuery(`${tenantBase()}/api/callsigns/${encodeURIComponent(callsign)}`, {})
   return { status: res.status, data: res.data }
 }

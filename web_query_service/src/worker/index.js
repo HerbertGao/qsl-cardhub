@@ -40,6 +40,66 @@ function getBearerToken(request) {
   return auth.slice(7).trim();
 }
 
+// ============================================================
+// 默认租户与 /t/<slug>/ 路径前缀解析（tenant-path-routing 规范）
+// ============================================================
+
+/**
+ * 取本部署的默认租户身份——所有面（读取面 bare 默认、写入面 legacy Key 兜底、微信无 state 回退）统一经此 helper。
+ * 用 `||` 而非 `??`：空串 DEFAULT_TENANT 也缺省回内置默认 slug（否则空串透传致全面静默空结果）。
+ * 下面 return 中的内置默认 slug 字面量是**唯一**允许保留的兜底默认；改 env.DEFAULT_TENANT 配置即可换默认租户。
+ * @returns {string}
+ */
+export function defaultTenant(env) {
+  return (env.DEFAULT_TENANT || 'bh2ro');
+}
+
+/**
+ * 解析可选路径前缀 `/t/<slug>/`（段边界文法，与 tenants.tenant_id CHECK 同构）。纯函数，供单测复用。
+ * - 命中 `^/t/([a-z0-9-]{1,32})(/.*)?$` → `{ slug, routePath }`（routePath 缺省 `/`）。
+ * - 命中 `/t` 命名空间（`^/t(/|$)`）但 slug 段不合文法（`/t`、`/t/`、`/t//`、大写/非法/超长）→ `{ namespaceInvalid: true }`（调用方 404，禁 fall-through）。
+ * - 不命中 `^/t(/|$)` → `{ slug: null, routePath: pathname }`（bare）。
+ * @param {string} pathname - 原始 url.pathname（不就地改写）。
+ * @returns {{slug: string, routePath: string} | {slug: null, routePath: string} | {namespaceInvalid: true}}
+ */
+export function parseTenantPrefix(pathname) {
+  const m = /^\/t\/([a-z0-9-]{1,32})(\/.*)?$/.exec(pathname);
+  if (m) {
+    return { slug: m[1], routePath: m[2] || '/' };
+  }
+  // 命中 /t 命名空间但 slug 段不合文法 → 非法前缀（禁 fall-through 当 bare）
+  if (/^\/t(\/|$)/.test(pathname)) {
+    return { namespaceInvalid: true };
+  }
+  // 不属 /t 命名空间 → bare（无前缀）
+  return { slug: null, routePath: pathname };
+}
+
+// 非查询面端点集合（带前缀一律 404；判定基于剥离前缀后的 routePath）。
+const NON_QUERY_SURFACE = new Set(['/sync', '/pull', '/ping']);
+export function isNonQuerySurface(routePath) {
+  return (
+    NON_QUERY_SURFACE.has(routePath) ||
+    routePath.startsWith('/api/sf/') ||
+    routePath.startsWith('/api/wechat/')
+  );
+}
+
+/**
+ * 显式查询面租户解析（数据端点用）：slug 非空 → 校验 tenants 活跃，命中返回 slug、未命中返回 null（调用方 404）；
+ * slug 为 null（bare）→ 不读 tenants 表，直接返回 defaultTenant(env)（热路径零新增 DB 读）。
+ * @returns {Promise<string|null>} 解析出的 tenant_id；显式 slug 未命中活跃校验时为 null。
+ */
+export async function resolveQueryTenant(env, slug) {
+  if (slug == null) {
+    return defaultTenant(env);
+  }
+  const row = await env.DB.prepare(
+    "SELECT 1 FROM tenants WHERE tenant_id = ? AND status = 'active' LIMIT 1"
+  ).bind(slug).first();
+  return row ? slug : null;
+}
+
 function serverTime() {
   return new Date().toISOString().replace('Z', '+00:00');
 }
@@ -284,7 +344,7 @@ export async function resolveTenant(env, key, opts = {}) {
         throw new Error('auth_fallback counter row missing');
       }
     }
-    return { tenant: 'bh2ro', viaFallback: true };
+    return { tenant: defaultTenant(env), viaFallback: true };
   }
 
   // env.API_KEY 未配置或仍不命中 → 不命中（调用方 401）；禁止沿用「env.API_KEY 空即放行」。
@@ -316,12 +376,27 @@ export default {
     }
 
     const url = new URL(request.url);
-    const path = url.pathname.replace(/\/$/, '') || '/';
+    // 前缀解析（tenant-path-routing）：剥离 `/t/<slug>/` 仅产出独立局部变量 routePath 供分发；
+    // **禁止**就地改写 url/url.pathname——verifySessionSig 实参恒为原始 url.pathname（含前缀），见 D4。
+    const prefix = parseTenantPrefix(url.pathname);
+    if (prefix.namespaceInvalid) {
+      // /t 命名空间保留：命中 ^/t(/|$) 但 slug 段不合文法 → 404，禁 fall-through 当 bare。
+      return json({ success: false, message: 'Not Found' }, 404);
+    }
+    const tenantSlug = prefix.slug; // 显式前缀的活跃待校验 slug；null=bare（默认租户）
+    // routePath：剥离前缀后用于端点分发的路径（去尾斜杠口径与原 path 一致）。
+    const routePath = prefix.routePath.replace(/\/$/, '') || '/';
     const method = request.method;
+
+    // 非查询面前缀存在 gate（关键）：前缀存在且 routePath ∈ 非查询面集合 → 立即 404，
+    // 早于 /sync、/pull、/ping、/api/sf/*、/api/wechat/* 各 handler（否则 /t/x/sync 的 routePath==='/sync' 会落入 sync handler）。
+    if (tenantSlug !== null && isNonQuerySurface(routePath)) {
+      return json({ success: false, message: 'Not Found' }, 404);
+    }
 
     try {
       // GET /ping
-      if (path === '/ping' && method === 'GET') {
+      if (routePath === '/ping' && method === 'GET') {
         const token = getBearerToken(request);
         const declared = (request.headers.get('X-Tenant-Id') || '').trim();
         // 走 resolveTenant（表驱动+兜底，readonly 不计兜底计数），使「多 Key→同租户」表驱动凭据也能测通；
@@ -341,7 +416,7 @@ export default {
       }
 
       // POST /sync
-      if (path === '/sync' && method === 'POST') {
+      if (routePath === '/sync' && method === 'POST') {
         const token = getBearerToken(request);
         const declared = (request.headers.get('X-Tenant-Id') || '').trim();
         // 鉴权由 resolveTenant 命中决定 + 声明租户交叉校验（X-Tenant-Id 仅校验+回显、绝不当写入目标）；
@@ -521,7 +596,7 @@ export default {
       }
 
       // GET /pull 按写入 Key 拉回该租户全量快照 + 当前 server_version
-      if (path === '/pull' && method === 'GET') {
+      if (routePath === '/pull' && method === 'GET') {
         const token = getBearerToken(request);
         const declared = (request.headers.get('X-Tenant-Id') || '').trim();
         // 同 /sync：声明租户交叉校验（仅校验+回显、绝不当读取目标），缺声明向后兼容，403 在任何 SELECT 之前。
@@ -606,7 +681,7 @@ export default {
       }
 
       // GET /api/session/challenge 下发 PoW 题（query-antibot-session）
-      if (path === '/api/session/challenge' && method === 'GET') {
+      if (routePath === '/api/session/challenge' && method === 'GET') {
         if (!sessionSubsystemReady(env)) {
           return json({ success: false, message: '会话功能不可用' }, 503);
         }
@@ -634,7 +709,7 @@ export default {
       }
 
       // POST /api/session 验 PoW → 签发短时会话（query-antibot-session）
-      if (path === '/api/session' && method === 'POST') {
+      if (routePath === '/api/session' && method === 'POST') {
         if (!sessionSubsystemReady(env)) {
           return json({ success: false, message: '会话功能不可用' }, 503);
         }
@@ -680,12 +755,23 @@ export default {
       }
 
       // GET /api/callsigns/:callsign 或 /api/query?callsign=
-      const callsignMatch = path.match(/^\/api\/callsigns\/([^/]+)$/);
+      const callsignMatch = routePath.match(/^\/api\/callsigns\/([^/]+)$/);
       const callsignFromPath = callsignMatch ? decodeURIComponent(callsignMatch[1]) : null;
       const callsignFromQuery = url.searchParams.get('callsign');
       const callsign = callsignFromPath || callsignFromQuery;
 
-      if (callsign && method === 'GET' && (path.startsWith('/api/callsigns/') || path === '/api/query')) {
+      // 查询读取面数据端点判定（按 routePath，**与 callsign 存在性无关**）。
+      const isQueryDataEndpoint = method === 'GET' && (routePath === '/api/query' || routePath.startsWith('/api/callsigns/'));
+      // 数据端点：显式前缀 slug 经 tenants 活跃校验后取 tenant_id，未命中 404；bare 取 DEFAULT_TENANT（不读 tenants 表）。
+      // **即使缺 callsign 也先做此校验**——否则 /t/<未知>/api/query 会 fall-through 当 bare 服务外壳、绕过未知 slug→404。
+      // 红线：slug 仅在活跃校验通过后用作读取面 tenant_id，绝不当写入目标。
+      const queryTenantId = isQueryDataEndpoint ? await resolveQueryTenant(env, tenantSlug) : null;
+      if (isQueryDataEndpoint && !queryTenantId) {
+        return json({ success: false, message: 'Not Found' }, 404);
+      }
+
+      if (callsign && isQueryDataEndpoint) {
+        const tenant_id = queryTenantId; // 上方已解析+校验（resolveQueryTenant），此处直接复用
         const bkey = clientBindingKey(getClientIP(request, env));
         // Layer 0: 纯 IP 限流（查询桶 `ratelimit:<bkey>`，fail-open）——**置于会话校验之前**。
         // 顺序不变量：限流触发先返 429；fail-open 绝不在会话校验之前短路放行，会话校验(fail-closed)仍主导。
@@ -705,9 +791,8 @@ export default {
         }
 
         const DB = env.DB;
-        // 读取侧按服务端确定的 tenant_id 过滤（本期恒为常量 'bh2ro'，host/path 路由属阶段 4）；
+        // 读取侧按服务端确定的 tenant_id 过滤（tenant-path-routing 解析的活跃 slug，或 bare 的 DEFAULT_TENANT）；
         // tenant_id 禁止取自前端参数。projects join 同时按 tenant_id 匹配，保留 LEFT JOIN 与 COLLATE NOCASE。
-        const tenant_id = 'bh2ro';
         const rows = await DB.prepare(
           `SELECT c.id, c.project_id, c.callsign, c.qty, c.serial, c.status, c.metadata, c.created_at, c.updated_at, p.name AS project_name
            FROM cards c
@@ -744,8 +829,8 @@ export default {
       }
 
       // POST /api/sf/route-push 或 /api/sf/route-push/sandbox 顺丰路由推送（JSON）：先返回 0000，再异步落库与微信推送；沙箱路径在用户推送中标记「【沙箱】」
-      const isSandboxRoute = path === '/api/sf/route-push/sandbox';
-      const isProdRoute = path === '/api/sf/route-push';
+      const isSandboxRoute = routePath === '/api/sf/route-push/sandbox';
+      const isProdRoute = routePath === '/api/sf/route-push';
       if ((isSandboxRoute || isProdRoute) && method === 'POST') {
         let body;
         try {
@@ -858,7 +943,7 @@ export default {
       }
 
       // GET /api/wechat/auth-callback 微信网页授权回调（订阅收卡）：code + state(tenant:callsign) -> 换 openid -> 写入绑定表
-      if (path === '/api/wechat/auth-callback' && method === 'GET') {
+      if (routePath === '/api/wechat/auth-callback' && method === 'GET') {
         // IP 限流：独立计数桶 authcb（不与查询共桶、互不挤占预算），
         // 计数 IP 取自可信真实客户端 IP 解析（见 client-ip.js / trusted-client-ip 规范）。
         // checkRateLimit 在 RATE_LIMIT KV 未配置时 fail-open（可用性优先）→ KV 为部署前置。
@@ -870,7 +955,7 @@ export default {
           return new Response('请求过于频繁，请稍后再试', { status: 429, headers: CORS_HEADERS });
         }
         const code = url.searchParams.get('code');
-        const state = url.searchParams.get('state'); // tenant:callsign（无冒号 → 纯 callsign，租户回退 bh2ro）
+        const state = url.searchParams.get('state'); // tenant:callsign（无冒号 → 纯 callsign，租户回退 DEFAULT_TENANT）
         if (!code || !state) {
           return new Response('缺少 code 或 state（呼号）', { status: 400, headers: CORS_HEADERS });
         }
@@ -879,8 +964,8 @@ export default {
           return new Response('参数过长', { status: 400, headers: CORS_HEADERS });
         }
         // state 向前兼容解析：以【首个】冒号分隔 tenant:callsign（callsign 与租户 slug 均不含冒号）；
-        // 无冒号 → callsign=整串、租户回退创始租户 bh2ro（兼容本期仍发纯 callsign 的前端；前端改发
-        // tenant:callsign 属阶段 4-B）。畸形 %编码 → 400（不外溢到顶层 catch 的 500）。
+        // 无冒号 → callsign=整串、租户回退默认租户（DEFAULT_TENANT，兼容 bare 页仍发纯 callsign 的前端；
+        // /t/<slug>/ 页发 tenant:callsign）。畸形 %编码 → 400（不外溢到顶层 catch 的 500）。
         let decodedState;
         try {
           decodedState = decodeURIComponent(state);
@@ -893,7 +978,7 @@ export default {
           tenant_id = decodedState.slice(0, sepIdx);
           callsign = decodedState.slice(sepIdx + 1).toUpperCase();
         } else {
-          tenant_id = 'bh2ro';
+          tenant_id = defaultTenant(env);
           callsign = decodedState.toUpperCase();
         }
         if (!callsign) {
@@ -905,7 +990,7 @@ export default {
           return new Response('无效呼号', { status: 400, headers: CORS_HEADERS });
         }
         // 解析出的 tenant 必须为 tenants 表中的活跃租户，否则拒绝（公开回调可被构造任意 state，
-        // 不校验则会在不存在/非活跃租户名下落入垃圾绑定行；bh2ro 默认路径亦经此校验）。
+        // 不校验则会在不存在/非活跃租户名下落入垃圾绑定行；DEFAULT_TENANT 默认路径亦经此校验）。
         const tenantRow = await env.DB.prepare(
           "SELECT 1 FROM tenants WHERE tenant_id = ? AND status = 'active' LIMIT 1"
         ).bind(tenant_id).first();
@@ -938,8 +1023,22 @@ export default {
         return new Response(html, { headers: { 'Content-Type': 'text/html; charset=UTF-8', ...CORS_HEADERS } });
       }
 
-      // GET /api/config 前端配置（功能开关 + WECHAT_APPID + 备案；不再下发查询签名密钥/验证码配置）
-      if (path === '/api/config' && method === 'GET') {
+      // GET /api/config 前端配置（嵌套 tenant 身份 + 功能开关 + WECHAT_APPID + 备案；不再下发查询签名密钥/验证码配置）
+      if (routePath === '/api/config' && method === 'GET') {
+        // /api/config 属数据端点：显式前缀 slug 经 tenants 活跃校验（同取展示名），未命中 404；
+        // bare 回显 { id: DEFAULT_TENANT, name: null }，不读 tenants 表（热路径零新增 DB 读）。
+        let tenant;
+        if (tenantSlug !== null) {
+          const row = await env.DB.prepare(
+            "SELECT name FROM tenants WHERE tenant_id = ? AND status = 'active' LIMIT 1"
+          ).bind(tenantSlug).first();
+          if (!row) {
+            return json({ success: false, message: 'Not Found' }, 404);
+          }
+          tenant = { id: tenantSlug, name: row.name ?? null };
+        } else {
+          tenant = { id: defaultTenant(env), name: null };
+        }
         const wechatSubscribeEnabled = !!(env.WECHAT_APPID && env.WECHAT_SECRET);
         const wechatPushEnabled = !!(env.WECHAT_APPID && env.WECHAT_SECRET && env.WECHAT_TEMPLATE_ID);
         let filing = null;
@@ -948,6 +1047,7 @@ export default {
         }
         // 退役：禁止下发 sign_key（静态 CLIENT_SIGN_KEY 退役）与 captcha 相关配置——查询签名改用会话专属 sk。
         return json({
+          tenant,
           features: {
             wechat_subscribe: wechatSubscribeEnabled,
             wechat_push: wechatPushEnabled,
@@ -962,8 +1062,9 @@ export default {
       if (env.ASSETS) {
         // API 路径已在上方处理，其余交给 Assets
         const assetResponse = await env.ASSETS.fetch(request);
-        // 如果是 404 且路径不含扩展名，返回 index.html 以支持 SPA
-        if (assetResponse.status === 404 && !path.includes('.')) {
+        // 如果是 404 且路径不含扩展名，返回 index.html 以支持 SPA（守卫读 routePath：
+        // /t/<slug>/ → routePath='/' 无点 → index.html；/t/<slug>/x.js → routePath='/x.js' 有点 → 不回退、404）
+        if (assetResponse.status === 404 && !routePath.includes('.')) {
           const indexRequest = new Request(new URL('/index.html', url.origin), request);
           return env.ASSETS.fetch(indexRequest);
         }
