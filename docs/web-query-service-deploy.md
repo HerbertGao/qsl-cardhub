@@ -82,6 +82,7 @@
 ### 配置
 
 - `env.DEFAULT_TENANT`（**非密钥**）：在 `wrangler.toml` 的 `[vars]` 配置（示例见 `wrangler.toml.example`）。「改配置文件即可换默认租户」的落点；缺省回退 `bh2ro`。
+- **`[assets]` 须含 `binding = "ASSETS"`（必填，否则 `/t/<slug>/` 404）**：Worker 经 `env.ASSETS` 为 SPA 客户端路由（含 `/t/<slug>/` 租户入口、bare 无扩展名深链）返回 `index.html` 内容并**保留浏览器 URL**（不重定向，否则丢前缀、前端 `tenantBase()` 读不到租户而错当默认租户）。缺 `binding` 则 `env.ASSETS` 未定义、Worker 的 SPA 回退失效、`/t/<slug>/` 直接 404。现有部署若 `wrangler.toml` 的 `[assets]` 只有 `directory` 没有 `binding`，**部署 4-B 前须补上**（示例见 `wrangler.toml.example`）。
 
 ### CDN 回源（无新增域名）
 
