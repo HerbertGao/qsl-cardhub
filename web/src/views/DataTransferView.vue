@@ -1,76 +1,11 @@
 <template>
-  <div class="page-content sync-first">
+  <div class="page-content">
     <h1>数据管理</h1>
 
-    <!-- 数据导出 -->
+    <!-- 租户 & 云端同步（本页主功能，置于导出/导入之前） -->
     <el-card
       shadow="hover"
       style="margin-bottom: 20px"
-    >
-      <template #header>
-        <div class="card-header">
-          <span>数据导出</span>
-        </div>
-      </template>
-      <el-form label-width="100px">
-        <el-form-item label="导出说明">
-          <div class="description-text">
-            将本地数据库中的所有数据（项目、卡片、寄件人、订单）导出为 JSON 格式文件，便于备份和迁移。
-          </div>
-        </el-form-item>
-        <el-form-item>
-          <el-button
-            type="primary"
-            :loading="exportLoading"
-            @click="handleExport"
-          >
-            <el-icon><Download /></el-icon>
-            <span style="margin-left: 4px">导出数据</span>
-          </el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
-
-    <!-- 数据导入 -->
-    <el-card
-      shadow="hover"
-      style="margin-bottom: 20px"
-    >
-      <template #header>
-        <div class="card-header">
-          <span>数据导入</span>
-        </div>
-      </template>
-      <el-form label-width="100px">
-        <el-form-item label="导入说明">
-          <div class="description-text">
-            <el-alert
-              title="警告：导入将覆盖本地所有数据，此操作不可逆！建议先导出备份。"
-              type="warning"
-              :closable="false"
-              show-icon
-              style="margin-bottom: 10px"
-            />
-            从 QSL-CardHub 导出的 .qslhub 文件导入数据到本地数据库。
-          </div>
-        </el-form-item>
-        <el-form-item>
-          <el-button
-            type="warning"
-            :loading="importLoading"
-            @click="handleImport"
-          >
-            <el-icon><Upload /></el-icon>
-            <span style="margin-left: 4px">导入数据</span>
-          </el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
-
-    <!-- 租户 & 云端同步（CSS order 置顶：本卡是本页主功能，排在导出/导入之前） -->
-    <el-card
-      shadow="hover"
-      class="sync-card"
     >
       <template #header>
         <div class="card-header">
@@ -241,6 +176,68 @@
           <div class="form-hint">
             复制：把当前 API 地址 / 租户代码 / API Key 导出为字符串到剪贴板（<strong>含明文 Key</strong>，仅用于本机设备间迁移，请妥善保管）。粘贴：从剪贴板字符串导入并保存。
           </div>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
+    <!-- 数据导出 -->
+    <el-card
+      shadow="hover"
+      style="margin-bottom: 20px"
+    >
+      <template #header>
+        <div class="card-header">
+          <span>数据导出</span>
+        </div>
+      </template>
+      <el-form label-width="100px">
+        <el-form-item label="导出说明">
+          <div class="description-text">
+            将本地数据库中的所有数据（项目、卡片、寄件人、订单）导出为 JSON 格式文件，便于备份和迁移。
+          </div>
+        </el-form-item>
+        <el-form-item>
+          <el-button
+            type="primary"
+            :loading="exportLoading"
+            @click="handleExport"
+          >
+            <el-icon><Download /></el-icon>
+            <span style="margin-left: 4px">导出数据</span>
+          </el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
+    <!-- 数据导入 -->
+    <el-card shadow="hover">
+      <template #header>
+        <div class="card-header">
+          <span>数据导入</span>
+        </div>
+      </template>
+      <el-form label-width="100px">
+        <el-form-item label="导入说明">
+          <div class="description-text">
+            <el-alert
+              title="警告：导入将覆盖本地所有数据，此操作不可逆！建议先导出备份。"
+              type="warning"
+              :closable="false"
+              show-icon
+              style="margin-bottom: 10px"
+            />
+            从 QSL-CardHub 导出的 .qslhub 文件导入数据到本地数据库。
+          </div>
+        </el-form-item>
+        <el-form-item>
+          <el-button
+            type="warning"
+            :loading="importLoading"
+            @click="handleImport"
+          >
+            <el-icon><Upload /></el-icon>
+            <span style="margin-left: 4px">导入数据</span>
+          </el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -917,21 +914,6 @@ onMounted(() => {
 <style scoped>
 .page-content h1 {
   margin-bottom: 20px;
-}
-
-/* 卡片排序：标题 → 租户&云端同步 → 导出 → 导入。用 flex order 置顶云同步卡，
-   避免在 DOM 里搬动整块（el-dialog 默认 teleport 到 body，不参与此 flex 流） */
-.sync-first {
-  display: flex;
-  flex-direction: column;
-}
-
-.sync-first > h1 {
-  order: -2;
-}
-
-.sync-first > .sync-card {
-  order: -1;
 }
 
 .card-header {

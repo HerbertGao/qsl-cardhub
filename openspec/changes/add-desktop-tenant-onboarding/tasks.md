@@ -24,7 +24,7 @@
 
 ## 4. DataTransferView 重组 + 收口 syncStore（D2/D3）
 
-- [x] 4.1 租户 & 云端同步 card **移至顶部** + 标题改名「租户 & 云端同步」；数据导出/导入 card 在下（用 flex `order` 置顶，el-dialog teleport 不入此流）
+- [x] 4.1 租户 & 云端同步 card **移至顶部** + 标题改名「租户 & 云端同步」；数据导出/导入 card 在下（在 DOM 里实际前置，保持 `.page-content` 普通块级流——勿用 flex 容器，会逼卡片压缩出逐卡滚动条）
 - [x] 4.2 云配置**展示态**收口到 `syncStore`（删自身 `syncConfig` ref + 不再自取 `load_sync_config_cmd`，改 `hydrateForm` 回填草稿）；保留 `syncForm` 作表单草稿；save/import-paste 走 `applyConfig`、clear 走 `reset`、sync 走 `applySyncSuccess`、restore 走 `applyRestoreSuccess` → 徽章响应式
 - [x] 4.3 同步/恢复按钮判据改 `canSync`（`apiUrl && hasApiKey`），非仅 `!apiUrl`；官方云预设已有「租户代码与 API Key 必填」引导，纯本地态按钮禁用而非堵死
 
