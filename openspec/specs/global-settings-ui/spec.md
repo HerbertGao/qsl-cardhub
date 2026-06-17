@@ -1,7 +1,7 @@
 # global-settings-ui Specification
 
 ## Purpose
-全局配置界面，在数据配置菜单提供集中管理 app_settings 的页面。
+桌面端「全局配置」界面：在「数据配置」子菜单下提供集中查看与管理 app_settings 全局键值对偏好设置的页面，让用户在统一入口调整应用级配置项，并即时持久化到本地数据库。
 
 ## 需求
 
