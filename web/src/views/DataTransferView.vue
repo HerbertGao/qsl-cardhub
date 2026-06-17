@@ -2,82 +2,20 @@
   <div class="page-content">
     <h1>数据管理</h1>
 
-    <!-- 数据导出 -->
+    <!-- 租户 & 云端同步（本页主功能，置于导出/导入之前） -->
     <el-card
       shadow="hover"
       style="margin-bottom: 20px"
     >
       <template #header>
         <div class="card-header">
-          <span>数据导出</span>
-        </div>
-      </template>
-      <el-form label-width="100px">
-        <el-form-item label="导出说明">
-          <div class="description-text">
-            将本地数据库中的所有数据（项目、卡片、寄件人、订单）导出为 JSON 格式文件，便于备份和迁移。
-          </div>
-        </el-form-item>
-        <el-form-item>
-          <el-button
-            type="primary"
-            :loading="exportLoading"
-            @click="handleExport"
-          >
-            <el-icon><Download /></el-icon>
-            <span style="margin-left: 4px">导出数据</span>
-          </el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
-
-    <!-- 数据导入 -->
-    <el-card
-      shadow="hover"
-      style="margin-bottom: 20px"
-    >
-      <template #header>
-        <div class="card-header">
-          <span>数据导入</span>
-        </div>
-      </template>
-      <el-form label-width="100px">
-        <el-form-item label="导入说明">
-          <div class="description-text">
-            <el-alert
-              title="警告：导入将覆盖本地所有数据，此操作不可逆！建议先导出备份。"
-              type="warning"
-              :closable="false"
-              show-icon
-              style="margin-bottom: 10px"
-            />
-            从 QSL-CardHub 导出的 .qslhub 文件导入数据到本地数据库。
-          </div>
-        </el-form-item>
-        <el-form-item>
-          <el-button
-            type="warning"
-            :loading="importLoading"
-            @click="handleImport"
-          >
-            <el-icon><Upload /></el-icon>
-            <span style="margin-left: 4px">导入数据</span>
-          </el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
-
-    <!-- 云端同步 -->
-    <el-card shadow="hover">
-      <template #header>
-        <div class="card-header">
-          <span>云端同步</span>
+          <span>租户 &amp; 云端同步</span>
           <el-tag
-            v-if="syncConfig?.last_sync_at"
+            v-if="syncStore.lastSyncAt.value"
             type="success"
             size="small"
           >
-            上次同步: {{ formatDateTime(syncConfig.last_sync_at) }}
+            上次同步: {{ formatDateTime(syncStore.lastSyncAt.value) }}
           </el-tag>
         </div>
       </template>
@@ -135,12 +73,12 @@
           <el-input
             v-model="syncForm.api_key"
             type="password"
-            :placeholder="syncConfig?.has_api_key ? '已保存（留空保持不变，输入新值可更新）' : '输入您的 API Key'"
+            :placeholder="syncStore.hasApiKey.value ? '已保存（留空保持不变，输入新值可更新）' : '输入您的 API Key'"
             show-password
             style="max-width: 400px"
           />
           <div
-            v-if="syncConfig?.has_api_key && !syncForm.api_key"
+            v-if="syncStore.hasApiKey.value && !syncForm.api_key"
             class="form-hint"
           >
             ✓ 已保存 API Key（出于安全不回显，留空则保持不变）
@@ -166,7 +104,7 @@
           <!-- 只读展示，故用 div 而非 disabled el-input：规避 WKWebView 对禁用输入框
                re-mount 时文字下缘裁切的渲染 bug，且本就是不可编辑的自动生成值 -->
           <div class="readonly-field">
-            {{ syncConfig.client_id || '—' }}
+            {{ syncStore.clientId.value || '—' }}
           </div>
           <div class="form-hint">
             自动生成的客户端标识，用于云端识别
@@ -192,7 +130,7 @@
             <el-button
               type="success"
               :loading="syncLoading"
-              :disabled="!syncConfig?.has_api_key || !syncForm.api_url"
+              :disabled="!syncStore.canSync.value"
               @click="handleSync(false)"
             >
               <el-icon><Refresh /></el-icon>
@@ -201,7 +139,7 @@
             <el-button
               type="warning"
               :loading="restoreLoading"
-              :disabled="!syncConfig?.has_api_key || !syncForm.api_url"
+              :disabled="!syncStore.canSync.value"
               @click="handleRestoreFromCloud"
             >
               <el-icon><Download /></el-icon>
@@ -212,7 +150,7 @@
             type="danger"
             plain
             style="margin-left: 12px"
-            :disabled="!syncConfig?.api_url"
+            :disabled="!syncStore.apiUrl.value"
             @click="handleClearConfig"
           >
             清除配置
@@ -223,7 +161,7 @@
           <el-button-group>
             <el-button
               :loading="copyConfigLoading"
-              :disabled="!syncConfig?.api_url"
+              :disabled="!syncStore.apiUrl.value"
               @click="handleCopyConfig"
             >
               一键复制
@@ -238,6 +176,68 @@
           <div class="form-hint">
             复制：把当前 API 地址 / 租户代码 / API Key 导出为字符串到剪贴板（<strong>含明文 Key</strong>，仅用于本机设备间迁移，请妥善保管）。粘贴：从剪贴板字符串导入并保存。
           </div>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
+    <!-- 数据导出 -->
+    <el-card
+      shadow="hover"
+      style="margin-bottom: 20px"
+    >
+      <template #header>
+        <div class="card-header">
+          <span>数据导出</span>
+        </div>
+      </template>
+      <el-form label-width="100px">
+        <el-form-item label="导出说明">
+          <div class="description-text">
+            将本地数据库中的所有数据（项目、卡片、寄件人、订单）导出为 JSON 格式文件，便于备份和迁移。
+          </div>
+        </el-form-item>
+        <el-form-item>
+          <el-button
+            type="primary"
+            :loading="exportLoading"
+            @click="handleExport"
+          >
+            <el-icon><Download /></el-icon>
+            <span style="margin-left: 4px">导出数据</span>
+          </el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
+    <!-- 数据导入 -->
+    <el-card shadow="hover">
+      <template #header>
+        <div class="card-header">
+          <span>数据导入</span>
+        </div>
+      </template>
+      <el-form label-width="100px">
+        <el-form-item label="导入说明">
+          <div class="description-text">
+            <el-alert
+              title="警告：导入将覆盖本地所有数据，此操作不可逆！建议先导出备份。"
+              type="warning"
+              :closable="false"
+              show-icon
+              style="margin-bottom: 10px"
+            />
+            从 QSL-CardHub 导出的 .qslhub 文件导入数据到本地数据库。
+          </div>
+        </el-form-item>
+        <el-form-item>
+          <el-button
+            type="warning"
+            :loading="importLoading"
+            @click="handleImport"
+          >
+            <el-icon><Upload /></el-icon>
+            <span style="margin-left: 4px">导入数据</span>
+          </el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -466,6 +466,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { save, open } from '@tauri-apps/plugin-dialog'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { logger } from '@/utils/logger'
+import { syncStore } from '@/stores/syncStore'
 import type {
   ExportStats,
   PingResponse,
@@ -501,15 +502,7 @@ const importFilePath = ref<string>('')
 
 const apiSpecVisible = ref(false)
 
-const syncConfig = ref<SyncConfigResponse>({
-  api_url: '',
-  client_id: '',
-  last_sync_at: null,
-  has_api_key: false,
-  base_version: null,
-  tenant: null
-})
-
+// 已保存态收口到 syncStore（徽章 / 网关 / 本页 / 卡片管理共享）；本页只持表单草稿 syncForm
 const restoreLoading = ref(false)
 const copyConfigLoading = ref(false)
 const pasteConfigLoading = ref(false)
@@ -534,7 +527,7 @@ function formatTenant() {
 }
 
 // 格式化时间
-function formatDateTime(dateStr: string): string {
+function formatDateTime(dateStr: string | null): string {
   if (!dateStr) return ''
   const date = new Date(dateStr)
   return date.toLocaleString('zh-CN', {
@@ -636,18 +629,10 @@ async function confirmImport() {
   }
 }
 
-// 加载同步配置
-async function loadSyncConfig() {
-  try {
-    const config = await invoke<SyncConfigResponse | null>('load_sync_config_cmd')
-    if (config) {
-      syncConfig.value = config
-      syncForm.api_url = config.api_url
-      syncForm.tenant = config.tenant ?? ''
-    }
-  } catch (error) {
-    logger.error(`[同步配置] 加载失败: ${error}`)
-  }
+// 用 store 已加载的已保存态回填表单草稿（store 由 App.vue 启动时统一加载，本页进入时已就绪）
+function hydrateForm() {
+  syncForm.api_url = syncStore.apiUrl.value
+  syncForm.tenant = syncStore.tenant.value ?? ''
 }
 
 // 保存同步配置
@@ -670,7 +655,7 @@ async function handleSaveConfig() {
       ElMessage.warning('选择官方云时，租户代码为必填')
       return
     }
-    if (!syncForm.api_key && !syncConfig.value.has_api_key) {
+    if (!syncForm.api_key && !syncStore.hasApiKey.value) {
       ElMessage.warning('选择官方云时，API Key 为必填')
       return
     }
@@ -684,7 +669,7 @@ async function handleSaveConfig() {
       tenant: tenant || null
     })
 
-    syncConfig.value = config
+    syncStore.applyConfig(config)
     syncForm.api_key = ''
     syncForm.tenant = config.tenant ?? ''
     ElMessage.success('配置已保存')
@@ -725,7 +710,7 @@ async function handlePasteConfig() {
     const config = await invoke<SyncConfigResponse>('import_sync_config_string_cmd', {
       data: str.trim()
     })
-    syncConfig.value = config
+    syncStore.applyConfig(config)
     syncForm.api_url = config.api_url
     syncForm.tenant = config.tenant ?? ''
     syncForm.api_key = ''
@@ -780,8 +765,7 @@ async function handleSync(force = false) {
 
     switch (result.status) {
       case 'success': {
-        syncConfig.value.last_sync_at = result.sync_time
-        syncConfig.value.base_version = result.server_version
+        syncStore.applySyncSuccess(result.server_version, result.sync_time)
         ElMessage.success(
           `同步成功：${result.stats.projects} 个项目，${result.stats.cards} 张卡片，${result.stats.sf_senders} 个寄件人，${result.stats.sf_orders} 个订单`
         )
@@ -853,7 +837,7 @@ async function restoreFromCloud() {
     restoreLoading.value = true
     const result = await invoke<RestoreResult>('restore_from_cloud')
 
-    syncConfig.value.base_version = result.server_version
+    syncStore.applyRestoreSuccess(result.server_version)
     ElMessage.success(
       `恢复成功：${result.stats.projects} 个项目，${result.stats.cards} 张卡片，${result.stats.sf_senders} 个寄件人，${result.stats.sf_orders} 个订单`
     )
@@ -901,14 +885,7 @@ async function handleClearConfig() {
 
     await invoke('clear_sync_config_cmd')
 
-    syncConfig.value = {
-      api_url: '',
-      client_id: syncConfig.value.client_id,
-      last_sync_at: null,
-      has_api_key: false,
-      base_version: null,
-      tenant: null
-    }
+    syncStore.reset()
     syncForm.api_url = ''
     syncForm.api_key = ''
     syncForm.tenant = ''
@@ -928,9 +905,9 @@ function showApiSpec() {
   apiSpecVisible.value = true
 }
 
-// 初始化
+// 初始化：回填表单草稿（store 已由 App.vue 加载）
 onMounted(() => {
-  loadSyncConfig()
+  hydrateForm()
 })
 </script>
 
