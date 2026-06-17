@@ -257,9 +257,9 @@ async function silentCheckUpdate(): Promise<void> {
   await checkForUpdate({ silent: true })
   if (!hadUpdate && updateState.hasUpdate && updateState.updateInfo) {
     logger.info(`[更新检查] 发现新版本: v${updateState.updateInfo.version}`)
-    // 任一阻断首屏（网关 / 加载失败错误分支）期间不弹更新通知：主界面未挂载，
-    // 「查看详情」跳「关于」会是死按钮；进主界面后「关于」徽章仍会提示。检查本身照常跑（D6 正交）
-    if (gateVisible.value || syncStore.loadError.value) {
+    // 主界面未挂载的任一态都不弹更新通知（加载占位 `!bootReady`〔含 retry 关门窗口〕/ 网关 / 加载失败错误分支）：
+    // 此时「查看详情」跳「关于」是死按钮（About 未挂载）；进主界面后「关于」徽章仍会提示。检查本身照常跑（D6 正交）
+    if (!bootReady.value || gateVisible.value || syncStore.loadError.value) {
       return
     }
     ElNotification({

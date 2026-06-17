@@ -71,7 +71,7 @@
 - **抽函数**：把既有打印机检测（App.vue:228-233 `get_printer_config` 无打印机→`activeMenu='print-config-printer'`）抽成独立 `runPrinterCheck()`，供**两处**调用：①无网关分支（onMounted 内）；②网关「纯本地」关闭回调。**「云同步」分支不调**（已 navigate 到设置页，跑打印机检测会覆盖落点 → blocker）。
   - 仅 return 无法实现「关闭后再跑」：onMounted 是单次 async、return 即结束，网关关闭是之后的异步回调——必须抽函数由回调复用。
 - **更新检查无条件**：`silentCheckUpdate()` + `setInterval` 定时器**与网关正交、无条件注册**（它们不依赖 activeMenu）。**禁止**被「网关成立则 return」吞掉（否则首启走网关的会话永久无更新检查）。
-- **更新通知不绕过阻断首屏（review F4 + 二轮 RC-A）**：更新检查的 `ElNotification`「查看详情」会切 `activeMenu='about'`。**任一阻断首屏期间（网关 `gateVisible` 或加载失败错误分支 `loadError`，主界面均未挂载）抑制该通知**——否则「查看详情」是死按钮（目标视图未挂载）/ 误导。实现：`silentCheckUpdate` 在弹通知前 `if (gateVisible.value || syncStore.loadError.value) return`。检查本身照常跑（D6 正交），徽章「New!」进主界面后仍提示。
+- **更新通知不绕过阻断首屏（review F4 + 二轮 RC-A + Bugbot）**：更新检查的 `ElNotification`「查看详情」会切 `activeMenu='about'`。**主界面未挂载的任一态都抑制该通知**——否则「查看详情」是死按钮（About 未挂载）/ 误导。判据须覆盖**全部非主界面态**：加载占位 `!bootReady`（含 `retryLoad` 关门窗口——检查可能在 `load()` 清 `loadError` 后、`bootstrapAfterLoad` 重置 `bootReady` 前 resolve）/ 网关 `gateVisible` / 加载失败 `loadError`。实现：弹通知前 `if (!bootReady.value || gateVisible.value || syncStore.loadError.value) return`。检查本身照常跑（D6 正交），徽章「New!」进主界面后仍提示。
 - **执行序（与 D1.4 一致）**：`await load()` → `bootstrapAfterLoad()`（迁移置标志 → 判网关 → (无网关)`runPrinterCheck()` → **最后**置 `bootReady` 揭幕）→ 无条件更新检查 + `setInterval`。迁移/网关/揭幕收口在 `bootstrapAfterLoad` 单函数内同步完成，retryLoad 复用之。
 
 ### D7：`load()` 失败路径（review M6）
