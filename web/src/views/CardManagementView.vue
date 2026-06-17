@@ -46,7 +46,7 @@
           :page-size="cardPageSize"
           :loading="cardLoading"
           :project-id="selectedProjectId"
-          :sync-configured="syncConfigured"
+          :sync-configured="syncStore.canSync.value"
           :syncing="syncing"
           @add="handleAddCard"
           @view="handleViewCard"
@@ -132,6 +132,7 @@ import CardDetailDialog from '@/components/cards/CardDetailDialog.vue'
 import WaybillPrintDialog from '@/components/cards/WaybillPrintDialog.vue'
 import { formatSerial } from '@/utils/format'
 import { useQtyDisplayMode } from '@/composables/useQtyDisplayMode'
+import { syncStore } from '@/stores/syncStore'
 
 const { formatQty } = useQtyDisplayMode()
 
@@ -153,7 +154,7 @@ const projectDialogMode = ref<'create' | 'edit'>('create')
 const editingProject = ref<ProjectWithStats | null>(null)
 
 // ==================== 云端同步状态 ====================
-const syncConfigured = ref<boolean>(false)
+// 是否已配置可同步收口到 syncStore.canSync（徽章 / 网关 / 数据管理 / 本页共享同一事实源）
 const syncing = ref<boolean>(false)
 
 // SyncCmdResult / RestoreResult 由 ts-rs 生成、从 @/types/models 导入（消灭手写漂移）
@@ -264,6 +265,8 @@ const handleSync = async (force = false): Promise<void> => {
 
     switch (result.status) {
       case 'success': {
+        // 回写 store，保持标题栏徽章「上次同步」与基线版本与数据管理页一致
+        syncStore.applySyncSuccess(result.server_version, result.sync_time)
         ElMessage.success(
           `同步成功：${result.stats.projects} 个项目，${result.stats.cards} 张卡片，${result.stats.sf_senders} 个寄件人，${result.stats.sf_orders} 个订单`
         )
@@ -328,6 +331,8 @@ const handleSyncConflict = async (serverVersion: number | null): Promise<void> =
 const restoreFromCloud = async (): Promise<void> => {
   try {
     const result = await invoke<RestoreResult>('restore_from_cloud')
+    // 回写 store 基线版本（RestoreResult 无 sync_time，不动 last_sync_at）
+    syncStore.applyRestoreSuccess(result.server_version)
     ElMessage.success(
       `恢复成功：${result.stats.projects} 个项目，${result.stats.cards} 张卡片，${result.stats.sf_senders} 个寄件人，${result.stats.sf_orders} 个订单`
     )
@@ -545,16 +550,7 @@ onMounted(async () => {
   } else {
     handleCreateProject()
   }
-
-  // 加载云端同步配置，判断是否已配置
-  try {
-    const config = await invoke<{ api_url: string; has_api_key: boolean } | null>('load_sync_config_cmd')
-    if (config && config.api_url && config.has_api_key) {
-      syncConfigured.value = true
-    }
-  } catch {
-    // 同步配置加载失败，不影响主流程
-  }
+  // 同步配置已由 App.vue 启动时加载到 syncStore，本页直接读 canSync，无需自取
 })
 </script>
 

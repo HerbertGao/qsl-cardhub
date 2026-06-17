@@ -1,5 +1,5 @@
 <template>
-  <div class="page-content">
+  <div class="page-content sync-first">
     <h1>数据管理</h1>
 
     <!-- 数据导出 -->
@@ -67,17 +67,20 @@
       </el-form>
     </el-card>
 
-    <!-- 云端同步 -->
-    <el-card shadow="hover">
+    <!-- 租户 & 云端同步（CSS order 置顶：本卡是本页主功能，排在导出/导入之前） -->
+    <el-card
+      shadow="hover"
+      class="sync-card"
+    >
       <template #header>
         <div class="card-header">
-          <span>云端同步</span>
+          <span>租户 &amp; 云端同步</span>
           <el-tag
-            v-if="syncConfig?.last_sync_at"
+            v-if="syncStore.lastSyncAt.value"
             type="success"
             size="small"
           >
-            上次同步: {{ formatDateTime(syncConfig.last_sync_at) }}
+            上次同步: {{ formatDateTime(syncStore.lastSyncAt.value) }}
           </el-tag>
         </div>
       </template>
@@ -135,12 +138,12 @@
           <el-input
             v-model="syncForm.api_key"
             type="password"
-            :placeholder="syncConfig?.has_api_key ? '已保存（留空保持不变，输入新值可更新）' : '输入您的 API Key'"
+            :placeholder="syncStore.hasApiKey.value ? '已保存（留空保持不变，输入新值可更新）' : '输入您的 API Key'"
             show-password
             style="max-width: 400px"
           />
           <div
-            v-if="syncConfig?.has_api_key && !syncForm.api_key"
+            v-if="syncStore.hasApiKey.value && !syncForm.api_key"
             class="form-hint"
           >
             ✓ 已保存 API Key（出于安全不回显，留空则保持不变）
@@ -166,7 +169,7 @@
           <!-- 只读展示，故用 div 而非 disabled el-input：规避 WKWebView 对禁用输入框
                re-mount 时文字下缘裁切的渲染 bug，且本就是不可编辑的自动生成值 -->
           <div class="readonly-field">
-            {{ syncConfig.client_id || '—' }}
+            {{ syncStore.clientId.value || '—' }}
           </div>
           <div class="form-hint">
             自动生成的客户端标识，用于云端识别
@@ -192,7 +195,7 @@
             <el-button
               type="success"
               :loading="syncLoading"
-              :disabled="!syncConfig?.has_api_key || !syncForm.api_url"
+              :disabled="!syncStore.canSync.value"
               @click="handleSync(false)"
             >
               <el-icon><Refresh /></el-icon>
@@ -201,7 +204,7 @@
             <el-button
               type="warning"
               :loading="restoreLoading"
-              :disabled="!syncConfig?.has_api_key || !syncForm.api_url"
+              :disabled="!syncStore.canSync.value"
               @click="handleRestoreFromCloud"
             >
               <el-icon><Download /></el-icon>
@@ -212,7 +215,7 @@
             type="danger"
             plain
             style="margin-left: 12px"
-            :disabled="!syncConfig?.api_url"
+            :disabled="!syncStore.apiUrl.value"
             @click="handleClearConfig"
           >
             清除配置
@@ -223,7 +226,7 @@
           <el-button-group>
             <el-button
               :loading="copyConfigLoading"
-              :disabled="!syncConfig?.api_url"
+              :disabled="!syncStore.apiUrl.value"
               @click="handleCopyConfig"
             >
               一键复制
@@ -466,6 +469,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { save, open } from '@tauri-apps/plugin-dialog'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { logger } from '@/utils/logger'
+import { syncStore } from '@/stores/syncStore'
 import type {
   ExportStats,
   PingResponse,
@@ -501,15 +505,7 @@ const importFilePath = ref<string>('')
 
 const apiSpecVisible = ref(false)
 
-const syncConfig = ref<SyncConfigResponse>({
-  api_url: '',
-  client_id: '',
-  last_sync_at: null,
-  has_api_key: false,
-  base_version: null,
-  tenant: null
-})
-
+// 已保存态收口到 syncStore（徽章 / 网关 / 本页 / 卡片管理共享）；本页只持表单草稿 syncForm
 const restoreLoading = ref(false)
 const copyConfigLoading = ref(false)
 const pasteConfigLoading = ref(false)
@@ -534,7 +530,7 @@ function formatTenant() {
 }
 
 // 格式化时间
-function formatDateTime(dateStr: string): string {
+function formatDateTime(dateStr: string | null): string {
   if (!dateStr) return ''
   const date = new Date(dateStr)
   return date.toLocaleString('zh-CN', {
@@ -636,18 +632,10 @@ async function confirmImport() {
   }
 }
 
-// 加载同步配置
-async function loadSyncConfig() {
-  try {
-    const config = await invoke<SyncConfigResponse | null>('load_sync_config_cmd')
-    if (config) {
-      syncConfig.value = config
-      syncForm.api_url = config.api_url
-      syncForm.tenant = config.tenant ?? ''
-    }
-  } catch (error) {
-    logger.error(`[同步配置] 加载失败: ${error}`)
-  }
+// 用 store 已加载的已保存态回填表单草稿（store 由 App.vue 启动时统一加载，本页进入时已就绪）
+function hydrateForm() {
+  syncForm.api_url = syncStore.apiUrl.value
+  syncForm.tenant = syncStore.tenant.value ?? ''
 }
 
 // 保存同步配置
@@ -670,7 +658,7 @@ async function handleSaveConfig() {
       ElMessage.warning('选择官方云时，租户代码为必填')
       return
     }
-    if (!syncForm.api_key && !syncConfig.value.has_api_key) {
+    if (!syncForm.api_key && !syncStore.hasApiKey.value) {
       ElMessage.warning('选择官方云时，API Key 为必填')
       return
     }
@@ -684,7 +672,7 @@ async function handleSaveConfig() {
       tenant: tenant || null
     })
 
-    syncConfig.value = config
+    syncStore.applyConfig(config)
     syncForm.api_key = ''
     syncForm.tenant = config.tenant ?? ''
     ElMessage.success('配置已保存')
@@ -725,7 +713,7 @@ async function handlePasteConfig() {
     const config = await invoke<SyncConfigResponse>('import_sync_config_string_cmd', {
       data: str.trim()
     })
-    syncConfig.value = config
+    syncStore.applyConfig(config)
     syncForm.api_url = config.api_url
     syncForm.tenant = config.tenant ?? ''
     syncForm.api_key = ''
@@ -780,8 +768,7 @@ async function handleSync(force = false) {
 
     switch (result.status) {
       case 'success': {
-        syncConfig.value.last_sync_at = result.sync_time
-        syncConfig.value.base_version = result.server_version
+        syncStore.applySyncSuccess(result.server_version, result.sync_time)
         ElMessage.success(
           `同步成功：${result.stats.projects} 个项目，${result.stats.cards} 张卡片，${result.stats.sf_senders} 个寄件人，${result.stats.sf_orders} 个订单`
         )
@@ -853,7 +840,7 @@ async function restoreFromCloud() {
     restoreLoading.value = true
     const result = await invoke<RestoreResult>('restore_from_cloud')
 
-    syncConfig.value.base_version = result.server_version
+    syncStore.applyRestoreSuccess(result.server_version)
     ElMessage.success(
       `恢复成功：${result.stats.projects} 个项目，${result.stats.cards} 张卡片，${result.stats.sf_senders} 个寄件人，${result.stats.sf_orders} 个订单`
     )
@@ -901,14 +888,7 @@ async function handleClearConfig() {
 
     await invoke('clear_sync_config_cmd')
 
-    syncConfig.value = {
-      api_url: '',
-      client_id: syncConfig.value.client_id,
-      last_sync_at: null,
-      has_api_key: false,
-      base_version: null,
-      tenant: null
-    }
+    syncStore.reset()
     syncForm.api_url = ''
     syncForm.api_key = ''
     syncForm.tenant = ''
@@ -928,15 +908,30 @@ function showApiSpec() {
   apiSpecVisible.value = true
 }
 
-// 初始化
+// 初始化：回填表单草稿（store 已由 App.vue 加载）
 onMounted(() => {
-  loadSyncConfig()
+  hydrateForm()
 })
 </script>
 
 <style scoped>
 .page-content h1 {
   margin-bottom: 20px;
+}
+
+/* 卡片排序：标题 → 租户&云端同步 → 导出 → 导入。用 flex order 置顶云同步卡，
+   避免在 DOM 里搬动整块（el-dialog 默认 teleport 到 body，不参与此 flex 流） */
+.sync-first {
+  display: flex;
+  flex-direction: column;
+}
+
+.sync-first > h1 {
+  order: -2;
+}
+
+.sync-first > .sync-card {
+  order: -1;
 }
 
 .card-header {
