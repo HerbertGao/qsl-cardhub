@@ -1,7 +1,7 @@
 # tenant-isolation 规范
 
 ## 目的
-待定 - 由归档变更 add-tenant-foundation 创建。归档后请更新目的。
+为云端提供行级多租户隔离的数据模型与不变量：以 tenants / tenant_credentials / tenant_routes 三张表承载租户身份、写入凭据与路由，既有数据归属配置化的默认租户（部署为 bh2ro）；写入归属恒由写凭据 key→tenant 解析、绝不信任客户端自报，确保各租户数据互不可见、互不可写。
 ## 需求
 ### 需求：租户模型与默认租户
 
