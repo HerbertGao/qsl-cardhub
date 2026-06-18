@@ -24,4 +24,4 @@
 - [x] 4.1 实跑脚本：合法输入产出可执行 SQL（`id` 为完整 hash、`scope='sync'`）；非法 slug / 空 Key / 弱 Key（<32）非 0 退出且 stdout 无 SQL；`--key-stdin` 路径正确；重签 = 把同一 Key 的 SQL 在离线 SQLite **执行两次**、断言**第二次**报 `UNIQUE constraint failed`（只跑一次则该断言空过）
 - [x] 4.2 差分验证：脚本对某 Key 的 `key_hash` == worker `sha256(trim(key))`——**绑定形式 = 独立比对**（对已上线 `bh2ro` 凭据核对 / 已知答案向量），**非**两路同 `createHash` 自比自；硬编码自检字面量断言通过
 - [x] 4.3 `openspec-cn validate add-credential-mint-cli --strict` 通过
-- [ ] 4.4 对抗 review-loop 收敛 → `openspec-cn archive add-credential-mint-cli`（新建 `credential-minting`；**无修改能力**）；归档前**人工评审门**（非纯机械 grep）：重写后的 `cloud-sync-api-spec.md` 文首声明从属 `cloud-backend-api`、且正文为非规范性示例、不复述与主规范并行的规范性断言（mirror 4-C1「0 残留」门，由评审者裁定）
+- [x] 4.4 对抗 review-loop 收敛 → `openspec-cn archive add-credential-mint-cli`（新建 `credential-minting`；**无修改能力**）；归档前**人工评审门**（非纯机械 grep）：重写后的 `cloud-sync-api-spec.md` 文首声明从属 `cloud-backend-api`、且正文为非规范性示例、不复述与主规范并行的规范性断言（mirror 4-C1「0 残留」门，由评审者裁定）
