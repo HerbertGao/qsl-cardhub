@@ -1,6 +1,6 @@
 {
   "name": "qsl-cardhub-frontend",
-  "version": "0.7.2",
+  "version": "0.8.0",
   "description": "qsl-cardhub 前端项目",
   "type": "module",
   "packageManager": "pnpm@10.28.2",
