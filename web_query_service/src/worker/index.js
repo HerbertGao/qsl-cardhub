@@ -86,6 +86,22 @@ export function isNonQuerySurface(routePath) {
 }
 
 /**
+ * 按租户 qty_display_mode 在服务端脱敏卡片数量（公开查询面，default-deny）。
+ * - mode === 'exact'      → 返回原始整数 qty（租户主动选择的精确暴露）。
+ * - mode === 'approximate'→ 分桶字符串（阈值与 web/src/composables/useQtyDisplayMode.ts:65-67 逐字一致）：
+ *     qty <= 10 → '≤10'；10 < qty <= 50 → '≤50'；qty > 50 → '>50'（返回值恒为 {≤10,≤50,>50} 之一）。
+ * - 其余（mode 缺失 / 未知值 / 空串等任意非 exact-approximate 值）→ 返回 undefined 哨兵，调用方据此省略 qty 字段。
+ * @param {number} qty
+ * @param {string|null|undefined} mode
+ * @returns {number|string|undefined}
+ */
+export function formatQtyByMode(qty, mode) {
+  if (mode === 'exact') return qty;
+  if (mode === 'approximate') return qty <= 10 ? '≤10' : qty <= 50 ? '≤50' : '>50';
+  return undefined;
+}
+
+/**
  * 显式查询面租户解析（数据端点用）：slug 非空 → 校验 tenants 活跃，命中返回 slug、未命中返回 null（调用方 404）；
  * slug 为 null（bare）→ 不读 tenants 表，直接返回 defaultTenant(env)（热路径零新增 DB 读）。
  * @returns {Promise<string|null>} 解析出的 tenant_id；显式 slug 未命中活跃校验时为 null。
@@ -803,14 +819,33 @@ export default {
           .bind(tenant_id, callsign.toUpperCase())
           .all();
 
+        // 读 qty_display_mode：复用上方与 cards 查询同一个 tenant_id（resolveQueryTenant 解析结果），
+        // 每次查询读一次（在结果映射之前，禁止放进每卡循环）。局部 try/catch 兜底：
+        // 读取异常 / 无该行 / value 非 exact-approximate → 一律得「无 mode」→ 映射省略 qty，但照常返回卡片列表（fail-safe，禁 fail-open 退回精确值）。
+        let qtyDisplayMode;
+        try {
+          const settingRow = await DB.prepare(
+            `SELECT value FROM app_settings WHERE tenant_id = ? AND key = 'qty_display_mode'`
+          )
+            .bind(tenant_id)
+            .first();
+          qtyDisplayMode = settingRow?.value;
+        } catch {
+          qtyDisplayMode = undefined; // 读设置抖动 → default-deny，不影响卡片列表返回
+        }
+
         const items = (rows.results || []).map((r) => {
           const metadata = r.metadata ? (typeof r.metadata === 'string' ? JSON.parse(r.metadata) : r.metadata) : null;
           const dist = metadata?.distribution;
           const ret = metadata?.return;
+          // 仅当 mode 为 exact/approximate 时附带脱敏后的 qty；未配置/未知/异常 → 不含 qty 键。
+          // approximate 下 v 为受限字符串、绝不附带原始整数，与脱敏值并发下发。
+          const qtyValue = formatQtyByMode(r.qty, qtyDisplayMode);
           return {
             id: r.id,
             project_name: r.project_name || null,
             status: r.status,
+            ...(qtyValue !== undefined ? { qty: qtyValue } : {}),
             distribution: dist ? {
               method: dist.method || null,
               proxy_callsign: dist.proxy_callsign || null,

@@ -5,6 +5,7 @@ interface CardItem {
   id: string
   project_name: string | null
   status: string
+  qty?: number | string
   distribution: {
     method?: string
     proxy_callsign?: string
@@ -92,6 +93,7 @@ async function copyRemarks(id: string, text: string) {
       <li v-for="item in items" :key="item.id" class="card-item card">
         <div class="card-header">
           <span class="project-name">{{ item.project_name || '未知项目' }}</span>
+          <span v-if="item.qty != null" class="qty-tag">数量：{{ item.qty }}</span>
           <span :class="['badge', getStatusClass(item.status)]">
             {{ getStatusLabel(item.status) }}
           </span>
@@ -251,6 +253,16 @@ async function copyRemarks(id: string, text: string) {
   font-weight: 600;
   font-size: 1rem;
   word-break: break-word;
+}
+
+.qty-tag {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.qty-tag + .badge {
+  margin-left: auto;
 }
 
 .card-body {
